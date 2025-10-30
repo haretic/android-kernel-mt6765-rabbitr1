@@ -115,30 +115,30 @@
 	status = "disabled";
 };
 
-&dsi_phy {
-	status = "okay";
-};
-
-&dsi {
-	status = "okay";
-
-	panel@0 {
-		compatible = "nokia,roo";
-		reg = <0>;
-		backlight = <&mt6370_backlight>;
-		port {
-			panel_in: endpoint {
-				remote-endpoint = <&dsi_out>;
-			};
-		};
-	};
-
-	port {
-		dsi_out: endpoint {
-			remote-endpoint = <&panel_in>;
-		};
-	};
-};
+//&dsi_phy {
+//	status = "okay";
+//};
+//
+//&dsi {
+//	status = "okay";
+//
+//	panel@0 {
+//		compatible = "nokia,roo";
+//		reg = <0>;
+//		backlight = <&mt6370_backlight>;
+//		port {
+//			panel_in: endpoint {
+//				remote-endpoint = <&dsi_out>;
+//			};
+//		};
+//	};
+//
+//	port {
+//		dsi_out: endpoint {
+//			remote-endpoint = <&panel_in>;
+//		};
+//	};
+//};
 
 &i2c5 {
 	status = "okay";
