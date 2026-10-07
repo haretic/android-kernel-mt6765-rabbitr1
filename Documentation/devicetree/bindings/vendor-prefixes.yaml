@@ -1391,6 +1391,8 @@ patternProperties:
     description: QST Corporation Limited
   "^quanta,.*":
     description: Quanta Computer Inc.
+  "^rabbit,.*":
+    description: rabbit inc.
   "^radxa,.*":
     description: Radxa
   "^raidsonic,.*":
