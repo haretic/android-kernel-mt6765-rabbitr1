@@ -242,6 +242,10 @@ struct mtk_dsi {
 	int refcount;
 	bool enabled;
 	bool lanes_ready;
+	/* Power references owned by serialized DDP and bridge commit callbacks. */
+	bool ddp_powered;
+	bool ddp_started;
+	bool bridge_powered;
 	atomic_t irq_data;
 	wait_queue_head_t irq_wait_queue;
 	struct mutex lock;
@@ -1044,7 +1048,7 @@ static void mtk_output_dsi_enable(struct mtk_dsi *dsi)
 {
 	if (dsi->driver_data->mt6765_regs) {
 		mutex_lock(&dsi->lock);
-		if (!dsi->refcount)
+		if (!dsi->refcount || !dsi->ddp_started || !dsi->bridge_powered)
 			goto out_unlock;
 	}
 	if (dsi->enabled)
@@ -1114,9 +1118,21 @@ static void mtk_dsi_bridge_atomic_pre_enable(struct drm_bridge *bridge,
 	struct drm_device *drm = bridge->dev;
 	int ret;
 
+	/* CRTC acquisition must succeed before the bridge can own a reference. */
+	if (dsi->driver_data->mt6765_regs &&
+	    (!dsi->ddp_started || dsi->bridge_powered))
+		return;
+
 	ret = mtk_dsi_poweron(dsi);
 	if (ret < 0)
 		drm_err(drm, "failed to power on dsi\n");
+
+	/* MT6765 power-on has already brought the lanes up in HS. */
+	if (dsi->driver_data->mt6765_regs) {
+		if (!ret)
+			dsi->bridge_powered = true;
+		return;
+	}
 
 	mtk_dsi_lane_ready(dsi);
 	mtk_dsi_clk_hs_mode(dsi, 1);
@@ -1127,6 +1143,11 @@ static void mtk_dsi_bridge_atomic_post_disable(struct drm_bridge *bridge,
 {
 	struct mtk_dsi *dsi = bridge_to_dsi(bridge);
 
+	if (dsi->driver_data->mt6765_regs) {
+		if (!dsi->bridge_powered)
+			return;
+		dsi->bridge_powered = false;
+	}
 	mtk_dsi_poweroff(dsi);
 }
 
@@ -1220,18 +1241,54 @@ static const struct drm_bridge_funcs mtk_dsi_bridge_funcs = {
 	.mode_set = mtk_dsi_bridge_mode_set,
 };
 
+int mtk_dsi_ddp_clk_enable(struct device *dev)
+{
+	struct mtk_dsi *dsi = dev_get_drvdata(dev);
+	int ret;
+
+	if (!dsi->driver_data->mt6765_regs || dsi->ddp_powered)
+		return 0;
+
+	/* This stage propagates failures before the CRTC connects or starts DDP. */
+	ret = mtk_dsi_poweron(dsi);
+	if (!ret)
+		dsi->ddp_powered = true;
+	return ret;
+}
+
+void mtk_dsi_ddp_clk_disable(struct device *dev)
+{
+	struct mtk_dsi *dsi = dev_get_drvdata(dev);
+
+	if (!dsi->driver_data->mt6765_regs)
+		return;
+
+	dsi->ddp_started = false;
+	if (dsi->ddp_powered) {
+		dsi->ddp_powered = false;
+		mtk_dsi_poweroff(dsi);
+	}
+}
+
 void mtk_dsi_ddp_start(struct device *dev)
 {
 	struct mtk_dsi *dsi = dev_get_drvdata(dev);
 
-	mtk_dsi_poweron(dsi);
+	if (dsi->driver_data->mt6765_regs)
+		dsi->ddp_started = dsi->ddp_powered;
+	else
+		mtk_dsi_poweron(dsi);
 }
 
 void mtk_dsi_ddp_stop(struct device *dev)
 {
 	struct mtk_dsi *dsi = dev_get_drvdata(dev);
 
-	mtk_dsi_poweroff(dsi);
+	/* Drop the DDP reference before upstream component clocks disappear. */
+	if (dsi->driver_data->mt6765_regs)
+		mtk_dsi_ddp_clk_disable(dev);
+	else
+		mtk_dsi_poweroff(dsi);
 }
 
 static int mtk_dsi_encoder_init(struct drm_device *drm, struct mtk_dsi *dsi)
