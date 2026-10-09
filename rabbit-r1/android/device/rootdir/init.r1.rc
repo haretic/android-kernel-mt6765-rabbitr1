@@ -4,3 +4,7 @@ on fs
 
 on late-fs
     mount_all /vendor/etc/fstab.r1 --late
+
+# configfs gadget HAL and init.usb.configfs.rc bind this UDC (mainline musb).
+on early-boot
+    setprop sys.usb.controller musb-hdrc.3.auto
