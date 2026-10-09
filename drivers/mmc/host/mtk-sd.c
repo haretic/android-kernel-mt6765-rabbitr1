@@ -445,6 +445,7 @@ struct mtk_mmc_compatible {
 	u8 stop_dly_sel;
 	u8 pop_en_cnt;
 	bool enhance_rx;
+	bool enhance_rx_top_only;
 	bool support_64g;
 	bool use_internal_cd;
 	bool support_new_tx;
@@ -562,7 +563,9 @@ static const struct mtk_mmc_compatible mt6765_compat = {
 	.data_tune = false,
 	.busy_check = true,
 	.stop_clk_fix = true,
+	.stop_dly_sel = 3,
 	.enhance_rx = true,
+	.enhance_rx_top_only = true,
 	.support_64g = false,
 };
 
@@ -2040,7 +2043,7 @@ static void msdc_init_hw(struct msdc_host *host)
 			pb2_val |= FIELD_PREP(MSDC_PB2_CRCSTSENSEL, 2);
 		} else if (host->top_base) {
 			sdr_set_bits(host->top_base + EMMC_TOP_CONTROL, SDC_RX_ENH_EN);
-		} else {
+		} else if (!host->dev_comp->enhance_rx_top_only) {
 			sdr_set_bits(host->base + SDC_ADV_CFG0, SDC_RX_ENHANCE_EN);
 		}
 	}
