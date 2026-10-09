@@ -1,0 +1,23 @@
+#!/bin/sh
+# Opt-in unattended recovery: reboot when no USB host has configured the gadget
+# for r1.rescue_reboot=SECONDS. Each reboot passes the preloader, where a host
+# listener can take over, and gives USB enumeration another chance.
+limit=
+for arg in $(cat /proc/cmdline); do
+    case $arg in r1.rescue_reboot=*) limit=${arg#r1.rescue_reboot=} ;; esac
+done
+case $limit in ''|*[!0-9]*) exit 0 ;; esac
+[ "$limit" -ge 120 ] || limit=120
+printf '<6>r1: rescue reboot armed: %ss without a configured USB host\n' "$limit" > /dev/kmsg
+read -r seen _ < /proc/uptime; seen=${seen%%.*}
+while sleep 15; do
+    read -r now _ < /proc/uptime; now=${now%%.*}
+    for state in /sys/class/udc/*/state; do
+        [ "$(cat "$state" 2>/dev/null)" = configured ] && seen=$now
+    done
+    if [ $((now - seen)) -ge "$limit" ]; then
+        printf '<4>r1: rescue reboot: no configured USB host for %ss\n' "$((now - seen))" > /dev/kmsg
+        sync
+        /bin/busybox reboot -f
+    fi
+done
