@@ -61,6 +61,13 @@ def check_mainline(dtb):
         assert clocks_prop[:4] == provider, f'MMC {addr}: source clock references wrong provider'
         assert struct.unpack('>I',clocks_prop[4:8])[0] == int(ids[name])
     assert nodes['/soc/mmc@11230000']['status'] == b'disabled\0', 'Default eMMC bring-up gate lost'
+    mmc = nodes['/soc/mmc@11230000']
+    # mtk-sd requires both states before registering even a legacy-speed host.
+    assert mmc['pinctrl-names'] == b'default\0state_uhs\0', 'Missing mandatory MMC pin states'
+    assert mmc['pinctrl-0'] == mmc['pinctrl-1'] == nodes['/soc/pinctrl@10005000/mmc0-pins']['phandle'], 'MMC states must preserve the existing pad configuration'
+    assert mmc['max-frequency'] == struct.pack('>I', 52000000)
+    assert 'cap-mmc-highspeed' in mmc
+    assert not any(key.startswith(('sd-uhs-', 'mmc-hs200-', 'mmc-hs400-', 'mmc-ddr-')) for key in mmc), 'Untested MMC timing enabled'
     assert nodes['/soc/usb@11200000']['dr_mode'] == b'peripheral\0'
     secure_ids = {'11009000': 2, '1100f000': 3, '11011000': 4, '1100d000': 6}
     for addr in ['11007000', '11008000', '11009000', '1100f000', '11011000', '11016000', '1100d000']:
@@ -72,7 +79,7 @@ def check_mainline(dtb):
             assert nodes['/soc/i2c@'+addr]['mediatek,secure-id'] == struct.pack('>I', secure_ids[addr])
         else:
             assert 'mediatek,secure-id' not in nodes['/soc/i2c@'+addr]
-    print('PASS: r1 identity, LK memory path, MMC clock providers/IDs, eMMC gate, USB role, I2C match/dividers')
+    print('PASS: r1 identity, LK memory path, MMC clock providers/IDs and pin states, eMMC gate, USB role, I2C match/dividers')
 
 def main():
     if len(sys.argv) == 3 and sys.argv[1] == '--dtb':
