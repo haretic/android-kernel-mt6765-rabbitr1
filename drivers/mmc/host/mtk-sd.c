@@ -557,13 +557,14 @@ static const struct mtk_mmc_compatible mt6765_compat = {
 	.clk_div_bits = 12,
 	.recheck_sdio_irq = false,
 	.hs400_tune = false,
+	.needs_top_base = true,
 	.pad_tune_reg = MSDC_PAD_TUNE0,
 	.async_fifo = true,
-	.data_tune = false,
+	.data_tune = true,
 	.busy_check = true,
 	.stop_clk_fix = true,
 	.enhance_rx = true,
-	.support_64g = false,
+	.support_64g = true,
 };
 
 static const struct mtk_mmc_compatible mt6779_compat = {
