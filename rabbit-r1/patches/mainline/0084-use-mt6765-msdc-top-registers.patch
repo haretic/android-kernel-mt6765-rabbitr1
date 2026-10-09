@@ -1,0 +1,45 @@
+diff --git a/arch/arm64/boot/dts/mediatek/mt6765.dtsi b/arch/arm64/boot/dts/mediatek/mt6765.dtsi
+index 6af2134756..02516e2728 100644
+--- a/arch/arm64/boot/dts/mediatek/mt6765.dtsi
++++ b/arch/arm64/boot/dts/mediatek/mt6765.dtsi
+@@ -811,7 +811,8 @@ audio: clock-controller@11220000 {
+ 		mmc0: mmc@11230000 {
+ 			compatible = "mediatek,mt6765-mmc",
+ 				     "mediatek,mt8183-mmc";
+-			reg = <0 0x11230000 0 0x1000>;
++			reg = <0 0x11230000 0 0x1000>,
++			      <0 0x11cd0000 0 0x1000>;
+ 			interrupts = <GIC_SPI 79 IRQ_TYPE_LEVEL_LOW>;
+ 			clocks = <&topckgen CLK_TOP_MSDC50_0>,
+ 				 <&infracfg CLK_IFR_MSDC0>,
+@@ -823,7 +824,8 @@ mmc0: mmc@11230000 {
+ 		mmc1: mmc@11240000 {
+ 			compatible = "mediatek,mt6765-mmc",
+ 				     "mediatek,mt8183-mmc";
+-			reg = <0 0x11240000 0 0x1000>;
++			reg = <0 0x11240000 0 0x1000>,
++			      <0 0x11c90000 0 0x1000>;
+ 			interrupts = <GIC_SPI 80 IRQ_TYPE_LEVEL_LOW>;
+ 			clocks = <&topckgen CLK_TOP_MSDC30_1>,
+ 				 <&infracfg CLK_IFR_MSDC1>,
+diff --git a/drivers/mmc/host/mtk-sd.c b/drivers/mmc/host/mtk-sd.c
+index 0a427d08e5..a8c3a0799e 100644
+--- a/drivers/mmc/host/mtk-sd.c
++++ b/drivers/mmc/host/mtk-sd.c
+@@ -557,13 +557,14 @@ static const struct mtk_mmc_compatible mt6765_compat = {
+ 	.clk_div_bits = 12,
+ 	.recheck_sdio_irq = false,
+ 	.hs400_tune = false,
++	.needs_top_base = true,
+ 	.pad_tune_reg = MSDC_PAD_TUNE0,
+ 	.async_fifo = true,
+-	.data_tune = false,
++	.data_tune = true,
+ 	.busy_check = true,
+ 	.stop_clk_fix = true,
+ 	.enhance_rx = true,
+-	.support_64g = false,
++	.support_64g = true,
+ };
+ 
+ static const struct mtk_mmc_compatible mt6779_compat = {
