@@ -64,7 +64,7 @@ def check_mainline(dtb):
     mmc = nodes['/soc/mmc@11230000']
     # mtk-sd requires both states before registering even a legacy-speed host.
     assert mmc['pinctrl-names'] == b'default\0state_uhs\0', 'Missing mandatory MMC pin states'
-    assert mmc['pinctrl-0'] == mmc['pinctrl-1'] == nodes['/soc/pinctrl@10005000/mmc0-pins']['phandle'], 'MMC states must preserve the existing pad configuration'
+    assert mmc['pinctrl-0'] == mmc['pinctrl-1'] == nodes['/soc/pin-controller@10005000/mmc0-pins']['phandle'], 'MMC states must preserve the existing pad configuration'
     assert mmc['max-frequency'] == struct.pack('>I', 52000000)
     assert 'cap-mmc-highspeed' in mmc
     assert not any(key.startswith(('sd-uhs-', 'mmc-hs200-', 'mmc-hs400-', 'mmc-ddr-')) for key in mmc), 'Untested MMC timing enabled'
