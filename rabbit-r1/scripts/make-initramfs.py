@@ -36,6 +36,7 @@ entry('init', stat.S_IFREG | 0o755, (ROOT/'initramfs/init').read_bytes())
 entry('bin/r1-report', stat.S_IFREG | 0o755, (ROOT/'initramfs/r1-report').read_bytes())
 entry('bin/r1-log-start', stat.S_IFREG | 0o755, (ROOT/'initramfs/r1-log-start').read_bytes())
 entry('bin/r1-log-shutdown', stat.S_IFREG | 0o755, (ROOT/'initramfs/r1-log-shutdown').read_bytes())
+entry('bin/r1-rescue', stat.S_IFREG | 0o755, (ROOT/'initramfs/r1-rescue').read_bytes())
 entry('bin/expdb-map', stat.S_IFREG | 0o755, (ROOT/'out/busybox/expdb-map').read_bytes())
 entry('bin/expdb-checkpoint', stat.S_IFREG | 0o755, (ROOT/'out/busybox/expdb-checkpoint').read_bytes())
 for name in ['pstore_zone', 'pstore_blk']:
