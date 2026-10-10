@@ -3,27 +3,36 @@
 
 #include <aidl/android/hardware/health/IHealth.h>
 #include <android/binder_manager.h>
+#include <atomic>
 #include <cerrno>
+#include <thread>
 
 using aidl::android::hardware::health::HealthInfo;
 using aidl::android::hardware::health::IHealth;
 
 namespace {
+// Init kills a hung attempt silently; name the step it was stuck in.
+std::atomic<const char*> stage{"start"};
+
 class BinderReadiness final : public r1::health::StartupOps {
   public:
     r1::health::Result Attempt() override {
         r1::health::Identity before{}, after{};
+        stage = "identity";
         if (auto r = r1::health::ReadIdentity("/sys", &before); r.error) return r;
         const std::string instance = std::string(IHealth::descriptor) + "/default";
+        stage = "checkService";
         ndk::SpAIBinder binder(AServiceManager_checkService(instance.c_str()));
         if (!binder.get()) return {EAGAIN, "Health default instance is not registered"};
         auto health = IHealth::fromBinder(binder);
         if (!health) return {EPROTO, "registered Health Binder has the wrong interface"};
         int32_t capacity = -1;
+        stage = "getCapacity";
         auto status = health->getCapacity(&capacity);
         if (!status.isOk()) return {EIO, "getCapacity: " + status.getDescription()};
         if (capacity < 0 || capacity > 100) return {ERANGE, "getCapacity is outside 0..100"};
         HealthInfo info;
+        stage = "getHealthInfo";
         status = health->getHealthInfo(&info);
         if (!status.isOk()) return {EIO, "getHealthInfo: " + status.getDescription()};
         if (!info.batteryPresent) return {ENODEV, "HealthInfo reports no battery"};
@@ -39,7 +48,13 @@ class BinderReadiness final : public r1::health::StartupOps {
 }  // namespace
 
 int main(int, char** argv) {
-    ::android::base::InitLogging(argv);
+    ::android::base::InitLogging(argv, ::android::base::KernelLogger);
+    std::thread([] {
+        for (;;) {
+            std::this_thread::sleep_for(std::chrono::seconds(5));
+            LOG(INFO) << "waiting in " << stage.load();
+        }
+    }).detach();
     BinderReadiness readiness;
     const auto result = r1::health::WaitUntilReady(readiness, std::chrono::seconds(35));
     if (result.error) {
