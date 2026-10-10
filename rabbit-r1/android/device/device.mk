@@ -48,6 +48,9 @@ PRODUCT_VENDOR_PROPERTIES += \
 # drmfb's auto-detection skips it because libdrm does not know the faux bus.
 PRODUCT_VENDOR_PROPERTIES += vendor.hwc.drm.device=/dev/dri/card1
 
+# Mainline has no ashmem; libcutils only picks memfd by itself for SDK 37+ callers.
+PRODUCT_SYSTEM_PROPERTIES += sys.use_memfd=true
+
 # Recovery-as-boot copies root/ into its ramdisk for the normal-boot switch.
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/rootdir/fstab.r1:$(TARGET_COPY_OUT_VENDOR)/etc/fstab.r1 \
