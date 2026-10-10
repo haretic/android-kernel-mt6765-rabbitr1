@@ -3439,6 +3439,33 @@ static struct platform_driver mt_msdc_driver = {
 	},
 };
 
+/* r1 bring-up: record the bootloader's MSDC0 pin and top-block setup before probe rewrites it. */
+static int __init msdc_r1_lk_state(void)
+{
+	static const struct { const char *name; phys_addr_t base; size_t len; } r[] = {
+		{ "gpio-mode", 0x10005300, 0x200 },
+		{ "iocfg4", 0x10002000, 0x200 },
+		{ "top0", 0x11cd0000, 0x100 },
+	};
+	char prefix[48];
+	void __iomem *va;
+	int i;
+
+	if (!of_machine_is_compatible("rabbit,r1"))
+		return 0;
+	for (i = 0; i < ARRAY_SIZE(r); i++) {
+		va = ioremap(r[i].base, r[i].len);
+		if (!va)
+			continue;
+		snprintf(prefix, sizeof(prefix), "r1-lk %s ", r[i].name);
+		print_hex_dump(KERN_INFO, prefix, DUMP_PREFIX_OFFSET, 16, 4,
+			       (__force const void *)va, r[i].len, false);
+		iounmap(va);
+	}
+	return 0;
+}
+subsys_initcall(msdc_r1_lk_state);
+
 module_platform_driver(mt_msdc_driver);
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("MediaTek SD/MMC Card Driver");
