@@ -20,10 +20,8 @@ service watchdogd /system/bin/watchdogd 10 20
 on property:sys.boot_completed=1
     start watchdogd
 
-on property:sys.usb.state=adb
-    start watchdogd
-
-on property:sys.usb.state=mtp,adb
+# With the gadget HAL (sys.usb.configfs=2) init never sets sys.usb.state.
+on property:init.svc.adbd=running
     start watchdogd
 
 service vendor.r1-logcat-kmsg /vendor/bin/r1-logcat-kmsg.sh
