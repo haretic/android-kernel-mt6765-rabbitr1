@@ -38,11 +38,22 @@ PRODUCT_PACKAGES += \
 # The logger validates expdb and bounds its mapping before loading pstore.
 PRODUCT_VENDOR_PROPERTIES += ro.vendor.r1.expdb.enabled=1
 
+# One online core: ueventd lags apexd's default 1 s wait for dm-verity links,
+# so boot APEX activation fails (and bpfloader with it) unless this waits longer.
+PRODUCT_VENDOR_PROPERTIES += \
+    apexd.config.dm_create.timeout=20000 \
+    apexd.config.dm_delete.timeout=5000
+
+# No physical display driver yet: compose onto vkms (card1, after vgem's card0).
+# drmfb's auto-detection skips it because libdrm does not know the faux bus.
+PRODUCT_VENDOR_PROPERTIES += vendor.hwc.drm.device=/dev/dri/card1
+
 # Recovery-as-boot copies root/ into its ramdisk for the normal-boot switch.
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/rootdir/fstab.r1:$(TARGET_COPY_OUT_VENDOR)/etc/fstab.r1 \
     $(LOCAL_PATH)/rootdir/fstab.r1:$(TARGET_COPY_OUT_ROOT)/first_stage_ramdisk/fstab.r1 \
-    $(LOCAL_PATH)/rootdir/init.r1.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/init.r1.rc
+    $(LOCAL_PATH)/rootdir/init.r1.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/init.r1.rc \
+    $(LOCAL_PATH)/rootdir/r1-logcat-kmsg.sh:$(TARGET_COPY_OUT_VENDOR)/bin/r1-logcat-kmsg.sh
 
 # Match the physical panel. Revisit density after UI testing on the device.
 TARGET_SCREEN_WIDTH := 480
