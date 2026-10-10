@@ -68,6 +68,7 @@
 #define MT7988_TOPRGU_SW_RST_NUM	24
 
 static bool nowayout = WATCHDOG_NOWAYOUT;
+static bool start_at_probe;
 static unsigned int timeout;
 
 struct mtk_wdt_dev {
@@ -445,14 +446,21 @@ static int mtk_wdt_probe(struct platform_device *pdev)
 	watchdog_set_drvdata(&mtk_wdt->wdt_dev, mtk_wdt);
 
 	mtk_wdt_init(&mtk_wdt->wdt_dev);
+	if (start_at_probe && !watchdog_hw_running(&mtk_wdt->wdt_dev)) {
+		err = mtk_wdt_start(&mtk_wdt->wdt_dev);
+		if (err)
+			return err;
+		set_bit(WDOG_HW_RUNNING, &mtk_wdt->wdt_dev.status);
+	}
 
 	watchdog_stop_on_reboot(&mtk_wdt->wdt_dev);
 	err = devm_watchdog_register_device(dev, &mtk_wdt->wdt_dev);
 	if (unlikely(err))
 		return err;
 
-	dev_info(dev, "Watchdog enabled (timeout=%d sec, nowayout=%d)\n",
-		 mtk_wdt->wdt_dev.timeout, nowayout);
+	dev_info(dev, "Watchdog enabled (timeout=%d sec, nowayout=%d, running=%d)\n",
+		 mtk_wdt->wdt_dev.timeout, nowayout,
+		 watchdog_hw_running(&mtk_wdt->wdt_dev));
 
 	wdt_data = of_device_get_match_data(dev);
 	if (wdt_data) {
@@ -528,6 +536,9 @@ module_platform_driver(mtk_wdt_driver);
 
 module_param(timeout, uint, 0);
 MODULE_PARM_DESC(timeout, "Watchdog heartbeat in seconds");
+
+module_param(start_at_probe, bool, 0);
+MODULE_PARM_DESC(start_at_probe, "Start the watchdog at probe if the bootloader left it off");
 
 module_param(nowayout, bool, 0);
 MODULE_PARM_DESC(nowayout, "Watchdog cannot be stopped once started (default="
