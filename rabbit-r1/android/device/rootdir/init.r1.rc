@@ -25,3 +25,12 @@ on property:sys.usb.state=adb
 
 on property:sys.usb.state=mtp,adb
     start watchdogd
+
+service vendor.r1-logcat-kmsg /vendor/bin/r1-logcat-kmsg.sh
+    user root
+    group log
+    disabled
+    seclabel u:r:shell:s0
+
+on post-fs-data
+    start vendor.r1-logcat-kmsg
