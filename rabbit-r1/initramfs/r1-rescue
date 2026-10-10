@@ -13,8 +13,12 @@ printf '<6>r1: rescue reboot armed: %ss without a configured USB host\n' "$limit
 # userspace opens it, so a boot that never reaches this loop resets itself.
 wdt=
 for dev in /sys/class/watchdog/watchdog*; do
-    [ "$(cat "$dev/identity" 2>/dev/null)" = mtk-wdt ] && wdt=/dev/${dev##*/}
+    case $(readlink "$dev/device" 2>/dev/null) in
+        *10007000.*) wdt=/dev/${dev##*/} ;;
+    esac
 done
+# The first registered watchdog is mtk-wdt; softdog loads after it.
+[ -n "$wdt" ] || { [ -c /dev/watchdog ] && wdt=/dev/watchdog; }
 if [ -n "$wdt" ] && exec 3> "$wdt"; then
     printf '<6>r1: rescue feeds %s\n' "$wdt" > /dev/kmsg
 else
