@@ -2980,8 +2980,14 @@ static int selinux_inode_init_security(struct inode *inode, struct inode *dir,
 	if (rc)
 		return rc;
 
-	/* Possibly defer initialization to selinux_complete_init. */
-	if (sbsec->flags & SE_SBINITIALIZED) {
+	/*
+	 * Possibly defer initialization to selinux_complete_init.  A genfs
+	 * filesystem that cannot store labels (bpffs) is labelled by path when
+	 * the dentry is instantiated; a transition SID here would bypass that.
+	 */
+	if ((sbsec->flags & SE_SBINITIALIZED) &&
+	    !(sbsec->behavior == SECURITY_FS_USE_GENFS &&
+	      (sbsec->flags & SE_SBGENFS) && !(sbsec->flags & SBLABEL_MNT))) {
 		struct inode_security_struct *isec = selinux_inode(inode);
 		isec->sclass = newsclass;
 		isec->sid = newsid;
