@@ -51,6 +51,10 @@ PRODUCT_VENDOR_PROPERTIES += vendor.hwc.drm.device=/dev/dri/card1
 # Mainline has no ashmem; libcutils only picks memfd by itself for SDK 37+ callers.
 PRODUCT_SYSTEM_PROPERTIES += sys.use_memfd=true
 
+# One slow core until secondary CPUs are brought up: AMS.systemReady alone
+# outlasts the 60 s framework watchdog on first boot.
+PRODUCT_VENDOR_PROPERTIES += ro.hw_timeout_multiplier=5
+
 # Recovery-as-boot copies root/ into its ramdisk for the normal-boot switch.
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/rootdir/fstab.r1:$(TARGET_COPY_OUT_VENDOR)/etc/fstab.r1 \
