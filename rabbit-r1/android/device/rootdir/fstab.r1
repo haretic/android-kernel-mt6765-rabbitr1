@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Stock uses md_udc for /metadata and para for /misc. Preserve those mappings.
-system      /system     ext4  ro  wait,logical,first_stage_mount,slotselect,avb
+# LK does not publish vbmeta/parts in the DT; name the vbmeta partition here for first-stage AVB.
+system      /system     ext4  ro  wait,logical,first_stage_mount,slotselect,avb=vbmeta
 system_ext  /system_ext ext4  ro  wait,logical,first_stage_mount,slotselect,avb
 product     /product    ext4  ro  wait,logical,first_stage_mount,slotselect,avb
 vendor      /vendor     ext4  ro  wait,logical,first_stage_mount,slotselect,avb
