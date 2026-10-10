@@ -2,6 +2,10 @@
 # Experimental normal boot; requires genuine kernel CAPACITY first.
 on post-fs-data
     start vendor.health-default
+
+# HealthLoop serves Binder only once bpf.progs_loaded=1, which load-bpf-programs
+# sets after post-fs-data; blocking post-fs-data on the check would deadlock.
+on zygote-start
     exec_start r1-health-initial-ready
 
 service vendor.health-default /vendor/bin/hw/android.hardware.health-service.r1
@@ -16,6 +20,7 @@ service r1-health-initial-ready /vendor/bin/r1-health-initial-ready
     oneshot
     user system
     group system
+    file /dev/kmsg w
     timeout_period 40
     reboot_on_failure shutdown,battery-init-failed
 

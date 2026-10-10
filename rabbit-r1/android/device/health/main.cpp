@@ -76,7 +76,7 @@ class PrimeReadiness final : public StartupOps {
 }  // namespace r1::health
 
 int main(int argc, char** argv) {
-    ::android::base::InitLogging(argv);
+    ::android::base::InitLogging(argv, ::android::base::KernelLogger);
     if (argc == 2 && std::string_view(argv[1]) == "--charger") {
         // Preserve the stock charger-mode path. The initial readiness
         // ordering and failure policy apply only to normal boot.
