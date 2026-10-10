@@ -365,17 +365,17 @@ static struct power_supply *devm_power_supply_register(struct device *dev,
     struct mt6370_priv *p=cfg->drv_data;
     assert(p == &priv && cfg->fwnode == dev && desc == &p->psy_desc);
     assert(!strcmp(desc->name,"mt6370-charger") && desc->type == POWER_SUPPLY_TYPE_USB);
-    assert(desc->num_properties == (p->ichg_workaround ? 15U : 14U));
-    assert(desc->charge_behaviours == (p->ichg_workaround ? 3U : 0U));
+    assert(desc->num_properties == (p->charge_control ? 15U : 14U));
+    assert(desc->charge_behaviours == (p->charge_control ? 3U : 0U));
     bool found=false;
     for (unsigned int i=0; i<desc->num_properties; i++) found |= desc->properties[i] == POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR;
-    assert(found == p->ichg_workaround);
-    assert(!!desc->property_is_writeable(&psy,POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR) == p->ichg_workaround);
+    assert(found == p->charge_control);
+    assert(!!desc->property_is_writeable(&psy,POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR) == p->charge_control);
     int ret=step(); if (ret) return ERR_PTR(ret);
     assert(settings_done && !published && p->wq->active);
     assert(p->bc12_work.initialized && p->mivr_dwork.work.initialized);
     assert(p->ichg_valid);
-    if (p->ichg_workaround) assert(!(regs[0x112]&1));
+    if (p->charge_control) assert(!(regs[0x112]&1));
     published=true; add(RES_PSY);
     publication_io_start=nops;
     assert(!p->psy);
@@ -383,11 +383,11 @@ static struct power_supply *devm_power_supply_register(struct device *dev,
     mt6370_chg_bc12_work_func(&p->bc12_work);
     assert(notifications == before); /* No NULL-handle notification before registration returns. */
     /* Emulate userspace calling both setters as soon as registration exposes them. */
-    assert(set_current(500000) == (p->ichg_workaround ? 0 : -ERANGE));
+    assert(set_current(500000) == (p->charge_control ? 0 : -ERANGE));
     union power_supply_propval val={.intval=1};
     assert(!mt6370_chg_set_property(&psy,POWER_SUPPLY_PROP_ONLINE,&val));
     assert(p->bc12_work.pending);
-    if (p->ichg_workaround) {
+    if (p->charge_control) {
         val.intval=POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO;
         /* Also exercise inherited sleep without a userspace write repairing it. */
         if (!inherited_input_sleep) {
@@ -398,7 +398,7 @@ static struct power_supply *devm_power_supply_register(struct device *dev,
         assert(val.intval == (p->input_suspended ? POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE : POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO));
         assert(!!(regs[0x112]&1) == !p->input_suspended);
     }
-    if (registration_input_zero && p->ichg_workaround) {
+    if (registration_input_zero && p->charge_control) {
         val.intval=0;
         assert(!desc->set_property(&psy,POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,&val));
         assert(p->input_suspended && !p->mivr_irq_paused && !p->num_irqs);
@@ -713,7 +713,15 @@ static void check_controls(void)
         for (unsigned int b=0; b<ARRAY_SIZE(invalid); b++) {
             assert(set_behaviour(invalid[b]) == -EINVAL && !nops && !notifications); rejected++;
         }
-        if (id>=2) {
+        if (ids[id] == 0xf0) {
+            /* MT6371: stock charge enable/disable without the hidden-register workaround. */
+            assert(!set_behaviour(POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE) && !(regs[0x112]&1));
+            int got=123; assert(!get_behaviour(&got) && got == POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE); reads++;
+            assert(!set_behaviour(POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO) && (regs[0x112]&1));
+            assert(current_value() == 900000 && !unlocks); resumes++;
+            for (unsigned int i=0; i<nops; i++)
+                assert(trace[i].reg != STOCK_KEY_REG && trace[i].reg != STOCK_HIDDEN_REG);
+        } else if (id>=2) {
             for (unsigned int mode=0; mode<2; mode++) {
                 assert(set_behaviour(mode) == -EOPNOTSUPP && !nops && !notifications); rejected++;
             }
@@ -881,7 +889,10 @@ static void check_powerpath(void)
             assert(input_set(POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,bad[i]) == (bad[i]<0 ? -EINVAL : -ERANGE));
             assert(!nops); rejects++;
         }
-        if (model>=2) {
+        if (ids[model] == 0xf0) {
+            /* MT6371 has charge control: a zero budget isolates input. */
+            assert(!input_set(POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,0) && priv.input_suspended);
+        } else if (model>=2) {
             assert(input_set(POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,0) == -ERANGE && !nops); rejects++;
         }
         release_probe();
@@ -1122,7 +1133,7 @@ static void check_shutdown(void)
         assert(nr_resources == before_resources && irq_live == 3);
         assert(!priv.bc12_work.pending && !priv.mivr_dwork.work.pending);
         for (unsigned int i=0; i<irq_live; i++) assert(irq_depth[i] == 1);
-        if (id<2) {
+        if (id<2 || ids[id] == 0xf0) { /* charge-control chips inhibit on shutdown */
             assert(!(regs[0x112]&1) && current_value() == 500000 && slept_us == 20000);
             if (!id && !pending) {
                 stop_ops=nops; assert(stop_ops<ARRAY_SIZE(stop_trace));
@@ -1244,24 +1255,26 @@ int main(void)
     for (unsigned int i=0; i<F_MAX; i++) { fields[i].id=i; priv.rmap_fields[i]=&fields[i]; }
     for (unsigned int id=0; id<256; id++) {
         reset_bus(id,false,900000,0x40);
-        priv.ichg_min=1; priv.ichg_workaround=true;
+        priv.ichg_min=1; priv.ichg_workaround=true; priv.charge_control=true;
         unsigned int model=id >> 4;
         bool known=model == 8 || model == 14;
-        bool other=model == 9 || model == 10 || model == 11 || model == 15;
-        assert(mt6370_chg_init_ichg(&priv) == (known || other ? 0 : -ENODEV));
-        assert(priv.ichg_workaround == known && priv.ichg_min == (known ? 500000U : 900000U));
+        bool control=known || model == 15; /* MT6371: stock ramp and 500 mA clamp, no hidden workaround */
+        bool other=model == 9 || model == 10 || model == 11;
+        assert(mt6370_chg_init_ichg(&priv) == (control || other ? 0 : -ENODEV));
+        assert(priv.ichg_workaround == known && priv.charge_control == control);
+        assert(priv.ichg_min == (control ? 500000U : 900000U));
         assert(nops == 1 && trace[0].type == 'r' && trace[0].reg == 0x100); models++;
     }
     reset_bus(0xe0,false,900000,0x40); errors[0]=EIO;
-    assert(mt6370_chg_init_ichg(&priv) == -EIO && !priv.ichg_workaround && priv.ichg_min == 900000); models++;
+    assert(mt6370_chg_init_ichg(&priv) == -EIO && !priv.ichg_workaround && !priv.charge_control && priv.ichg_min == 900000); models++;
     const unsigned int ids[]={0x80,0xe0,0x90,0xa0,0xb0,0xf0};
     for (unsigned int m=0; m<ARRAY_SIZE(ids); m++)
     for (unsigned int value=500000; value<=5000000; value+=100000)
     for (int offset=-1; offset<=1; offset++) {
         int ua=(int)value+offset;
-        bool workaround=m<2;
+        bool workaround=m<2, control=workaround || ids[m] == 0xf0;
         setup(ids[m],false,2000000,0x60);
-        if (ua < (workaround ? 500000 : 900000) || ua > 5000000) {
+        if (ua < (control ? 500000 : 900000) || ua > 5000000) {
             assert(set_current(ua) == -ERANGE && nops == 0); rejects++; continue;
         }
         unsigned int hidden=regs[STOCK_HIDDEN_REG], enable=regs[0x112];

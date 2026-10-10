@@ -124,6 +124,7 @@ struct mt6370_priv {
 	int psy_usb_type;
 	bool pwr_rdy;
 	bool ichg_workaround;
+	bool charge_control;
 	unsigned int ichg_min;
 	unsigned int ichg_request;
 	bool ichg_valid;
@@ -257,6 +258,7 @@ static int mt6370_chg_init_ichg(struct mt6370_priv *priv)
 
 	priv->ichg_min = 900000;
 	priv->ichg_workaround = false;
+	priv->charge_control = false;
 	ret = regmap_read(priv->regmap, MT6370_REG_DEV_INFO, &info);
 	if (ret)
 		return ret;
@@ -264,18 +266,25 @@ static int mt6370_chg_init_ichg(struct mt6370_priv *priv)
 	switch (FIELD_GET(MT6370_VENID_MASK, info)) {
 	case 0x8: /* RT5081 */
 	case 0xe: /* MT6370 */
-		priv->ichg_min = 500000;
+		/* Stock applies the hidden VSYS-short current workaround to these only. */
 		priv->ichg_workaround = true;
 		break;
+	case 0xf: /* MT6371, as on the r1 */
+		break;
 	case 0xa: /* RT5081A */
-	case 0xf: /* MT6371 */
 	case 0x9: /* MT6372P */
 	case 0xb: /* MT6372CP */
-		/* Keep the previous minimum until low-current behavior is verified. */
-		break;
+		/* Keep the previous minimum and no charge control until these are verified. */
+		return 0;
 	default:
 		return -ENODEV;
 	}
+	/*
+	 * Stock clamps ICHG to 500 mA and ramps it down before clearing CHG_EN on every
+	 * chip, so charge inhibit and the 500 mA minimum do not depend on the workaround.
+	 */
+	priv->ichg_min = 500000;
+	priv->charge_control = true;
 
 	return 0;
 }
@@ -372,7 +381,7 @@ complete:
 		priv->ichg_valid = true;
 		return 0;
 	}
-	if (!priv->ichg_workaround)
+	if (!priv->charge_control)
 		return ret;
 
 	/* A failed transition may leave current and protection settings mismatched. */
@@ -399,7 +408,7 @@ static int mt6370_chg_set_behaviour(struct mt6370_priv *priv, int behaviour)
 	if (behaviour != POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO &&
 	    behaviour != POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE)
 		return -EINVAL;
-	if (!priv->ichg_workaround)
+	if (!priv->charge_control)
 		return -EOPNOTSUPP;
 
 	guard(mutex)(&priv->ichg_lock);
@@ -443,7 +452,7 @@ static int mt6370_chg_get_behaviour(struct mt6370_priv *priv, int *behaviour)
 	unsigned int enabled;
 	int ret;
 
-	if (!priv->ichg_workaround)
+	if (!priv->charge_control)
 		return -EOPNOTSUPP;
 	guard(mutex)(&priv->ichg_lock);
 	ret = mt6370_chg_field_get(priv, F_CHG_EN, &enabled);
@@ -987,7 +996,7 @@ static int mt6370_chg_get_property(struct power_supply *psy,
 		val->intval = linear_range_get_max_value(&mt6370_chg_ranges[MT6370_RANGE_F_VOREG]);
 		return 0;
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
-		if (priv->ichg_workaround) {
+		if (priv->charge_control) {
 			ret = mt6370_chg_get_input(priv, &setting);
 			if (!ret)
 				val->intval = setting;
@@ -1077,7 +1086,7 @@ static int mt6370_chg_set_property(struct power_supply *psy,
 			mod_delayed_work(system_highpri_wq, &priv->policy_watchdog,
 					 MT6370_POLICY_LEASE);
 		}
-		if (priv->ichg_workaround &&
+		if (priv->charge_control &&
 		    (val->intval == POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO ||
 		     val->intval == POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE))
 			power_supply_changed(psy);
@@ -1093,7 +1102,7 @@ static int mt6370_chg_set_property(struct power_supply *psy,
 		fd = F_VOREG;
 		break;
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
-		if (priv->ichg_workaround && !val->intval) {
+		if (priv->charge_control && !val->intval) {
 			ret = mt6370_chg_suspend_input(priv);
 			power_supply_changed(psy);
 			return ret;
@@ -1127,12 +1136,12 @@ static int mt6370_chg_set_property(struct power_supply *psy,
 		power_supply_changed(psy);
 		return ret;
 	}
-	if (priv->ichg_workaround && fd == F_IAICR) {
+	if (priv->charge_control && fd == F_IAICR) {
 		ret = mt6370_chg_set_input(priv, setting);
 		power_supply_changed(psy);
 		return ret;
 	}
-	if (priv->ichg_workaround && fd == F_VMIVR)
+	if (priv->charge_control && fd == F_VMIVR)
 		return mt6370_chg_set_mivr(priv, setting);
 
 	return mt6370_chg_field_set(priv, fd, setting);
@@ -1145,7 +1154,7 @@ static int mt6370_chg_property_is_writeable(struct power_supply *psy,
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR:
-		return priv->ichg_workaround;
+		return priv->charge_control;
 	case POWER_SUPPLY_PROP_ONLINE:
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT:
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE:
@@ -1253,7 +1262,7 @@ static int mt6370_chg_init_setting(struct mt6370_priv *priv)
 	unsigned int asleep;
 	int ret;
 
-	if (priv->ichg_workaround) {
+	if (priv->charge_control) {
 		/* Policy must explicitly enable charging after validating its inputs. */
 		ret = mt6370_chg_set_behaviour(priv, POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE);
 		if (ret)
@@ -1336,7 +1345,7 @@ static int mt6370_chg_init_psy(struct mt6370_priv *priv)
 	};
 
 	priv->psy_desc = mt6370_chg_psy_desc;
-	if (!priv->ichg_workaround) {
+	if (!priv->charge_control) {
 		priv->psy_desc.num_properties--;
 		priv->psy_desc.charge_behaviours = 0;
 	}
@@ -1474,7 +1483,7 @@ static void mt6370_chg_quiesce(void *data)
 	mt6370_chg_cancel_work(priv);
 	if (priv->managed_charging)
 		cancel_delayed_work_sync(&priv->policy_watchdog);
-	if (priv->ichg_workaround)
+	if (priv->charge_control)
 		mt6370_chg_inhibit(priv);
 }
 
@@ -1493,7 +1502,7 @@ static int mt6370_chg_init_policy_guard(struct mt6370_priv *priv)
 							 "richtek,managed-charging");
 	if (!priv->managed_charging)
 		return 0;
-	if (!priv->ichg_workaround)
+	if (!priv->charge_control)
 		return -ENODEV;
 	/* Isolate input until a policy supplies validated limits. */
 	ret = mt6370_chg_suspend_input(priv);
@@ -1568,7 +1577,7 @@ static int mt6370_chg_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, ret,
 				     "Failed to init mt6370 charger setting\n");
 
-	if (priv->ichg_workaround) {
+	if (priv->charge_control) {
 		ret = devm_add_action_or_reset(dev, mt6370_chg_inhibit, priv);
 		if (ret)
 			return ret;

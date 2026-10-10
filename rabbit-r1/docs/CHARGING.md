@@ -42,7 +42,11 @@ then enable charging last. A failed operation attempts isolation and preserves
 its error. Failed bus writes may have taken effect; an error is not proof that
 charging stopped.
 
-`richtek,managed-charging` makes MT6370 start with input isolated. Successful
+The r1 carries an MT6371 (`DEV_INFO` 0xf4 in the stock loader log). Like stock, it
+uses the 500 mA ICHG floor and the ramp-down before clearing CHG_EN, but not the
+RT5081/MT6370 hidden-register current workaround.
+
+`richtek,managed-charging` makes the charger start with input isolated. Successful
 policy enable calls renew a ten-second software lease. Expiry requests input
 isolation and charge inhibition; a failed isolation is retried. Ordinary telemetry
 reads do not renew it. The stock hardware watchdog is disabled, as in Rabbit's
