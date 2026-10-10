@@ -53,6 +53,7 @@ PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/rootdir/fstab.r1:$(TARGET_COPY_OUT_VENDOR)/etc/fstab.r1 \
     $(LOCAL_PATH)/rootdir/fstab.r1:$(TARGET_COPY_OUT_ROOT)/first_stage_ramdisk/fstab.r1 \
     $(LOCAL_PATH)/rootdir/init.r1.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/init.r1.rc \
+    $(LOCAL_PATH)/rootdir/init.mt6765.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/hw/init.mt6765.rc \
     $(LOCAL_PATH)/rootdir/r1-logcat-kmsg.sh:$(TARGET_COPY_OUT_VENDOR)/bin/r1-logcat-kmsg.sh
 
 # Match the physical panel. Revisit density after UI testing on the device.

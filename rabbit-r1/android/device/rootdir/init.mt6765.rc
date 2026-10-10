@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
+# LK passes androidboot.hardware=mt6765, so init imports this file rather than
+# init.mainline.rc; pull in the common mainline actions (USB gadget/adb) here.
+import /vendor/etc/init/hw/init.mainline.rc
