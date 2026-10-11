@@ -806,6 +806,32 @@
 			compatible = "mediatek,mt6765-audsys", "syscon";
 			reg = <0 0x11220000 0 0x1000>;
 			#clock-cells = <1>;
+
+			afe: audio-controller {
+				compatible = "mediatek,mt6765-audio";
+				interrupts = <GIC_SPI 153 IRQ_TYPE_LEVEL_LOW>;
+				clocks = <&audio CLK_AUDIO_AFE>,
+					 <&audio CLK_AUDIO_DAC>,
+					 <&audio CLK_AUDIO_DAC_PREDIS>,
+					 <&audio CLK_AUDIO_ADC>,
+					 <&infracfg CLK_IFR_AUDIO>,
+					 <&infracfg CLK_IFR_AUDIO_26M_BCLK>,
+					 <&topckgen CLK_TOP_AUDIO_SEL>,
+					 <&topckgen CLK_TOP_AUD_INTBUS_SEL>,
+					 <&topckgen CLK_TOP_SYSPLL1_D4>,
+					 <&clk26m>;
+				clock-names = "aud_afe_clk",
+					      "aud_dac_clk",
+					      "aud_dac_predis_clk",
+					      "aud_adc_clk",
+					      "aud_infra_clk",
+					      "mtkaif_26m_clk",
+					      "top_mux_audio",
+					      "top_mux_aud_intbus",
+					      "top_syspll1_d4",
+					      "top_clk26m_clk";
+				status = "disabled";
+			};
 		};
 
 		mmc0: mmc@11230000 {
