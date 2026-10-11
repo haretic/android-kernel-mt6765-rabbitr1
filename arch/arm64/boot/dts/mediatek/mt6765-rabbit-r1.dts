@@ -13,8 +13,10 @@
 
 /dts-v1/;
 
+#include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/iio/adc/mediatek,mt6357-auxadc.h>
 #include <dt-bindings/iio/adc/mediatek,mt6370_adc.h>
+#include <dt-bindings/input/input.h>
 #include <dt-bindings/pinctrl/mediatek,mt6765-pinfunc.h>
 #include "mt6765.dtsi"
 #include "mt6357.dtsi"
@@ -151,6 +153,17 @@
 	interrupts = <144 IRQ_TYPE_LEVEL_HIGH>;
 	#interrupt-cells = <2>;
 
+	/*
+	 * Stock: only PWRKEY, the side push-to-talk button, as KEY_POWER;
+	 * home key commented out. Long-press PMIC reset on PWRKEY, delay 0.
+	 */
+	keys {
+		mediatek,long-press-mode = <1>;
+		power-off-time-sec = <0>;
+
+		/delete-node/ key-home;
+	};
+
 	rtc {
 		nvmem-layout {
 			compatible = "fixed-layout";
@@ -219,6 +232,39 @@
 		touchscreen-size-x = <480>;
 		touchscreen-size-y = <640>;
 	};
+};
+
+&i2c6 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&r1_i2c6_pins>;
+	/* Stock runs 400 kHz; standard speed for bring-up like I2C4/5. */
+	clock-frequency = <100000>;
+	status = "okay";
+
+	/* Stock och1970@0d: Hall sensor under the scroll wheel, polled. */
+	wheel@d {
+		compatible = "ocs,och1970";
+		reg = <0x0d>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&r1_wheel_pins>;
+		reset-gpios = <&pio 173 GPIO_ACTIVE_LOW>;
+	};
+};
+
+/*
+ * Stock mtk-kpd maps hardware key 1 (row 0, column 1) to KEY_POWER. Keys
+ * 8, 17 and 71 sit in column 8, which is the PMIC's and has no pin here.
+ */
+&keypad {
+	pinctrl-names = "default";
+	pinctrl-0 = <&r1_keypad_pins>;
+	keypad,num-rows = <1>;
+	keypad,num-columns = <2>;
+	linux,keymap = <MATRIX_KEY(0, 1, KEY_POWER)>;
+	/* Stock KP_DEBOUNCE 1024 at 32 ticks per ms. */
+	debounce-delay-ms = <32>;
+	wakeup-source;
+	status = "okay";
 };
 
 &i2c5 {
@@ -337,6 +383,37 @@
 
 		pins-reset {
 			pinmux = <PINMUX_GPIO174__FUNC_GPIO174>;
+		};
+	};
+
+	r1_i2c6_pins: i2c6-pins {
+		pins-bus {
+			pinmux = <PINMUX_GPIO161__FUNC_SCL6>,
+				 <PINMUX_GPIO162__FUNC_SDA6>;
+			input-enable;
+		};
+	};
+
+	r1_wheel_pins: wheel-pins {
+		pins-reset {
+			pinmux = <PINMUX_GPIO173__FUNC_GPIO173>;
+		};
+	};
+
+	/* Stock gpio_init_default: KPROW0 driven, KPCOL0/1 pulled up. */
+	r1_keypad_pins: keypad-pins {
+		pins-rows {
+			pinmux = <PINMUX_GPIO92__FUNC_KPROW0>;
+			output-low;
+			bias-disable;
+		};
+
+		pins-cols {
+			pinmux = <PINMUX_GPIO93__FUNC_KPCOL0>,
+				 <PINMUX_GPIO94__FUNC_KPCOL1>;
+			input-enable;
+			input-schmitt-enable;
+			bias-pull-up = <MTK_PUPD_SET_R1R0_10>;
 		};
 	};
 
