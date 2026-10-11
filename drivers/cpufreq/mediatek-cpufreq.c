@@ -61,6 +61,13 @@ struct mtk_cpu_dvfs_info {
 
 static struct platform_device *cpufreq_pdev;
 
+/*
+ * Some SoCs (e.g. MT6765) feed every cluster from the same Vproc/Vsram pair.
+ * The regulator core aggregates the per-cluster requests, but the tracking
+ * steps of two clusters must not interleave, so serialise all transitions.
+ */
+static DEFINE_MUTEX(mtk_cpufreq_rail_lock);
+
 static LIST_HEAD(dvfs_info_list);
 
 static struct mtk_cpu_dvfs_info *mtk_cpu_dvfs_info_lookup(int cpu)
@@ -213,6 +220,7 @@ static int mtk_cpufreq_set_target(struct cpufreq_policy *policy,
 
 	pre_freq_hz = clk_get_rate(cpu_clk);
 
+	mutex_lock(&mtk_cpufreq_rail_lock);
 	mutex_lock(&info->reg_lock);
 
 	if (unlikely(info->pre_vproc <= 0))
@@ -309,6 +317,7 @@ static int mtk_cpufreq_set_target(struct cpufreq_policy *policy,
 
 out:
 	mutex_unlock(&info->reg_lock);
+	mutex_unlock(&mtk_cpufreq_rail_lock);
 
 	return ret;
 }
@@ -327,6 +336,7 @@ static int mtk_cpufreq_opp_notifier(struct notifier_block *nb,
 	if (event == OPP_EVENT_ADJUST_VOLTAGE) {
 		freq = dev_pm_opp_get_freq(opp);
 
+		mutex_lock(&mtk_cpufreq_rail_lock);
 		mutex_lock(&info->reg_lock);
 		if (info->current_freq == freq) {
 			volt = dev_pm_opp_get_voltage(opp);
@@ -336,6 +346,7 @@ static int mtk_cpufreq_opp_notifier(struct notifier_block *nb,
 					"failed to scale voltage: %d\n", ret);
 		}
 		mutex_unlock(&info->reg_lock);
+		mutex_unlock(&mtk_cpufreq_rail_lock);
 	} else if (event == OPP_EVENT_DISABLE) {
 		freq = dev_pm_opp_get_freq(opp);
 
@@ -624,6 +635,7 @@ static struct cpufreq_driver mtk_cpufreq_driver = {
 	.init = mtk_cpufreq_init,
 	.exit = mtk_cpufreq_exit,
 	.register_em = cpufreq_register_em_with_opp,
+	.set_boost = cpufreq_boost_set_sw,
 	.name = "mtk-cpufreq",
 };
 
@@ -691,6 +703,20 @@ static const struct mtk_cpufreq_platform_data mt2701_platform_data = {
 	.ccifreq_supported = false,
 };
 
+/*
+ * MT6765 limits from the vendor cpufreq driver: Vproc and Vsram_proc at most
+ * 1.2 V, Vsram = Vproc + 100 mV but at least 850 mV. The vendor driver lets
+ * Vsram lead Vproc by up to 350 mV during a ramp; use 200 mV here.
+ */
+static const struct mtk_cpufreq_platform_data mt6765_platform_data = {
+	.min_volt_shift = 100000,
+	.max_volt_shift = 200000,
+	.proc_max_volt = 1200000,
+	.sram_min_volt = 850000,
+	.sram_max_volt = 1200000,
+	.ccifreq_supported = false,
+};
+
 static const struct mtk_cpufreq_platform_data mt7622_platform_data = {
 	.min_volt_shift = 100000,
 	.max_volt_shift = 200000,
@@ -747,6 +773,7 @@ static const struct mtk_cpufreq_platform_data mt8516_platform_data = {
 static const struct of_device_id mtk_cpufreq_machines[] __initconst __maybe_unused = {
 	{ .compatible = "mediatek,mt2701", .data = &mt2701_platform_data },
 	{ .compatible = "mediatek,mt2712", .data = &mt2701_platform_data },
+	{ .compatible = "mediatek,mt6765", .data = &mt6765_platform_data },
 	{ .compatible = "mediatek,mt7622", .data = &mt7622_platform_data },
 	{ .compatible = "mediatek,mt7623", .data = &mt7623_platform_data },
 	{ .compatible = "mediatek,mt7988a", .data = &mt7988_platform_data },
