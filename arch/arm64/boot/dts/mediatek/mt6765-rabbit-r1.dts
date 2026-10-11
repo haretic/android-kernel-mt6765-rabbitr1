@@ -113,9 +113,12 @@
 	status = "okay";
 };
 
+&dsi_phy {
+	status = "okay";
+};
+
 &dsi {
-	/* Host timing, PHY and power handoff still need validation. */
-	status = "disabled";
+	status = "okay";
 
 	port {
 		r1_dsi_out: endpoint {
@@ -248,9 +251,7 @@
 			mediatek,bled-ovp-microvolt = <29000000>;
 			mediatek,bled-ocp-microamp = <1500000>;
 			max-brightness = <512>;
-			default-brightness = <0>;
-			/* Keep LK's display state until the panel handoff is ready. */
-			status = "disabled";
+			default-brightness = <256>;
 		};
 
 		tcpc {
