@@ -10,7 +10,7 @@
 #
 # Generated inputs (not committed; see aw87xxx-acf-to-aw87390.py):
 #   prebuilt/firmware/aw87390_acf.bin    from stock vendor/firmware/aw87xxx_acf.bin
-#   prebuilt/modules/snd-soc-aw88395-lib.ko, snd-soc-aw87390.ko from the kernel build
+# The amplifier modules reach /vendor/lib/modules with the other kernel modules.
 
 R1_AUDIO_PATH := device/rabbit/r1/audio
 
@@ -21,9 +21,7 @@ PRODUCT_COPY_FILES += \
     $(R1_AUDIO_PATH)/ucm2/conf.d/mt6765-mt6357/rabbit-r1.conf:$(TARGET_COPY_OUT_VENDOR)/etc/alsa/ucm2/conf.d/mt6765-mt6357/rabbit-r1.conf \
     $(R1_AUDIO_PATH)/ucm2/Rabbit/r1/HiFi.conf:$(TARGET_COPY_OUT_VENDOR)/etc/alsa/ucm2/Rabbit/r1/HiFi.conf \
     $(R1_AUDIO_PATH)/init.r1.audio.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/init.r1.audio.rc \
-    device/rabbit/r1/prebuilt/firmware/aw87390_acf.bin:$(TARGET_COPY_OUT_VENDOR)/firmware/aw87390_acf.bin \
-    device/rabbit/r1/prebuilt/modules/snd-soc-aw88395-lib.ko:$(TARGET_COPY_OUT_VENDOR)/lib/modules/snd-soc-aw88395-lib.ko \
-    device/rabbit/r1/prebuilt/modules/snd-soc-aw87390.ko:$(TARGET_COPY_OUT_VENDOR)/lib/modules/snd-soc-aw87390.ko
+    device/rabbit/r1/prebuilt/firmware/aw87390_acf.bin:$(TARGET_COPY_OUT_VENDOR)/firmware/aw87390_acf.bin
 
 # Use the r1 card only, and give the amplifier module time to bind it.
 PRODUCT_VENDOR_PROPERTIES += \
