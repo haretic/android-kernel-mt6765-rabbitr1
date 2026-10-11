@@ -44,9 +44,6 @@ PRODUCT_VENDOR_PROPERTIES += \
     apexd.config.dm_create.timeout=20000 \
     apexd.config.dm_delete.timeout=5000
 
-# No physical display driver yet: compose onto vkms (card1, after vgem's card0).
-# drmfb's auto-detection skips it because libdrm does not know the faux bus.
-PRODUCT_VENDOR_PROPERTIES += vendor.hwc.drm.device=/dev/dri/card1
 
 # Mainline has no ashmem; libcutils only picks memfd by itself for SDK 37+ callers.
 PRODUCT_SYSTEM_PROPERTIES += sys.use_memfd=true
