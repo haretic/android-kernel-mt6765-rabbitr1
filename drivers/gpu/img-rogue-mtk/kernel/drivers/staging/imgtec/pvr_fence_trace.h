@@ -40,6 +40,17 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */ /**************************************************************************/
 
+#include <linux/version.h>
+
+/* __assign_str() lost its source argument in 6.10. */
+#if !defined(PVR_ASSIGN_STR)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 10, 0))
+#define PVR_ASSIGN_STR(dst, src) __assign_str(dst)
+#else
+#define PVR_ASSIGN_STR(dst, src) __assign_str(dst, src)
+#endif
+#endif
+
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM pvr_fence
 
@@ -62,7 +73,7 @@ DECLARE_EVENT_CLASS(pvr_fence_context,
 	),
 
 	TP_fast_assign(
-		__assign_str(name, fctx->name)
+		PVR_ASSIGN_STR(name, fctx->name);
 		pvr_context_value_str(fctx, __entry->val,
 			sizeof(__entry->val));
 	),
@@ -107,11 +118,11 @@ DECLARE_EVENT_CLASS(pvr_fence,
 	),
 
 	TP_fast_assign(
-		__assign_str(driver,
-			fence->base.ops->get_driver_name(&fence->base))
-		__assign_str(timeline,
-			fence->base.ops->get_timeline_name(&fence->base))
-		fence->base.ops->fence_value_str(&fence->base,
+		PVR_ASSIGN_STR(driver,
+			fence->base.ops->get_driver_name(&fence->base));
+		PVR_ASSIGN_STR(timeline,
+			fence->base.ops->get_timeline_name(&fence->base));
+		pvr_dma_fence_value_str(&fence->base,
 			__entry->val, sizeof(__entry->val));
 		__entry->context = fence->base.context;
 	),
@@ -166,27 +177,23 @@ DECLARE_EVENT_CLASS(pvr_fence_foreign,
 	),
 
 	TP_fast_assign(
-		__assign_str(driver,
-			fence->base.ops->get_driver_name(&fence->base))
-		__assign_str(timeline,
-			fence->base.ops->get_timeline_name(&fence->base))
-		fence->base.ops->fence_value_str(&fence->base, __entry->val,
+		PVR_ASSIGN_STR(driver,
+			fence->base.ops->get_driver_name(&fence->base));
+		PVR_ASSIGN_STR(timeline,
+			fence->base.ops->get_timeline_name(&fence->base));
+		pvr_dma_fence_value_str(&fence->base, __entry->val,
 			sizeof(__entry->val));
 		__entry->context = fence->base.context;
-		__assign_str(foreign_driver,
+		PVR_ASSIGN_STR(foreign_driver,
 			fence->fence->ops->get_driver_name ?
 			fence->fence->ops->get_driver_name(fence->fence) :
-			"unknown")
-		__assign_str(foreign_timeline,
+			"unknown");
+		PVR_ASSIGN_STR(foreign_timeline,
 			fence->fence->ops->get_timeline_name ?
 			fence->fence->ops->get_timeline_name(fence->fence) :
-			"unknown")
-		fence->fence->ops->fence_value_str ?
-			fence->fence->ops->fence_value_str(
-				fence->fence, __entry->foreign_val,
-				sizeof(__entry->foreign_val)) :
-			(void) strlcpy(__entry->foreign_val,
-				"unknown", sizeof(__entry->foreign_val));
+			"unknown");
+		pvr_dma_fence_value_str(fence->fence, __entry->foreign_val,
+			sizeof(__entry->foreign_val));
 		__entry->foreign_context = fence->fence->context;
 	),
 
