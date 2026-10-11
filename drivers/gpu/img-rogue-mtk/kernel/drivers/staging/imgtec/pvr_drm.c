@@ -69,6 +69,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "kernel_compatibility.h"
 
+/* All DRM ioctls are unlocked on current kernels; the flag is gone. */
+#if !defined(DRM_UNLOCKED)
+#define DRM_UNLOCKED 0
+#endif
+
 #define PVR_DRM_DRIVER_NAME PVR_DRM_NAME
 #define PVR_DRM_DRIVER_DESC "Imagination Technologies PVR DRM"
 #define	PVR_DRM_DRIVER_DATE "20170530"
@@ -281,7 +286,9 @@ static const struct file_operations pvr_drm_fops = {
 const struct drm_driver pvr_drm_generic_driver = {
 	.driver_features	= DRIVER_MODESET | DRIVER_RENDER,
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 18, 0))
 	.dev_priv_size		= 0,
+#endif
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0))
 	.load			= NULL,
 	.unload			= NULL,
@@ -298,7 +305,9 @@ const struct drm_driver pvr_drm_generic_driver = {
 
 	.name			= PVR_DRM_DRIVER_NAME,
 	.desc			= PVR_DRM_DRIVER_DESC,
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 14, 0))
 	.date			= PVR_DRM_DRIVER_DATE,
+#endif
 	.major			= PVRVERSION_MAJ,
 	.minor			= PVRVERSION_MIN,
 	.patchlevel		= PVRVERSION_BUILD,

@@ -221,7 +221,11 @@ err_drm_dev_put:
 #endif
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0))
+static void pvr_remove(struct platform_device *pdev)
+#else
 static int pvr_remove(struct platform_device *pdev)
+#endif
 {
 	struct drm_device *ddev = platform_get_drvdata(pdev);
 
@@ -240,7 +244,9 @@ static int pvr_remove(struct platform_device *pdev)
 #else
 	drm_put_dev(ddev);
 #endif
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 11, 0))
 	return 0;
+#endif
 }
 
 static void pvr_shutdown(struct platform_device *pdev)
