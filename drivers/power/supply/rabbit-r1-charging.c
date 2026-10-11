@@ -120,6 +120,12 @@ static struct r1_charge_target r1_charge_decide(struct r1_charge_policy *p,
 		budget = R1_CHARGE_MAX_UA;
 	} else if (s->usb_type == POWER_SUPPLY_USB_TYPE_SDP) {
 		budget = clamp(s->gadget_ua, 0, 500000);
+	} else if (s->usb_type == POWER_SUPPLY_USB_TYPE_UNKNOWN) {
+		/*
+		 * Nothing on the r1 starts BC1.2 detection, so every source reads
+		 * as unknown. The USB 2.0 default current is safe on any of them.
+		 */
+		budget = 500000;
 	}
 	/* IAICR cannot represent enumeration/reset/suspend budgets below 100 mA. */
 	t.input_ua = budget >= 100000 ? budget / 50000 * 50000 : 0;

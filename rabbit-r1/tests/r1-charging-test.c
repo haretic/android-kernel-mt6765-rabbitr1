@@ -117,10 +117,10 @@ static void decisions(void)
         struct r1_charge_target t=r1_charge_decide(&p,&s);
         assert(t.charge_ua<=cap && t.charge_ua<=1000000 && t.input_ua<=1000000);
         assert(t.charge_ua==0 || (t.charge_ua>=500000 && t.charge_ua%100000==0));
-        if (temp<50 || temp>=500 || voltage<3000000 || voltage>=4200000 || !usb)
+        if (temp<50 || temp>=500 || voltage<3000000 || voltage>=4200000)
             assert(!t.charge_ua);
         if (temp>=430 && voltage>=4100000) assert(!t.charge_ua);
-        if (temp<150 || temp>=430 || usb==POWER_SUPPLY_USB_TYPE_SDP) assert(t.charge_ua<=500000);
+        if (temp<150 || temp>=430 || usb==POWER_SUPPLY_USB_TYPE_SDP || !usb) assert(t.charge_ua<=500000);
         if (temp>=150 && temp<430 && voltage>=3000000 && voltage<4200000 && usb>=2)
             assert(t.charge_ua==cap);
         cases++;
