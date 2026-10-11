@@ -1,0 +1,5 @@
+# rabbit r1 scroll wheel (OCH1970 Hall sensor). Stock och1970_holl_key
+# reports KEY_UP/KEY_DOWN per step and RabbitOS maps them through Generic.kl.
+
+key 103   DPAD_UP
+key 108   DPAD_DOWN
