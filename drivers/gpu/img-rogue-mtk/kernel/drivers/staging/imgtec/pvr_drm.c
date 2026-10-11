@@ -200,7 +200,13 @@ void pvr_drm_unload(struct drm_device *ddev)
 
 	DRM_DEBUG_DRIVER("device %p\n", ddev->dev);
 
+	/*
+	 * Since 5.8 drm_mode_config_init() is managed and the cleanup runs
+	 * when the drm_device is released; do not tear it down twice.
+	 */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0))
 	drm_mode_config_cleanup(ddev);
+#endif
 
 	PVRSRVDeviceDeinit(priv->dev_node);
 
