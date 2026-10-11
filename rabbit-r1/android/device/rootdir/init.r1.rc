@@ -18,7 +18,7 @@ on late-fs
 
 # configfs gadget HAL and init.usb.configfs.rc bind this UDC (mainline musb).
 on early-boot
-    setprop sys.usb.controller musb-hdrc.3.auto
+    setprop sys.usb.controller musb-hdrc.0
 
 # Boot deadman: with watchdog.open_timeout on the kernel cmdline the hardware
 # watchdog resets the r1 unless Android completes boot or brings up adb first.
