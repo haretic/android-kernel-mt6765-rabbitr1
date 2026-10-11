@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# AW87390 speaker amplifier: a module so its ACF firmware comes from
+# /vendor/firmware. Binding it completes the deferred rabbit-r1 sound card.
+on post-fs
+    insmod /vendor/lib/modules/snd-soc-aw88395-lib.ko
+    insmod /vendor/lib/modules/snd-soc-aw87390.ko
