@@ -1,0 +1,2 @@
+# PowerVR sync device: opened by every EGL/Vulkan client.
+/dev/pvr_sync             0666   system     graphics
