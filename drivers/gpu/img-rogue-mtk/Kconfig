@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config DRM_PVR_MTK_DDK
+	tristate "MediaTek PowerVR Rogue DDK 1.13 (pvrsrvkm) for MT6765"
+	depends on DRM && ARM64 && OF
+	depends on COMMON_CLK && PM
+	select DMA_SHARED_BUFFER
+	select SYNC_FILE
+	select FW_LOADER
+	help
+	  Port of the Imagination PowerVR Rogue services kernel driver
+	  shipped by MediaTek in the stock Rabbit R1 kernel
+	  (DDK 1.13, m1.13ED5776728, GE8320 BVNC 22.87.104.18).
+
+	  The userspace bridge ABI (ioctls, bridge tables and the "pvr"
+	  DRM driver) is kept identical to the stock DDK so that the
+	  stock Android userspace GPU blobs can talk to it. This is not
+	  the upstream "powervr" DRM driver and does not share its UAPI.
+
+	  The module is called pvrsrvkm and loads the firmware files
+	  rgx.fw and rgx.sh.
