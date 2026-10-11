@@ -1,0 +1,3 @@
+# The HAL only looks for stale hrtimer triggers of its own in configfs; the
+# r1's trigger is created by init.
+dontaudit hal_sensors_default configfs:dir search;

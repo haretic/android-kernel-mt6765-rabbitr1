@@ -72,6 +72,13 @@ PRODUCT_VENDOR_PROPERTIES += ro.hw_timeout_multiplier=5
 PRODUCT_COPY_FILES += \
     frameworks/native/data/etc/handheld_core_hardware.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/handheld_core_hardware.xml
 
+# ICM-42607 accelerometer and gyroscope through the mainline IIO sensors HAL.
+PRODUCT_COPY_FILES += \
+    $(LOCAL_PATH)/rootdir/init.r1.sensors.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/init.r1.sensors.rc \
+    $(LOCAL_PATH)/sensors/r1-sensors.conf:$(TARGET_COPY_OUT_VENDOR)/etc/sensors/r1-sensors.conf \
+    frameworks/native/data/etc/android.hardware.sensor.accelerometer.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.sensor.accelerometer.xml \
+    frameworks/native/data/etc/android.hardware.sensor.gyroscope.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.sensor.gyroscope.xml
+
 # Side button (PMIC power key and keypad) and the OCH1970 scroll wheel.
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/keylayout/mtk-pmic-keys.kl:$(TARGET_COPY_OUT_VENDOR)/usr/keylayout/mtk-pmic-keys.kl \
