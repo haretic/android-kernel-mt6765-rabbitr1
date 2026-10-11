@@ -108,6 +108,7 @@ static const struct mtk_pmic_regs mt6357_regs = {
 				   MTK_PMIC_MT6357_HOMEKEY_RST),
 	.pmic_rst_reg = MT6357_TOP_RST_MISC,
 	.rst_lprst_mask = MTK_PMIC_MT6357_RST_DU_MASK,
+	.key_release_irq = true,
 };
 
 static const struct mtk_pmic_regs mt6358_regs = {
@@ -226,6 +227,31 @@ static irqreturn_t mtk_pmic_keys_irq_handler_thread(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+/*
+ * PMICs with a separate release interrupt raise the press and release
+ * interrupts on the corresponding edges, so report the edge itself. Sampling
+ * the debounced state instead loses taps that end before the thread runs.
+ */
+static irqreturn_t mtk_pmic_keys_press_irq_handler_thread(int irq, void *data)
+{
+	struct mtk_pmic_keys_info *info = data;
+
+	input_report_key(info->keys->input_dev, info->keycode, 1);
+	input_sync(info->keys->input_dev);
+
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t mtk_pmic_keys_release_irq_handler_thread(int irq, void *data)
+{
+	struct mtk_pmic_keys_info *info = data;
+
+	input_report_key(info->keys->input_dev, info->keycode, 0);
+	input_sync(info->keys->input_dev);
+
+	return IRQ_HANDLED;
+}
+
 static int mtk_pmic_key_setup(struct mtk_pmic_keys *keys,
 		struct mtk_pmic_keys_info *info)
 {
@@ -240,6 +266,8 @@ static int mtk_pmic_key_setup(struct mtk_pmic_keys *keys,
 		return ret;
 
 	ret = devm_request_threaded_irq(keys->dev, info->irq, NULL,
+					info->irq_r > 0 ?
+					mtk_pmic_keys_press_irq_handler_thread :
 					mtk_pmic_keys_irq_handler_thread,
 					IRQF_ONESHOT | IRQF_TRIGGER_HIGH,
 					"mtk-pmic-keys", info);
@@ -251,7 +279,7 @@ static int mtk_pmic_key_setup(struct mtk_pmic_keys *keys,
 
 	if (info->irq_r > 0) {
 		ret = devm_request_threaded_irq(keys->dev, info->irq_r, NULL,
-						mtk_pmic_keys_irq_handler_thread,
+						mtk_pmic_keys_release_irq_handler_thread,
 						IRQF_ONESHOT | IRQF_TRIGGER_HIGH,
 						"mtk-pmic-keys", info);
 		if (ret) {
