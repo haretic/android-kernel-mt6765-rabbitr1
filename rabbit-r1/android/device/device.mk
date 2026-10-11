@@ -100,3 +100,6 @@ TARGET_SCREEN_HEIGHT := 640
 PRODUCT_AAPT_CONFIG := normal
 PRODUCT_AAPT_PREF_CONFIG := hdpi
 PRODUCT_VENDOR_PROPERTIES += ro.sf.lcd_density=140
+
+# MT6765 AFE + MT6357 codec + AW87390 speaker amplifier.
+$(call inherit-product, $(LOCAL_PATH)/audio/audio.mk)
