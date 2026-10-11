@@ -48,4 +48,8 @@ source "drivers/staging/axis-fifo/Kconfig"
 
 source "drivers/staging/vme_user/Kconfig"
 
+source "drivers/staging/mtk-ion-compat/Kconfig"
+
+source "drivers/staging/mtk-ged/Kconfig"
+
 endif # STAGING
