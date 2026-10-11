@@ -34,6 +34,7 @@ properties:
               - mediatek,mt6735-vencsys
               - mediatek,mt6765-camsys
               - mediatek,mt6765-imgsys
+              - mediatek,mt6765-mcucfg
               - mediatek,mt6765-mipi0a
               - mediatek,mt6765-vcodecsys
               - mediatek,mt6779-camsys
