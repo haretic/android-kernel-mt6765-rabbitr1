@@ -7,6 +7,7 @@ obj-$(CONFIG_GPU_BUDDY)	+= buddy.o
 obj-y			+= host1x/ drm/ vga/ tests/
 obj-$(CONFIG_IMX_IPUV3_CORE)	+= ipu-v3/
 obj-$(CONFIG_TRACE_GPU_MEM)		+= trace/
+obj-$(CONFIG_DRM_PVR_MTK_DDK)	+= img-rogue-mtk/
 
 # nova-core and nova-drm are built from this Makefile so nova-drm's dependency
 # on nova-core can be expressed as a plain Make prerequisite rather than a
