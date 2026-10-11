@@ -252,6 +252,28 @@
 };
 
 /*
+ * Stock routes the ICM-42607 IMU through the SCP sensor hub: GPIO13-16 run
+ * as SCP_SPI0 (mode 3) and the SCP firmware's icm4n607 driver talks SPI to
+ * it. The same pads carry the AP's SPI4 in mode 2, so the AP drives the IMU
+ * directly. The interrupt line is not known, so the IMU is polled through
+ * an IIO trigger. The supplies follow the MediaTek reference sensor wiring
+ * (VIO28 core, VIO18 I/O); both are on from LK and not traced on the board.
+ */
+&spi4 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&r1_spi4_pins>;
+	status = "okay";
+
+	imu@0 {
+		compatible = "invensense,icm42607p";
+		reg = <0>;
+		spi-max-frequency = <10000000>;
+		vdd-supply = <&mt6357_vio28_reg>;
+		vddio-supply = <&mt6357_vio18_reg>;
+	};
+};
+
+/*
  * Stock mtk-kpd maps hardware key 1 (row 0, column 1) to KEY_POWER. Keys
  * 8, 17 and 71 sit in column 8, which is the PMIC's and has no pin here.
  */
@@ -391,6 +413,16 @@
 			pinmux = <PINMUX_GPIO161__FUNC_SCL6>,
 				 <PINMUX_GPIO162__FUNC_SDA6>;
 			input-enable;
+		};
+	};
+
+	/* Keep the stock gpio_init_default bias: MISO pulled down, the rest none. */
+	r1_spi4_pins: spi4-pins {
+		pins-spi {
+			pinmux = <PINMUX_GPIO13__FUNC_SPI4_MI>,
+				 <PINMUX_GPIO14__FUNC_SPI4_CSB>,
+				 <PINMUX_GPIO15__FUNC_SPI4_MO>,
+				 <PINMUX_GPIO16__FUNC_SPI4_CLK>;
 		};
 	};
 
