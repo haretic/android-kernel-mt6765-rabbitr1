@@ -154,7 +154,8 @@ static const struct mtk_fixed_factor top_divs[] = {
 	FACTOR(CLK_TOP_AES_FDE, "aes_fde_ck", "aes_fde_sel", 1, 1),
 	FACTOR(CLK_TOP_F_BIST2FPC, "f_bist2fpc_ck", "univpll2_d2", 1, 1),
 	FACTOR(CLK_TOP_ARMPLL_DIVIDER_PLL0, "arm_div_pll0", "syspll_d2", 1, 1),
-	FACTOR(CLK_TOP_ARMPLL_DIVIDER_PLL1, "arm_div_pll1", "syspll_ck", 1, 1),
+	/* CLK_TOP_SYSPLL shares ID 0 with CLK_TOP_CLK26M, so syspll_ck never registers */
+	FACTOR(CLK_TOP_ARMPLL_DIVIDER_PLL1, "arm_div_pll1", "mainpll", 1, 1),
 	FACTOR(CLK_TOP_ARMPLL_DIVIDER_PLL2, "arm_div_pll2", "univpll_d2", 1, 1),
 	FACTOR(CLK_TOP_DA_USB20_48M_DIV,
 	       "usb20_48m_div", "usb20_192m_d4", 1, 1),
@@ -800,6 +801,79 @@ static int clk_mt6765_top_probe(struct platform_device *pdev)
 	return r;
 }
 
+/*
+ * MCUCFG CPU clock muxes ([10:9] of the *_PLL_DIVIDER_CFG registers):
+ * 0 = 26 MHz, 1 = cluster PLL, 2 = MAINPLL, 3 = UNIVPLL/2.
+ * Inputs 2 and 3 only reach MCUSYS while their CLK_MISC_CFG_0 enable is set.
+ */
+static const char * const mcu_mp0_parents[] = {
+	"clk26m",
+	"armpll_l",
+	"arm_div_pll1_en",
+	"arm_div_pll2_en",
+};
+
+static const char * const mcu_mp1_parents[] = {
+	"clk26m",
+	"armpll",
+	"arm_div_pll1_en",
+	"arm_div_pll2_en",
+};
+
+static const char * const mcu_bus_parents[] = {
+	"clk26m",
+	"ccipll",
+	"arm_div_pll1_en",
+	"arm_div_pll2_en",
+};
+
+static const struct mtk_composite mcu_muxes[] = {
+	/* mp0_pll_divider_cfg: cpu0-3 */
+	MUX_FLAGS(CLK_MCU_MP0_SEL, "mcu_mp0_sel", mcu_mp0_parents,
+		  0x7a0, 9, 2, 0),
+	/* mp1_pll_divider_cfg: cpu4-7 */
+	MUX_FLAGS(CLK_MCU_MP1_SEL, "mcu_mp1_sel", mcu_mp1_parents,
+		  0x7a4, 9, 2, 0),
+	/* bus_pll_divider_cfg: CCI */
+	MUX_FLAGS(CLK_MCU_BUS_SEL, "mcu_bus_sel", mcu_bus_parents,
+		  0x7c0, 9, 2, 0),
+};
+
+static int clk_mt6765_mcu_probe(struct platform_device *pdev)
+{
+	struct clk_hw_onecell_data *clk_data;
+	struct device_node *node = pdev->dev.of_node;
+	void __iomem *base;
+	int r;
+
+	base = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(base))
+		return PTR_ERR(base);
+
+	clk_data = mtk_alloc_clk_data(CLK_MCU_NR_CLK);
+	if (!clk_data)
+		return -ENOMEM;
+
+	r = mtk_clk_register_composites(&pdev->dev, mcu_muxes,
+					ARRAY_SIZE(mcu_muxes), base,
+					&mt6765_clk_lock, clk_data);
+	if (r)
+		goto free_data;
+
+	r = of_clk_add_hw_provider(node, of_clk_hw_onecell_get, clk_data);
+	if (r)
+		goto unregister;
+
+	return 0;
+
+unregister:
+	mtk_clk_unregister_composites(mcu_muxes, ARRAY_SIZE(mcu_muxes),
+				      clk_data);
+free_data:
+	mtk_free_clk_data(clk_data);
+	return r;
+}
+
 static int clk_mt6765_ifr_probe(struct platform_device *pdev)
 {
 	struct clk_hw_onecell_data *clk_data;
@@ -836,6 +910,9 @@ static const struct of_device_id of_match_clk_mt6765[] = {
 	}, {
 		.compatible = "mediatek,mt6765-infracfg",
 		.data = clk_mt6765_ifr_probe,
+	}, {
+		.compatible = "mediatek,mt6765-mcucfg",
+		.data = clk_mt6765_mcu_probe,
 	}, {
 		/* sentinel */
 	}
