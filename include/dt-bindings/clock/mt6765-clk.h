@@ -311,4 +311,11 @@
 #define CLK_CAM_CCU			8
 #define CLK_CAM_NR_CLK			9
 
+/* MCUCFG */
+
+#define CLK_MCU_MP0_SEL			0
+#define CLK_MCU_MP1_SEL			1
+#define CLK_MCU_BUS_SEL			2
+#define CLK_MCU_NR_CLK			3
+
 #endif /* _DT_BINDINGS_CLK_MT6765_H */

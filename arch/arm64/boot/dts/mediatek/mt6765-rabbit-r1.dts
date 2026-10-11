@@ -56,6 +56,146 @@
 		bootargs = "earlycon=uart8250,mmio32,0x11002000 console=ttyS0,921600n8 maxcpus=1 clk_ignore_unused regulator_ignore_unused";
 	};
 
+	/*
+	 * CPU DVFS. Vproc (MT6357 VPROC) and Vsram_proc feed both clusters and
+	 * the CCI. Pairs are the stock R1 kernel's CPU level 10 tables: efuse
+	 * segment (devinfo word 30, efuse_segment_cell @0x78) reads 0x24 here,
+	 * which _mt_cpufreq_get_cpu_level maps to level 10 ("65X"). Tables in
+	 * out/stock-kernel.elf: L 0xffffff80097d4498, LL 0xffffff80097d4a18,
+	 * CCI 0xffffff80097d4f98 (opp_tbls at 0xffffff80097d5018).
+	 *
+	 * LK leaves L 1500 MHz, LL 920 MHz and CCI 600 MHz at 0.800 V. CCI is
+	 * not scaled; the stock CCI table needs 0.8125 V for 600 MHz, so no OPP
+	 * below 0.8125 V is listed. OPPs above 0.85 V are turbo-mode: they stay
+	 * unused until /sys/devices/system/cpu/cpufreq/boost is set to 1,
+	 * because nothing throttles the SoC thermally yet.
+	 */
+	cluster0_opp: opp-table-cluster0 {
+		compatible = "operating-points-v2";
+		opp-shared;
+
+		opp-1617000000 {
+			opp-hz = /bits/ 64 <1617000000>;
+			opp-microvolt = <812500>;
+		};
+
+		opp-1750000000 {
+			opp-hz = /bits/ 64 <1750000000>;
+			opp-microvolt = <850000>;
+		};
+
+		opp-1803000000 {
+			opp-hz = /bits/ 64 <1803000000>;
+			opp-microvolt = <893750>;
+			turbo-mode;
+		};
+
+		opp-1856000000 {
+			opp-hz = /bits/ 64 <1856000000>;
+			opp-microvolt = <937500>;
+			turbo-mode;
+		};
+
+		opp-1909000000 {
+			opp-hz = /bits/ 64 <1909000000>;
+			opp-microvolt = <975000>;
+			turbo-mode;
+		};
+
+		opp-1962000000 {
+			opp-hz = /bits/ 64 <1962000000>;
+			opp-microvolt = <1018750>;
+			turbo-mode;
+		};
+
+		opp-2015000000 {
+			opp-hz = /bits/ 64 <2015000000>;
+			opp-microvolt = <1056250>;
+			turbo-mode;
+		};
+
+		opp-2068000000 {
+			opp-hz = /bits/ 64 <2068000000>;
+			opp-microvolt = <1100000>;
+			turbo-mode;
+		};
+
+		opp-2130000000 {
+			opp-hz = /bits/ 64 <2130000000>;
+			opp-microvolt = <1150000>;
+			turbo-mode;
+		};
+
+		opp-2200000000 {
+			opp-hz = /bits/ 64 <2200000000>;
+			opp-microvolt = <1200000>;
+			turbo-mode;
+		};
+	};
+
+	cluster1_opp: opp-table-cluster1 {
+		compatible = "operating-points-v2";
+		opp-shared;
+
+		opp-948000000 {
+			opp-hz = /bits/ 64 <948000000>;
+			opp-microvolt = <812500>;
+		};
+
+		opp-1050000000 {
+			opp-hz = /bits/ 64 <1050000000>;
+			opp-microvolt = <850000>;
+		};
+
+		opp-1114000000 {
+			opp-hz = /bits/ 64 <1114000000>;
+			opp-microvolt = <893750>;
+			turbo-mode;
+		};
+
+		opp-1179000000 {
+			opp-hz = /bits/ 64 <1179000000>;
+			opp-microvolt = <937500>;
+			turbo-mode;
+		};
+
+		opp-1244000000 {
+			opp-hz = /bits/ 64 <1244000000>;
+			opp-microvolt = <975000>;
+			turbo-mode;
+		};
+
+		opp-1309000000 {
+			opp-hz = /bits/ 64 <1309000000>;
+			opp-microvolt = <1018750>;
+			turbo-mode;
+		};
+
+		opp-1374000000 {
+			opp-hz = /bits/ 64 <1374000000>;
+			opp-microvolt = <1056250>;
+			turbo-mode;
+		};
+
+		opp-1439000000 {
+			opp-hz = /bits/ 64 <1439000000>;
+			opp-microvolt = <1100000>;
+			turbo-mode;
+		};
+
+		opp-1515000000 {
+			opp-hz = /bits/ 64 <1515000000>;
+			opp-microvolt = <1150000>;
+			turbo-mode;
+		};
+
+		opp-1600000000 {
+			opp-hz = /bits/ 64 <1600000000>;
+			opp-microvolt = <1200000>;
+			turbo-mode;
+		};
+	};
+
 	/* LK's /memory lookup accepts this unit address and updates the reg. */
 	memory@40000000 {
 		device_type = "memory";
@@ -103,6 +243,78 @@
 			alloc-ranges = <0 0x40000000 0 0x80000000>;
 		};
 	};
+};
+
+&cpu0 {
+	clocks = <&mcucfg CLK_MCU_MP0_SEL>,
+		 <&topckgen CLK_TOP_ARMPLL_DIVIDER_PLL1_EN>;
+	clock-names = "cpu", "intermediate";
+	operating-points-v2 = <&cluster0_opp>;
+	proc-supply = <&mt6357_vproc_reg>;
+	sram-supply = <&mt6357_vsram_proc_reg>;
+};
+
+&cpu1 {
+	clocks = <&mcucfg CLK_MCU_MP0_SEL>,
+		 <&topckgen CLK_TOP_ARMPLL_DIVIDER_PLL1_EN>;
+	clock-names = "cpu", "intermediate";
+	operating-points-v2 = <&cluster0_opp>;
+	proc-supply = <&mt6357_vproc_reg>;
+	sram-supply = <&mt6357_vsram_proc_reg>;
+};
+
+&cpu2 {
+	clocks = <&mcucfg CLK_MCU_MP0_SEL>,
+		 <&topckgen CLK_TOP_ARMPLL_DIVIDER_PLL1_EN>;
+	clock-names = "cpu", "intermediate";
+	operating-points-v2 = <&cluster0_opp>;
+	proc-supply = <&mt6357_vproc_reg>;
+	sram-supply = <&mt6357_vsram_proc_reg>;
+};
+
+&cpu3 {
+	clocks = <&mcucfg CLK_MCU_MP0_SEL>,
+		 <&topckgen CLK_TOP_ARMPLL_DIVIDER_PLL1_EN>;
+	clock-names = "cpu", "intermediate";
+	operating-points-v2 = <&cluster0_opp>;
+	proc-supply = <&mt6357_vproc_reg>;
+	sram-supply = <&mt6357_vsram_proc_reg>;
+};
+
+&cpu4 {
+	clocks = <&mcucfg CLK_MCU_MP1_SEL>,
+		 <&topckgen CLK_TOP_ARMPLL_DIVIDER_PLL1_EN>;
+	clock-names = "cpu", "intermediate";
+	operating-points-v2 = <&cluster1_opp>;
+	proc-supply = <&mt6357_vproc_reg>;
+	sram-supply = <&mt6357_vsram_proc_reg>;
+};
+
+&cpu5 {
+	clocks = <&mcucfg CLK_MCU_MP1_SEL>,
+		 <&topckgen CLK_TOP_ARMPLL_DIVIDER_PLL1_EN>;
+	clock-names = "cpu", "intermediate";
+	operating-points-v2 = <&cluster1_opp>;
+	proc-supply = <&mt6357_vproc_reg>;
+	sram-supply = <&mt6357_vsram_proc_reg>;
+};
+
+&cpu6 {
+	clocks = <&mcucfg CLK_MCU_MP1_SEL>,
+		 <&topckgen CLK_TOP_ARMPLL_DIVIDER_PLL1_EN>;
+	clock-names = "cpu", "intermediate";
+	operating-points-v2 = <&cluster1_opp>;
+	proc-supply = <&mt6357_vproc_reg>;
+	sram-supply = <&mt6357_vsram_proc_reg>;
+};
+
+&cpu7 {
+	clocks = <&mcucfg CLK_MCU_MP1_SEL>,
+		 <&topckgen CLK_TOP_ARMPLL_DIVIDER_PLL1_EN>;
+	clock-names = "cpu", "intermediate";
+	operating-points-v2 = <&cluster1_opp>;
+	proc-supply = <&mt6357_vproc_reg>;
+	sram-supply = <&mt6357_vsram_proc_reg>;
 };
 
 &uart0 {
@@ -208,6 +420,17 @@
 
 &mt6357_vdram_reg {
 	regulator-always-on;
+};
+
+/* Stock limits: 1.2 V max (vendor MAX_VPROC_VOLT/MAX_VSRAM_VOLT); LK level as floor. */
+&mt6357_vproc_reg {
+	regulator-min-microvolt = <800000>;
+	regulator-max-microvolt = <1200000>;
+};
+
+&mt6357_vsram_proc_reg {
+	regulator-min-microvolt = <900000>;
+	regulator-max-microvolt = <1200000>;
 };
 
 &i2c4 {
