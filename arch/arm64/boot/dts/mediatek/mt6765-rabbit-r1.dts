@@ -532,6 +532,8 @@
 &spi4 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&r1_spi4_pins>;
+	/* spi-mt65xx refuses to probe MT6765 controllers without it. */
+	mediatek,pad-select = <0>;
 	status = "okay";
 
 	imu@0 {
