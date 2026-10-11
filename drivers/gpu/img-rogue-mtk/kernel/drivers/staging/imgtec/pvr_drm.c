@@ -284,6 +284,10 @@ static const struct file_operations pvr_drm_fops = {
 	.mmap			= PVRSRV_MMap,
 	.poll			= drm_poll,
 	.read			= drm_read,
+#if defined(FOP_UNSIGNED_OFFSET)
+	/* drm_open_helper() refuses files without it (EINVAL) since 6.12. */
+	.fop_flags		= FOP_UNSIGNED_OFFSET,
+#endif
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 12, 0))
 	.fasync			= drm_fasync,
 #endif
