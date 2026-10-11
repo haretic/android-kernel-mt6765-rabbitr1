@@ -597,7 +597,12 @@ static const struct musb_hdrc_config mtk_musb_hdrc_config = {
 
 static const struct platform_device_info mtk_dev_info = {
 	.name = "musb-hdrc",
-	.id = PLATFORM_DEVID_AUTO,
+	/*
+	 * Each SoC has one controller. A fixed id keeps the UDC name stable
+	 * for userspace that selects it by name (Android's sys.usb.controller);
+	 * automatic ids shift whenever another driver registers devices first.
+	 */
+	.id = 0,
 	.dma_mask = DMA_BIT_MASK(32),
 };
 
