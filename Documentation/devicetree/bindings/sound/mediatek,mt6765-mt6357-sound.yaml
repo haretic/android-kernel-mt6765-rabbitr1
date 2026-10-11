@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/sound/mediatek,mt6765-mt6357-sound.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek MT6765 sound card with MT6357 codec
+
+maintainers:
+  - itskenny0 <0@kenny.cat>
+
+description:
+  The MT6765 AFE ADDA interface drives the MT6357 PMIC codec over MTKAIF.
+  An analog speaker amplifier may follow the MT6357 line output.
+
+allOf:
+  - $ref: sound-card-common.yaml#
+
+properties:
+  compatible:
+    const: mediatek,mt6765-mt6357-sound
+
+  mediatek,platform:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: The MT6765 AFE.
+
+  mediatek,speaker-amplifier:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      Speaker amplifier component fed from the MT6357 line output.
+
+  pinctrl-names:
+    items:
+      - const: aud_mosi_off
+      - const: aud_mosi_on
+      - const: aud_miso_off
+      - const: aud_miso_on
+
+required:
+  - compatible
+  - mediatek,platform
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    sound {
+        compatible = "mediatek,mt6765-mt6357-sound";
+        model = "rabbit-r1";
+        mediatek,platform = <&afe>;
+        mediatek,speaker-amplifier = <&speaker_amp>;
+        pinctrl-names = "aud_mosi_off", "aud_mosi_on",
+                        "aud_miso_off", "aud_miso_on";
+        pinctrl-0 = <&aud_mosi_off_pins>;
+        pinctrl-1 = <&aud_mosi_on_pins>;
+        pinctrl-2 = <&aud_miso_off_pins>;
+        pinctrl-3 = <&aud_miso_on_pins>;
+    };

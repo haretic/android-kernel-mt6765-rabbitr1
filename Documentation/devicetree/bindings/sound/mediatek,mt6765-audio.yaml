@@ -1,0 +1,95 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/sound/mediatek,mt6765-audio.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek MT6765 AFE PCM controller
+
+maintainers:
+  - itskenny0 <0@kenny.cat>
+
+description:
+  Audio front end of the MT6765 (Helio P35). It is a child of the audsys
+  syscon and shares its register space.
+
+properties:
+  compatible:
+    const: mediatek,mt6765-audio
+
+  interrupts:
+    maxItems: 1
+
+  resets:
+    maxItems: 1
+
+  reset-names:
+    const: audiosys
+
+  memory-region:
+    maxItems: 1
+
+  clocks:
+    items:
+      - description: AFE clock
+      - description: ADDA DAC clock
+      - description: ADDA DAC pre-distortion clock
+      - description: ADDA ADC clock
+      - description: Audio infra sys clock
+      - description: Audio infra 26M clock
+      - description: Mux for audio clock
+      - description: Mux for audio internal bus clock
+      - description: Main PLL divider by 4, audio internal bus parent
+      - description: 26M oscillator
+
+  clock-names:
+    items:
+      - const: aud_afe_clk
+      - const: aud_dac_clk
+      - const: aud_dac_predis_clk
+      - const: aud_adc_clk
+      - const: aud_infra_clk
+      - const: mtkaif_26m_clk
+      - const: top_mux_audio
+      - const: top_mux_aud_intbus
+      - const: top_syspll1_d4
+      - const: top_clk26m_clk
+
+required:
+  - compatible
+  - interrupts
+  - clocks
+  - clock-names
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/mt6765-clk.h>
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    audio-controller {
+        compatible = "mediatek,mt6765-audio";
+        interrupts = <GIC_SPI 153 IRQ_TYPE_LEVEL_LOW>;
+        clocks = <&audsys CLK_AUDIO_AFE>,
+                 <&audsys CLK_AUDIO_DAC>,
+                 <&audsys CLK_AUDIO_DAC_PREDIS>,
+                 <&audsys CLK_AUDIO_ADC>,
+                 <&infracfg CLK_IFR_AUDIO>,
+                 <&infracfg CLK_IFR_AUDIO_26M_BCLK>,
+                 <&topckgen CLK_TOP_AUDIO_SEL>,
+                 <&topckgen CLK_TOP_AUD_INTBUS_SEL>,
+                 <&topckgen CLK_TOP_SYSPLL1_D4>,
+                 <&clk26m>;
+        clock-names = "aud_afe_clk",
+                      "aud_dac_clk",
+                      "aud_dac_predis_clk",
+                      "aud_adc_clk",
+                      "aud_infra_clk",
+                      "mtkaif_26m_clk",
+                      "top_mux_audio",
+                      "top_mux_aud_intbus",
+                      "top_syspll1_d4",
+                      "top_clk26m_clk";
+    };
