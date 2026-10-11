@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: GPL-2.0
+config MTK_GED_COMPAT
+	tristate "MediaTek GED /proc/ged bridge for vendor graphics blobs"
+	depends on PROC_FS && DMA_SHARED_BUFFER
+	help
+	  Provides /proc/ged with the bridge ioctl ABI of the MediaTek GED
+	  driver from the MT6765 Linux 4.19 vendor kernel, as used by the
+	  stock libged.so and libgralloc_extra.so. The gralloc_extra (GE)
+	  metadata objects and dma-buf naming are implemented; GPU DVFS,
+	  KPI and frame-rate hints are accepted without a backend.
+
+	  If unsure, say N.
