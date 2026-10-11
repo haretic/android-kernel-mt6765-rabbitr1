@@ -6,13 +6,29 @@ TARGET_INITIAL_BRINGUP := true
 TARGET_HAS_BATTERY := true
 # inherit-product defers and sorts children; set the selector before common defaults.
 include device/rabbit/r1/health/product.mk
+# GPU: the stock RabbitOS PowerVR GE8320 userspace on the ported DDK 1.13 pvrsrvkm,
+# or SwiftShader software rendering.
+R1_GPU ?= pvr
+ifeq ($(R1_GPU),pvr)
+TARGET_GRAPHICS := pvr
+TARGET_GRAPHICS_EGL := none
+TARGET_GRAPHICS_VULKAN := none
+TARGET_GRAPHICS_ALLOCATOR_HAL := none
+else
 TARGET_GRAPHICS := swiftshader
+endif
 TARGET_GRAPHICS_COMPOSER_HAL := drmfb-composer
 # Keep the supported ARM backends without x86-only Intel cache operations.
 TARGET_MINIGBM_PLATFORM := all_arm
 TARGET_SUPPORTS_SUSPEND := false
 TARGET_BOOT_HAL := r1
+# The stock gralloc is HIDL allocator/mapper 4.0, which FCM level 7 still accepts.
+ifeq ($(R1_GPU),pvr)
+TARGET_FOLLOWS_LATEST_VINTF_TARGET_LEVEL := false
+$(call inherit-product, vendor/rabbit/r1-pvr/r1-pvr.mk)
+else
 TARGET_FOLLOWS_LATEST_VINTF_TARGET_LEVEL := true
+endif
 
 TARGET_PREBUILT_KERNEL := device/rabbit/r1/prebuilt/Image.gz
 TARGET_KERNEL_MIXED_MODE := false
@@ -65,4 +81,4 @@ TARGET_SCREEN_WIDTH := 480
 TARGET_SCREEN_HEIGHT := 640
 PRODUCT_AAPT_CONFIG := normal
 PRODUCT_AAPT_PREF_CONFIG := hdpi
-PRODUCT_VENDOR_PROPERTIES += ro.sf.lcd_density=240
+PRODUCT_VENDOR_PROPERTIES += ro.sf.lcd_density=140

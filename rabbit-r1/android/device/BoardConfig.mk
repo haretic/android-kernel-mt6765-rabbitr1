@@ -76,3 +76,8 @@ BOARD_AVB_MAKE_VBMETA_IMAGE_ARGS += --flags 3
 
 TARGET_ENABLE_MEDIADRM_64 := true
 TARGET_LMKD_STATS_LOG := true
+
+ifeq ($(R1_GPU),pvr)
+include vendor/rabbit/r1-pvr/BoardConfigPvr.mk
+BOARD_VENDOR_SEPOLICY_DIRS += $(DEVICE_PATH)/sepolicy/pvr
+endif
