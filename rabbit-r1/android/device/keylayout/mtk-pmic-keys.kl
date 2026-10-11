@@ -1,0 +1,4 @@
+# rabbit r1 side push-to-talk button on the MT6357 PWRKEY.
+# Stock RabbitOS reports KEY_POWER and maps it through Generic.kl.
+
+key 116   POWER
