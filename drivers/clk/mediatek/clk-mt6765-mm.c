@@ -60,23 +60,19 @@ static const struct mtk_clk_desc mm_desc = {
 	.num_clks = ARRAY_SIZE(mm_clks),
 };
 
-static const struct of_device_id of_match_clk_mt6765_mm[] = {
-	{
-		.compatible = "mediatek,mt6765-mmsys",
-		.data = &mm_desc,
-	}, {
-		/* sentinel */
-	}
+static const struct platform_device_id clk_mt6765_mm_id_table[] = {
+	{ .name = "clk-mt6765-mm", .driver_data = (kernel_ulong_t)&mm_desc },
+	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, of_match_clk_mt6765_mm);
+MODULE_DEVICE_TABLE(platform, clk_mt6765_mm_id_table);
 
 static struct platform_driver clk_mt6765_mm_drv = {
-	.probe = mtk_clk_simple_probe,
-	.remove = mtk_clk_simple_remove,
+	.probe = mtk_clk_pdev_probe,
+	.remove = mtk_clk_pdev_remove,
 	.driver = {
 		.name = "clk-mt6765-mm",
-		.of_match_table = of_match_clk_mt6765_mm,
 	},
+	.id_table = clk_mt6765_mm_id_table,
 };
 module_platform_driver(clk_mt6765_mm_drv);
 
