@@ -877,6 +877,28 @@
 			};
 		};
 
+		/*
+		 * PowerVR GE8320 driven by MediaTek's stock DDK 1.13 (pvrsrvkm),
+		 * which matches the vendor "mediatek,doma" compatible. MFG_CFG
+		 * holds the hardware APM registers the driver programs.
+		 */
+		gpu: gpu@13000000 {
+			compatible = "mediatek,doma";
+			reg = <0 0x13000000 0 0x80000>,
+			      <0 0x13ffe000 0 0x1000>;
+			reg-names = "rgx", "mfg_cfg";
+			interrupts = <GIC_SPI 259 IRQ_TYPE_LEVEL_LOW>;
+			interrupt-names = "RGX";
+			clocks = <&topckgen CLK_TOP_MFG_SEL>,
+				 <&topckgen CLK_TOP_MFGPLL>,
+				 <&clk26m>;
+			clock-names = "mux", "main_parent", "sub_parent";
+			power-domains = <&spm MT6765_POWER_DOMAIN_MFG>,
+					<&spm MT6765_POWER_DOMAIN_MFG_CORE0>;
+			power-domain-names = "mfg", "core0";
+			status = "disabled";
+		};
+
 		mmsys: clock-controller@14000000 {
 			compatible = "mediatek,mt6765-mmsys", "syscon";
 			reg = <0 0x14000000 0 0x1000>;
