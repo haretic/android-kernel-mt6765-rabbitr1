@@ -113,6 +113,11 @@
 	status = "okay";
 };
 
+&gpu {
+	vcore-supply = <&mt6357_vcore_reg>;
+	status = "okay";
+};
+
 &dsi_phy {
 	status = "okay";
 };
