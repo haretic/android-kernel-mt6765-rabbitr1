@@ -108,6 +108,20 @@ config KMX61
 	  To compile this driver as module, choose M here: the module will
 	  be called kmx61.
 
+config INV_ICM42607
+	tristate "InvenSense ICM-42607/ICM-42670 SPI driver"
+	depends on SPI_MASTER
+	select REGMAP_SPI
+	select IIO_BUFFER
+	select IIO_TRIGGERED_BUFFER
+	help
+	  Say yes here to build support for the InvenSense ICM-42607-P and
+	  ICM-42670-P 6-axis motion tracking devices over SPI, giving
+	  accelerometer, gyroscope and temperature readings.
+
+	  This driver can be built as a module. The module will be called
+	  inv_icm42607.
+
 source "drivers/iio/imu/inv_icm42600/Kconfig"
 source "drivers/iio/imu/inv_icm45600/Kconfig"
 source "drivers/iio/imu/inv_mpu6050/Kconfig"
