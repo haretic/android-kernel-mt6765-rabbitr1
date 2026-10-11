@@ -225,7 +225,8 @@ PVRSRV_ERROR SysDevInit(void *pvOSDevice, PVRSRV_DEVICE_CONFIG **ppsDevConfig)
 
 	/* define HW APM */
 #if defined(MTK_USE_HW_APM)
-	gsRGXTimingInfo.bEnableRDPowIsland = true;
+	/* Runtime switch on mainline, see the hwapm module parameter. */
+	gsRGXTimingInfo.bEnableRDPowIsland = MTKMFGHwApmEnabled();
 #else
 	gsRGXTimingInfo.bEnableRDPowIsland = false;
 #endif
@@ -245,21 +246,25 @@ PVRSRV_ERROR SysDevInit(void *pvOSDevice, PVRSRV_DEVICE_CONFIG **ppsDevConfig)
 #if defined(MTK_CONFIG_OF) && defined(CONFIG_OF)
 	/* MTK: using device tree */
 	{
-		struct resource *irq_res;
 		struct resource *reg_res;
+		int irq;
 
 		gpsPVRCfgDev = to_platform_device((struct device *)pvOSDevice);
-		irq_res = platform_get_resource(gpsPVRCfgDev,
-						IORESOURCE_IRQ, 0);
 
-		if (irq_res) {
-			gsDevices[0].ui32IRQ = irq_res->start;
-			g32SysIrq = irq_res->start;
+		/*
+		 * Mainline no longer populates IRQ resources for OF devices;
+		 * platform_get_irq() returns the mapped Linux IRQ number.
+		 */
+		irq = platform_get_irq(gpsPVRCfgDev, 0);
+		if (irq > 0) {
+			gsDevices[0].ui32IRQ = irq;
+			g32SysIrq = irq;
 
-			PVR_LOG(("irq_res = 0x%x", (int)irq_res->start));
+			PVR_LOG(("irq = %d", irq));
 		} else {
-			PVR_DPF((PVR_DBG_ERROR, "irq_res = NULL!"));
-			return PVRSRV_ERROR_INIT_FAILURE;
+			PVR_DPF((PVR_DBG_ERROR, "no GPU irq (%d)", irq));
+			return irq == -EPROBE_DEFER ? PVRSRV_ERROR_PROBE_DEFER :
+						      PVRSRV_ERROR_INIT_FAILURE;
 		}
 
 		reg_res = platform_get_resource(gpsPVRCfgDev,
