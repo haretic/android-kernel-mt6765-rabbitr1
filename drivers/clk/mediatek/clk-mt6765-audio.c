@@ -5,6 +5,7 @@
  */
 
 #include <linux/clk-provider.h>
+#include <linux/of_platform.h>
 #include <linux/platform_device.h>
 
 #include "clk-mtk.h"
@@ -57,6 +58,28 @@ static const struct mtk_clk_desc audio_desc = {
 	.num_clks = ARRAY_SIZE(audio_clks),
 };
 
+/* The AFE is an audio-controller child sharing this block's syscon regmap. */
+static int clk_mt6765_audio_probe(struct platform_device *pdev)
+{
+	int r;
+
+	r = mtk_clk_simple_probe(pdev);
+	if (r)
+		return r;
+
+	r = devm_of_platform_populate(&pdev->dev);
+	if (r)
+		mtk_clk_simple_remove(pdev);
+
+	return r;
+}
+
+static void clk_mt6765_audio_remove(struct platform_device *pdev)
+{
+	of_platform_depopulate(&pdev->dev);
+	mtk_clk_simple_remove(pdev);
+}
+
 static const struct of_device_id of_match_clk_mt6765_audio[] = {
 	{
 		.compatible = "mediatek,mt6765-audsys",
@@ -68,8 +91,8 @@ static const struct of_device_id of_match_clk_mt6765_audio[] = {
 MODULE_DEVICE_TABLE(of, of_match_clk_mt6765_audio);
 
 static struct platform_driver clk_mt6765_audio_drv = {
-	.probe = mtk_clk_simple_probe,
-	.remove = mtk_clk_simple_remove,
+	.probe = clk_mt6765_audio_probe,
+	.remove = clk_mt6765_audio_remove,
 	.driver = {
 		.name = "clk-mt6765-audio",
 		.of_match_table = of_match_clk_mt6765_audio,
