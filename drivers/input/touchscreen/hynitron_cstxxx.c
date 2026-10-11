@@ -436,9 +436,15 @@ static int hyn_probe(struct i2c_client *client)
 
 	hyn_reset_proc(client, 60);
 
+	/*
+	 * Some cst3xx parts (the cst340 on the rabbit r1) do not answer the
+	 * bootloader handshake; firmware_info below still identifies them.
+	 */
 	err = ts_data->chip->bootloader_enter(client);
-	if (err < 0)
-		return err;
+	if (err < 0) {
+		dev_warn(&client->dev, "continuing without bootloader check\n");
+		hyn_reset_proc(client, 40);
+	}
 
 	err = ts_data->chip->init_input(client);
 	if (err < 0)
