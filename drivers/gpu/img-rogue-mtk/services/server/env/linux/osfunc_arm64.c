@@ -63,14 +63,22 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 static inline void begin_user_mode_access(void)
 {
 #if defined(CONFIG_ARM64) && defined(CONFIG_ARM64_SW_TTBR0_PAN)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0))
+	uaccess_enable_privileged();
+#else
 	uaccess_enable();
+#endif
 #endif
 }
 
 static inline void end_user_mode_access(void)
 {
 #if defined(CONFIG_ARM64) && defined(CONFIG_ARM64_SW_TTBR0_PAN)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0))
+	uaccess_disable_privileged();
+#else
 	uaccess_disable();
+#endif
 #endif
 }
 

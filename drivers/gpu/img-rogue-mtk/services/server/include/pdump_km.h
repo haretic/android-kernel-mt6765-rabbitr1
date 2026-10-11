@@ -45,7 +45,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define PDUMP_KM_H
 
 #if defined(PDUMP)
-#include <stdarg.h>
+#include <linux/stdarg.h>
 #endif
 
 /* services/srvkm/include/ */

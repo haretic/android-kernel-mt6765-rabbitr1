@@ -140,7 +140,7 @@ SysDmaAcquireKernelAddress(struct page *psPage, IMG_UINT64 ui64Size, void *pvOSD
 #if !defined(CONFIG_64BIT) || defined(PVRSRV_FORCE_SLOWER_VMAP_ON_64BIT_BUILDS)
 	pvVirtAddr = vmap(pagearray, ui32PgCount, VM_READ | VM_WRITE, prot);
 #else
-	pvVirtAddr = vm_map_ram(pagearray, ui32PgCount, -1, prot);
+	pvVirtAddr = pvr_vm_map_ram(pagearray, ui32PgCount, -1, prot);
 #endif
 
 	/* Clean-up tmp buffers */
@@ -157,7 +157,7 @@ static void SysDmaReleaseKernelAddress(void *pvVirtAddr, IMG_UINT64 ui64Size)
 #if !defined(CONFIG_64BIT) || defined(PVRSRV_FORCE_SLOWER_VMAP_ON_64BIT_BUILDS)
 	vunmap(pvVirtAddr);
 #else
-	vm_unmap_ram(pvVirtAddr, ui64Size >> OSGetPageShift());
+	pvr_vm_unmap_ram(pvVirtAddr, ui64Size >> OSGetPageShift());
 #endif
 }
 

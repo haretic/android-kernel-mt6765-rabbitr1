@@ -73,6 +73,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "pvr_uaccess.h"
 #include "osdi_impl.h"
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
+#define PDE_DATA(inode) pde_data(inode)
+#endif
+
 #define _DRIVER_THREAD_ENTER() \
 	do { \
 		PVRSRV_ERROR eLocalError = PVRSRVDriverThreadEnter(); \
@@ -454,21 +458,31 @@ typedef struct file_operations proc_ops;
 static const proc_ops _g_psFileOpsGen = {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 6, 0)
 	.owner = THIS_MODULE,
-#endif
 	.open = _Open,
 	.release = _Close,
 	.read = _Read,
 	.llseek = _LSeek,
 	.write = _Write,
+#else
+	.proc_open = _Open,
+	.proc_release = _Close,
+	.proc_read = _Read,
+	.proc_lseek = _LSeek,
+	.proc_write = _Write,
+#endif
 };
 
 static const proc_ops _g_psFileOpsRndAcc = {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 6, 0)
 	.owner = THIS_MODULE,
-#endif
 	.read = _Read,
 	.llseek = _LSeek,
 	.write = _Write,
+#else
+	.proc_read = _Read,
+	.proc_lseek = _LSeek,
+	.proc_write = _Write,
+#endif
 };
 
 /* ----- DI implementation interface ---------------------------------------- */
@@ -493,7 +507,7 @@ static PVRSRV_ERROR _CreateFile(const IMG_CHAR *pszName,
 	DFS_FILE *psFile;
 	umode_t uiMode = S_IFREG;
 	struct proc_dir_entry *psEntry;
-	const struct file_operations *psFileOps = NULL;
+	const proc_ops *psFileOps = NULL;
 	PVRSRV_ERROR eError;
 
 	PVR_LOG_RETURN_IF_INVALID_PARAM(pvFile != NULL, "pvFile");

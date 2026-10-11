@@ -43,7 +43,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #ifndef DI_SERVER_H
 #define DI_SERVER_H
 
-#include <stdarg.h>
+#include <linux/stdarg.h>
 
 #include "di_common.h"
 #include "pvrsrv_error.h"
