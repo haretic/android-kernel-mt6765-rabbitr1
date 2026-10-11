@@ -46,7 +46,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <linux/moduleparam.h>
 #include <linux/workqueue.h>
 #include <linux/string.h>
-#include <stdbool.h>
+#include <linux/types.h>
 
 /* Common and SO layer */
 #include "img_defs.h"
@@ -73,7 +73,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "km_apphint.h"
 
 #if defined(PDUMP)
-#include <stdarg.h>
+#include <linux/stdarg.h>
 #include "pdump_km.h"
 #endif
 

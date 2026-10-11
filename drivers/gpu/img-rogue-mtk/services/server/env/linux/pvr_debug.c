@@ -51,7 +51,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <linux/spinlock.h>
 #include <linux/string.h>
 #include <linux/slab.h>
-#include <stdarg.h>
+#include <linux/stdarg.h>
 
 #include "allocmem.h"
 #include "pvrversion.h"

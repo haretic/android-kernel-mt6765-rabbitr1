@@ -41,7 +41,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */ /**************************************************************************/
 
 #if defined(PDUMP)
-#include <stdarg.h>
+#include <linux/stdarg.h>
 
 #include "pvrversion.h"
 #include "allocmem.h"

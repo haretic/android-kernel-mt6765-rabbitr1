@@ -449,6 +449,63 @@ __pvr_access_ok_compat(int type, const void __user * addr, unsigned long size)
 
 #endif
 
+
+/*
+ * Mainline (up to 7.1) compatibility. These only paper over in-kernel API
+ * changes; nothing here alters what userspace or the firmware sees.
+ */
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 17, 0))
+/* pfn_t is gone; the insert helpers take a plain pfn again. */
+#include <linux/pfn.h>
+typedef unsigned long pfn_t;
+#define page_to_pfn_t(page)		page_to_pfn(page)
+#define pfn_t_valid(pfn)		pfn_valid(pfn)
+#define pfn_t_to_page(pfn)		pfn_to_page(pfn)
+#define pfn_t_to_pfn(pfn)		(pfn)
+#define pfn_to_pfn_t(pfn)		(pfn)
+#define phys_to_pfn_t(addr, flags)	PHYS_PFN(addr)
+#endif
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0))
+/* vm_flags is read-only; it must be changed through the helpers. */
+#define pvr_vm_flags_set(vma, flags)	vm_flags_set(vma, flags)
+#else
+#define pvr_vm_flags_set(vma, flags)	((vma)->vm_flags |= (flags))
+#endif
+
+#if !defined(from_timer)
+#define from_timer(var, callback_timer, timer_fieldname) \
+	timer_container_of(var, callback_timer, timer_fieldname)
+#endif
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 2, 0))
+#define del_timer_sync(timer) timer_delete_sync(timer)
+#endif
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0))
+/*
+ * vm_map_ram() lost its pgprot argument and always maps PAGE_KERNEL. The DDK
+ * relies on uncached/write-combined kernel aliases, so use vmap() which still
+ * honours the requested protection.
+ */
+#define pvr_vm_map_ram(pages, count, node, prot) \
+	vmap(pages, count, VM_MAP, prot)
+#define pvr_vm_unmap_ram(addr, count)	vunmap(addr)
+#else
+#define pvr_vm_map_ram(pages, count, node, prot) \
+	vm_map_ram(pages, count, node, prot)
+#define pvr_vm_unmap_ram(addr, count)	vm_unmap_ram(addr, count)
+#endif
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0))
+#define pvr_mmap_write_lock(mm)		mmap_write_lock(mm)
+#define pvr_mmap_write_unlock(mm)	mmap_write_unlock(mm)
+#else
+#define pvr_mmap_write_lock(mm)		down_write(&(mm)->mmap_sem)
+#define pvr_mmap_write_unlock(mm)	up_write(&(mm)->mmap_sem)
+#endif
+
 #if defined(CONFIG_L4)
 
 /*

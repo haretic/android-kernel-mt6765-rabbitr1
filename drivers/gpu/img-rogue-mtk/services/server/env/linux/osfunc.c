@@ -66,7 +66,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <linux/kthread.h>
 #include <linux/utsname.h>
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 17, 0))
 #include <linux/pfn_t.h>
+#endif
 #include <linux/pfn.h>
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)) */
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0))
@@ -1540,7 +1542,7 @@ PVRSRV_ERROR OSChangeSparseMemCPUAddrMap(void **psPageArray,
 	}
 
 	/* Acquire the memory sem */
-	down_write(&psMM->mmap_sem);
+	pvr_mmap_write_lock(psMM);
 
 	psMapping = psVMA->vm_file->f_mapping;
 
@@ -1568,7 +1570,7 @@ PVRSRV_ERROR OSChangeSparseMemCPUAddrMap(void **psPageArray,
 
 	if ((psVMA->vm_flags & VM_MIXEDMAP) || bIsLMA)
 	{
-		psVMA->vm_flags |= VM_MIXEDMAP;
+		pvr_vm_flags_set(psVMA, VM_MIXEDMAP);
 		bMixedMap = IMG_TRUE;
 	}
 	else
@@ -1590,7 +1592,7 @@ PVRSRV_ERROR OSChangeSparseMemCPUAddrMap(void **psPageArray,
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)) */
 				{
 					bMixedMap = IMG_TRUE;
-					psVMA->vm_flags |= VM_MIXEDMAP;
+					pvr_vm_flags_set(psVMA, VM_MIXEDMAP);
 					break;
 				}
 			}
@@ -1665,7 +1667,7 @@ PVRSRV_ERROR OSChangeSparseMemCPUAddrMap(void **psPageArray,
 
 	eError = PVRSRV_OK;
 eFailed:
-	up_write(&psMM->mmap_sem);
+	pvr_mmap_write_unlock(psMM);
 
 	return eError;
 }

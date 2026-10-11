@@ -58,7 +58,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #endif
 #endif
 
-#include <stdarg.h>
+#include <linux/stdarg.h>
 
 #if defined(__QNXNTO__)
 #include <stdio.h>

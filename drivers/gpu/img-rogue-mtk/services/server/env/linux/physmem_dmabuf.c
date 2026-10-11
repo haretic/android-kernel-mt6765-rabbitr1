@@ -81,6 +81,57 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "kernel_compatibility.h"
 
 /*
+ * dma_buf_vmap() now returns an iosys_map and expects the reservation lock
+ * to be held; use the _unlocked variants and keep the old void * interface.
+ */
+static void *pvr_dma_buf_vmap(struct dma_buf *psDmaBuf)
+{
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 2, 0))
+	struct iosys_map sMap;
+
+	if (dma_buf_vmap_unlocked(psDmaBuf, &sMap))
+		return NULL;
+
+	if (sMap.is_iomem)
+	{
+		dma_buf_vunmap_unlocked(psDmaBuf, &sMap);
+		return NULL;
+	}
+
+	return sMap.vaddr;
+#else
+	return dma_buf_vmap(psDmaBuf);
+#endif
+}
+
+/*
+ * Since 6.2 the plain (un)map_attachment calls expect the reservation lock
+ * to be held by the caller; the DDK never held it.
+ */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 2, 0))
+#define pvr_dma_buf_map_attachment(attach, dir) \
+	dma_buf_map_attachment_unlocked(attach, dir)
+#define pvr_dma_buf_unmap_attachment(attach, sgt, dir) \
+	dma_buf_unmap_attachment_unlocked(attach, sgt, dir)
+#else
+#define pvr_dma_buf_map_attachment(attach, dir) \
+	dma_buf_map_attachment(attach, dir)
+#define pvr_dma_buf_unmap_attachment(attach, sgt, dir) \
+	dma_buf_unmap_attachment(attach, sgt, dir)
+#endif
+
+static void pvr_dma_buf_vunmap(struct dma_buf *psDmaBuf, void *pvKernAddr)
+{
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 2, 0))
+	struct iosys_map sMap = IOSYS_MAP_INIT_VADDR(pvKernAddr);
+
+	dma_buf_vunmap_unlocked(psDmaBuf, &sMap);
+#else
+	dma_buf_vunmap(psDmaBuf, pvKernAddr);
+#endif
+}
+
+/*
  * dma_buf_ops
  *
  * These are all returning errors if used.
@@ -244,7 +295,7 @@ static PVRSRV_ERROR PMRFinalizeDmaBuf(PMR_IMPL_PRIVDATA pvPriv)
 	if (!psSgTable)
 		goto exit;
 
-	dma_buf_unmap_attachment(psAttachment, psSgTable, DMA_BIDIRECTIONAL);
+	pvr_dma_buf_unmap_attachment(psAttachment, psSgTable, DMA_BIDIRECTIONAL);
 
 
 	if (psPrivData->bPoisonOnFree)
@@ -266,7 +317,7 @@ static PVRSRV_ERROR PMRFinalizeDmaBuf(PMR_IMPL_PRIVDATA pvPriv)
 		}
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0))
-		pvKernAddr = dma_buf_vmap(psDmaBuf);
+		pvKernAddr = pvr_dma_buf_vmap(psDmaBuf);
 		if (!pvKernAddr)
 		{
 			PVR_DPF((PVR_DBG_ERROR,
@@ -278,7 +329,7 @@ static PVRSRV_ERROR PMRFinalizeDmaBuf(PMR_IMPL_PRIVDATA pvPriv)
 
 		memset(pvKernAddr, PVRSRV_POISON_ON_FREE_VALUE, psDmaBuf->size);
 
-		dma_buf_vunmap(psDmaBuf, pvKernAddr);
+		pvr_dma_buf_vunmap(psDmaBuf, pvKernAddr);
 #else
 		for (i = 0; i < psDmaBuf->size / PAGE_SIZE; i++)
 		{
@@ -406,7 +457,7 @@ PMRAcquireKernelMappingDataDmaBuf(PMR_IMPL_PRIVDATA pvPriv,
 		goto fail;
 	}
 
-	pvKernAddr = dma_buf_vmap(psDmaBuf);
+	pvKernAddr = pvr_dma_buf_vmap(psDmaBuf);
 	if (IS_ERR_OR_NULL(pvKernAddr))
 	{
 		eError = PVRSRV_ERROR_PMR_NO_KERNEL_MAPPING;
@@ -436,7 +487,7 @@ static void PMRReleaseKernelMappingDataDmaBuf(PMR_IMPL_PRIVDATA pvPriv,
 	void *pvKernAddr = hHandle;
 	int err;
 
-	dma_buf_vunmap(psDmaBuf, pvKernAddr);
+	pvr_dma_buf_vunmap(psDmaBuf, pvKernAddr);
 
 	do {
 		err = dma_buf_end_cpu_access(psDmaBuf, DMA_BIDIRECTIONAL);
@@ -578,7 +629,7 @@ PhysmemCreateNewDmaBufBackedPMR(PVRSRV_DEVICE_NODE *psDevNode,
 		}
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0))
-		pvKernAddr = dma_buf_vmap(psDmaBuf);
+		pvKernAddr = pvr_dma_buf_vmap(psDmaBuf);
 		if (!pvKernAddr)
 		{
 			PVR_DPF((PVR_DBG_ERROR,
@@ -602,7 +653,7 @@ PhysmemCreateNewDmaBufBackedPMR(PVRSRV_DEVICE_NODE *psDevNode,
 			memset(pvKernAddr, PVRSRV_POISON_ON_ALLOC_VALUE, psDmaBuf->size);
 		}
 
-		dma_buf_vunmap(psDmaBuf, pvKernAddr);
+		pvr_dma_buf_vunmap(psDmaBuf, pvKernAddr);
 #else
 		for (i = 0; i < psDmaBuf->size / PAGE_SIZE; i++)
 		{
@@ -640,7 +691,7 @@ PhysmemCreateNewDmaBufBackedPMR(PVRSRV_DEVICE_NODE *psDevNode,
 		} while (err == -EAGAIN || err == -EINTR);
 	}
 
-	table = dma_buf_map_attachment(psAttachment, DMA_BIDIRECTIONAL);
+	table = pvr_dma_buf_map_attachment(psAttachment, DMA_BIDIRECTIONAL);
 	if (IS_ERR_OR_NULL(table))
 	{
 		eError = PVRSRV_ERROR_INVALID_PARAMS;
@@ -776,7 +827,7 @@ PhysmemCreateNewDmaBufBackedPMR(PVRSRV_DEVICE_NODE *psDevNode,
 	return PVRSRV_OK;
 
 errUnmap:
-	dma_buf_unmap_attachment(psAttachment, table, DMA_BIDIRECTIONAL);
+	pvr_dma_buf_unmap_attachment(psAttachment, table, DMA_BIDIRECTIONAL);
 errFreePhysAddr:
 	OSFreeMem(psPrivData->pasDevPhysAddr);
 errFreePrivData:
