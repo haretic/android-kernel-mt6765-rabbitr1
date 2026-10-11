@@ -47,3 +47,15 @@ on post-fs-data
 # Bring-up builds: allow adb root without the developer-options toggle.
 on post-fs-data && property:ro.debuggable=1
     write /data/adbroot/enabled 1
+
+# PowerVR GE8320 (ported DDK 1.13). rgx.fw comes from /vendor/firmware on first use.
+on post-fs
+    insmod /vendor/lib/modules/pvrsrvkm.ko
+    wait /dev/pvr_sync 5
+    chown system graphics /dev/pvr_sync
+    chmod 0666 /dev/pvr_sync
+
+# drmfb (system) dims and blanks the panel through the MT6370 backlight.
+on boot
+    chown system system /sys/class/backlight/mt6370-backlight/brightness
+    chown system system /sys/class/backlight/mt6370-backlight/bl_power
