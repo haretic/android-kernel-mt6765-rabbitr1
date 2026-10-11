@@ -48,13 +48,28 @@
 #define MTK_MFG_CFG_OFFSET	0xffe000
 #define MTK_MFG_CFG_SIZE	0x1000
 
-/* Lowest VCORE the stock table uses for the 400 MHz OPP (0.65 V). */
-#define MTK_MFG_MIN_VCORE_UV	650000
+/*
+ * Stock MT6765 segment 3 GPU table (mtk_gpufreq_core.h SEG3_GPU_DVFS_*),
+ * the one the stock kernel picks for efuse segment 0x24. The GPU runs from
+ * VCORE; stock only voted a VCORE level per OPP and never set it directly.
+ */
+static const struct {
+	unsigned int khz;
+	int vcore_uv;
+} mtk_mfg_opps[] = {
+	{ 680000, 800000 },
+	{ 500000, 700000 },
+	{ 400000, 650000 },
+};
 
 static unsigned int mfg_freq_khz = RGX_HW_CORE_CLOCK_SPEED / 1000;
 module_param(mfg_freq_khz, uint, 0444);
 MODULE_PARM_DESC(mfg_freq_khz,
-	"Fixed GPU core clock in kHz (default 400000, the stock MT6765 rate)");
+	"Fixed GPU core clock in kHz: 400000 (default), 500000 or 680000; "
+	"falls back to the fastest stock OPP the current VCORE supports");
+
+/* VCORE needed by the clock actually in use (set by MTKSetFixedFreq). */
+static int mfg_min_vcore_uv = 650000;
 
 static bool hwapm = true;
 module_param(hwapm, bool, 0444);
@@ -178,9 +193,9 @@ static int MTKEnableVcore(struct mtk_mfg *mfg)
 	 * Only check that the fixed OPP's requirement is met.
 	 */
 	uv = regulator_get_voltage(mfg->vcore);
-	if (uv > 0 && uv < MTK_MFG_MIN_VCORE_UV && !mfg->vcore_warned) {
+	if (uv > 0 && uv < mfg_min_vcore_uv && !mfg->vcore_warned) {
 		dev_warn(mfg->dev, "vcore %d uV is below the %d uV the GPU OPP needs\n",
-			 uv, MTK_MFG_MIN_VCORE_UV);
+			 uv, mfg_min_vcore_uv);
 		mfg->vcore_warned = true;
 	}
 
@@ -423,16 +438,41 @@ static int MTKGetClocks(struct mtk_mfg *mfg)
 	return 0;
 }
 
+/*
+ * Use the requested stock OPP, or the fastest one below it, and only if the
+ * VCORE level left by the bootloader meets that OPP's stock requirement.
+ * Without a readable VCORE only the lowest OPP is used.
+ */
+static unsigned int MTKPickFreq(struct mtk_mfg *mfg)
+{
+	int uv = mfg->vcore ? regulator_get_voltage(mfg->vcore) : -ENODEV;
+	unsigned int i, last = ARRAY_SIZE(mtk_mfg_opps) - 1;
+
+	for (i = 0; i < last; i++)
+		if (mtk_mfg_opps[i].khz <= mfg_freq_khz &&
+		    uv >= mtk_mfg_opps[i].vcore_uv)
+			break;
+
+	if (mtk_mfg_opps[i].khz != mfg_freq_khz)
+		dev_warn(mfg->dev, "GPU clock %u kHz not usable (vcore %d uV), using %u kHz\n",
+			 mfg_freq_khz, uv, mtk_mfg_opps[i].khz);
+
+	mfg_min_vcore_uv = mtk_mfg_opps[i].vcore_uv;
+	return mtk_mfg_opps[i].khz;
+}
+
 static void MTKSetFixedFreq(struct mtk_mfg *mfg, PVRSRV_DEVICE_CONFIG *psDevConfig)
 {
 	RGX_DATA *psRGXData = (RGX_DATA *)psDevConfig->hDevData;
 	unsigned long rate;
+	unsigned int khz;
 	int ret;
 
-	ret = clk_set_rate(mfg->clk_main_parent, mfg_freq_khz * 1000UL);
+	khz = MTKPickFreq(mfg);
+	ret = clk_set_rate(mfg->clk_main_parent, khz * 1000UL);
 	if (ret)
 		dev_warn(mfg->dev, "failed to set mfgpll to %u kHz: %d\n",
-			 mfg_freq_khz, ret);
+			 khz, ret);
 
 	rate = clk_get_rate(mfg->clk_main_parent);
 	dev_info(mfg->dev, "fixed GPU clock %lu Hz (requested %u kHz), hwapm=%d\n",
