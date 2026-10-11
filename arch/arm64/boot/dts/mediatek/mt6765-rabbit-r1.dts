@@ -50,6 +50,25 @@
 			      <&r1_mt6370_adc MT6370_CHAN_TEMP_JC>;
 	};
 
+	/*
+	 * Stock audio: MT6765 AFE -> MTKAIF -> MT6357 codec. The speaker is an
+	 * AW87390 class-K amplifier (I2C0 0x58) on the MT6357 line output; the
+	 * stock codec driver turns its "Music" profile on with the LOL path.
+	 * No 3.5 mm jack: MT6357 headphone outputs and ACCDET are unused.
+	 */
+	sound {
+		compatible = "mediatek,mt6765-mt6357-sound";
+		model = "rabbit-r1";
+		mediatek,platform = <&afe>;
+		mediatek,speaker-amplifier = <&r1_speaker_amp>;
+		pinctrl-names = "aud_mosi_off", "aud_mosi_on",
+				"aud_miso_off", "aud_miso_on";
+		pinctrl-0 = <&r1_aud_mosi_off_pins>;
+		pinctrl-1 = <&r1_aud_mosi_on_pins>;
+		pinctrl-2 = <&r1_aud_miso_off_pins>;
+		pinctrl-3 = <&r1_aud_miso_on_pins>;
+	};
+
 	chosen {
 		stdout-path = "serial0:921600n8";
 		/* Single CPU until the r1's PSCI/firmware behavior is measured. */
@@ -327,6 +346,26 @@
 	status = "okay";
 };
 
+&afe {
+	status = "okay";
+};
+
+&i2c0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&r1_i2c0_pins>;
+	/* Stock runs 400 kHz open drain; standard speed for bring-up. */
+	clock-frequency = <100000>;
+	status = "okay";
+
+	/* Stock aw87xxx_pa@58, dev_index 0; its ACF names the part AW87390. */
+	r1_speaker_amp: amplifier@58 {
+		compatible = "awinic,aw87390";
+		reg = <0x58>;
+		#sound-dai-cells = <0>;
+		awinic,audio-channel = <0>;
+	};
+};
+
 &gpu {
 	vcore-supply = <&mt6357_vcore_reg>;
 	status = "okay";
@@ -431,6 +470,14 @@
 &mt6357_vsram_proc_reg {
 	regulator-min-microvolt = <900000>;
 	regulator-max-microvolt = <1200000>;
+};
+
+/*
+ * The MT6357 codec is an MFD cell without a DT node, so its vaud28 supply
+ * resolves to a dummy regulator. Keep the real rail up for the codec.
+ */
+&mt6357_vaud28_reg {
+	regulator-always-on;
 };
 
 &i2c4 {
@@ -612,6 +659,65 @@
 };
 
 &pio {
+	/* Stock gpio_init_default: GPIO82/83 in mode 1, pulled up. */
+	r1_i2c0_pins: i2c0-pins {
+		pins-bus {
+			pinmux = <PINMUX_GPIO82__FUNC_SDA0>,
+				 <PINMUX_GPIO83__FUNC_SCL0>;
+			input-enable;
+			bias-pull-up;
+		};
+	};
+
+	/*
+	 * MTKAIF to the MT6357. Stock gpio_init_default leaves GPIO136-143
+	 * in mode 1; its audio driver parks the clock and data pins as GPIOs
+	 * between streams (aud_{clk,dat}_{mosi,miso}_{off,on}).
+	 */
+	r1_aud_mosi_on_pins: aud-mosi-on-pins {
+		pins-aud {
+			pinmux = <PINMUX_GPIO136__FUNC_AUD_CLK_MOSI>,
+				 <PINMUX_GPIO137__FUNC_AUD_SYNC_MOSI>,
+				 <PINMUX_GPIO138__FUNC_AUD_DAT_MOSI0>,
+				 <PINMUX_GPIO139__FUNC_AUD_DAT_MOSI1>;
+		};
+	};
+
+	r1_aud_mosi_off_pins: aud-mosi-off-pins {
+		pins-clk {
+			pinmux = <PINMUX_GPIO136__FUNC_GPIO136>;
+		};
+
+		pins-dat {
+			pinmux = <PINMUX_GPIO138__FUNC_GPIO138>,
+				 <PINMUX_GPIO139__FUNC_GPIO139>;
+			input-enable;
+			bias-disable;
+		};
+	};
+
+	r1_aud_miso_on_pins: aud-miso-on-pins {
+		pins-aud {
+			pinmux = <PINMUX_GPIO140__FUNC_AUD_CLK_MISO>,
+				 <PINMUX_GPIO141__FUNC_AUD_SYNC_MISO>,
+				 <PINMUX_GPIO142__FUNC_AUD_DAT_MISO0>,
+				 <PINMUX_GPIO143__FUNC_AUD_DAT_MISO1>;
+		};
+	};
+
+	r1_aud_miso_off_pins: aud-miso-off-pins {
+		pins-clk {
+			pinmux = <PINMUX_GPIO140__FUNC_GPIO140>;
+		};
+
+		pins-dat {
+			pinmux = <PINMUX_GPIO142__FUNC_GPIO142>,
+				 <PINMUX_GPIO143__FUNC_GPIO143>;
+			input-enable;
+			bias-disable;
+		};
+	};
+
 	r1_i2c4_pins: i2c4-pins {
 		pins-bus {
 			pinmux = <PINMUX_GPIO105__FUNC_SCL4>,

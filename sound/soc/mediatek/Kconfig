@@ -36,6 +36,29 @@ config SND_SOC_MT2701_WM8960
 	  Select Y if you have such device.
 	  If unsure select "N".
 
+config SND_SOC_MT6765
+	tristate "ASoC support for Mediatek MT6765 chip"
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	depends on COMMON_CLK
+	select SND_SOC_MEDIATEK
+	select MFD_SYSCON
+	help
+	  This adds ASoC platform driver support for the Mediatek MT6765
+	  (Helio P35) audio front end.
+	  Select Y if you have such device.
+	  If unsure select "N".
+
+config SND_SOC_MT6765_MT6357
+	tristate "ASoC Audio driver for MT6765 with MT6357 codec"
+	depends on SND_SOC_MT6765 && MTK_PMIC_WRAP
+	select SND_SOC_MT6357
+	help
+	  This adds the ASoC machine driver for Mediatek MT6765 boards
+	  with the MT6357 PMIC codec, optionally followed by an analog
+	  speaker amplifier on the codec line output.
+	  Select Y if you have such device.
+	  If unsure select "N".
+
 config SND_SOC_MT6797
 	tristate "ASoC support for Mediatek MT6797 chip"
 	depends on ARCH_MEDIATEK
