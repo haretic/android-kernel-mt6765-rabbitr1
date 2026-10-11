@@ -324,6 +324,17 @@ config INPUT_MMA8450
 	  To compile this driver as a module, choose M here: the
 	  module will be called mma8450.
 
+config INPUT_OCH1970
+	tristate "Orient Chip OCH1970 Hall sensor scroll wheel"
+	depends on I2C
+	help
+	  Say Y here to use an Orient Chip OCH1970 3D Hall sensor next to
+	  a magnetised wheel as a scroll wheel, as on the rabbit r1. Wheel
+	  steps are reported as KEY_UP and KEY_DOWN presses.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called och1970.
+
 config INPUT_APANEL
 	tristate "Fujitsu Lifebook Application Panel buttons"
 	depends on X86 && I2C && LEDS_CLASS
