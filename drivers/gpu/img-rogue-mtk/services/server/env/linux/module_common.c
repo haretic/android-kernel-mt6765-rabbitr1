@@ -41,6 +41,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */ /**************************************************************************/
 
 #include <linux/module.h>
+#include <linux/mutex.h>
 
 #if defined(CONFIG_DEBUG_FS)
 #include "pvr_debugfs.h"
@@ -432,6 +433,13 @@ int PVRSRVDeviceResume(PVRSRV_DEVICE_NODE *psDeviceNode)
 	return 0;
 }
 
+/*
+ * The first open initialises the device (firmware load, ISR registration).
+ * Concurrent first opens raced through it, so the loser failed request_irq()
+ * and left the device in the BAD state for good.
+ */
+static DEFINE_MUTEX(gsDeviceInitLock);
+
 /**************************************************************************/ /*!
 @Function     PVRSRVDeviceOpen
 @Description  Common device open.
@@ -469,11 +477,13 @@ int PVRSRVDeviceOpen(PVRSRV_DEVICE_NODE *psDeviceNode,
 		goto out;
 	}
 
+	mutex_lock(&gsDeviceInitLock);
 	if (psDeviceNode->eDevState == PVRSRV_DEVICE_STATE_INIT)
 	{
 		eError = PVRSRVCommonDeviceInitialise(psDeviceNode);
 		if (eError != PVRSRV_OK)
 		{
+			mutex_unlock(&gsDeviceInitLock);
 			PVR_DPF((PVR_DBG_ERROR, "%s: Failed to initialise device (%s)",
 					 __func__, PVRSRVGetErrorString(eError)));
 			iErr = -ENODEV;
@@ -484,6 +494,13 @@ int PVRSRVDeviceOpen(PVRSRV_DEVICE_NODE *psDeviceNode,
 		PVRGpuTraceInitIfEnabled(psDeviceNode);
 #endif
 	}
+	else if (psDeviceNode->eDevState == PVRSRV_DEVICE_STATE_BAD)
+	{
+		mutex_unlock(&gsDeviceInitLock);
+		iErr = -ENODEV;
+		goto out;
+	}
+	mutex_unlock(&gsDeviceInitLock);
 
 	sPrivData.psDevNode = psDeviceNode;
 	sPrivData.psFile = psDRMFile->filp;
