@@ -492,6 +492,12 @@
 			clocks = <&clk13m>;
 		};
 
+		mcucfg: clock-controller@10200000 {
+			compatible = "mediatek,mt6765-mcucfg", "syscon";
+			reg = <0 0x10200000 0 0x800>;
+			#clock-cells = <1>;
+		};
+
 		sysirq: interrupt-controller@10200a80 {
 			compatible = "mediatek,mt6765-sysirq",
 				     "mediatek,mt6577-sysirq";
