@@ -54,6 +54,12 @@ static_assert(sizeof(struct ion_heap_data) == 52);
 #define MIC_CONTIG_HEAPS	(BIT(MTK_ION_HEAP_SYSTEM_CONTIG) | \
 				 BIT(MTK_ION_HEAP_CARVEOUT) | \
 				 BIT(MTK_ION_HEAP_DMA))
+/*
+ * Heaps whose buffers can end up on screen: stock scans them out through the
+ * M4U IOMMU, and PowerVR gralloc takes the client target from the system heap.
+ */
+#define MIC_SCANOUT_HEAPS	(BIT(MTK_ION_HEAP_SYSTEM) | BIT(MTK_ION_HEAP_MULTIMEDIA) | \
+				 BIT(MTK_ION_HEAP_FB))
 /* Secure heaps: no TEE here, so they are ordinary (non-secure) memory. */
 #define MIC_SECURE_HEAPS	(BIT(MTK_ION_HEAP_MULTIMEDIA_SEC) | \
 				 GENMASK(MTK_ION_HEAP_MULTIMEDIA_SDSP_SHARED, \
@@ -471,7 +477,7 @@ err:
 	return ret;
 }
 
-static int mic_alloc_contig(struct mic_buffer *buffer)
+static int mic_alloc_contig(struct mic_buffer *buffer, gfp_t extra)
 {
 	void *vaddr;
 	int ret;
@@ -480,7 +486,7 @@ static int mic_alloc_contig(struct mic_buffer *buffer)
 		return -ENOMEM;
 
 	vaddr = alloc_pages_exact(buffer->len, GFP_KERNEL | __GFP_ZERO |
-					       __GFP_NOWARN);
+					       __GFP_NOWARN | extra);
 	if (!vaddr)
 		return -ENOMEM;
 
@@ -548,10 +554,23 @@ static struct dma_buf *mic_buffer_alloc(size_t len, unsigned int heap_id_mask,
 	buffer->flags = flags;
 	buffer->module_id = -1;
 
-	if (!(heap_id_mask & ~MIC_CONTIG_HEAPS))
-		ret = mic_alloc_contig(buffer);
-	else
-		ret = mic_alloc_scattered(buffer);
+	if (!(heap_id_mask & ~MIC_CONTIG_HEAPS)) {
+		ret = mic_alloc_contig(buffer, 0);
+	} else {
+		/*
+		 * Stock scans out mm/fb heap buffers through the M4U IOMMU. Without
+		 * it, mediatek-drm can only import physically contiguous buffers, so
+		 * try that first and fall back to pages (CPU-copied for scanout).
+		 */
+		ret = -ENOMEM;
+		if (heap_id_mask & MIC_SCANOUT_HEAPS)
+			ret = mic_alloc_contig(buffer, __GFP_NORETRY);
+		if (ret)
+			ret = mic_alloc_scattered(buffer);
+	}
+	if (len >= SZ_1M)
+		pr_debug("mtk_ion_compat: alloc %zu heap mask %#x flags %#x contig %d\n",
+			 len, heap_id_mask, flags, buffer->contig);
 	if (ret)
 		goto err_free_buffer;
 
