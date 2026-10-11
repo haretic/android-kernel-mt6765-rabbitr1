@@ -21,6 +21,7 @@
  */
 
 #include <linux/compat.h>
+#include <linux/device/faux.h>
 #include <linux/dma-buf.h>
 #include <linux/dma-mapping.h>
 #include <linux/err.h>
@@ -81,6 +82,8 @@ static const struct mic_heap_desc mic_heaps[] = {
 };
 
 static struct miscdevice mic_misc;
+/* DMA device used for the initial cache clean of new buffers. */
+static struct faux_device *mic_fdev;
 
 struct mic_buffer {
 	struct list_head attachments;
@@ -556,11 +559,11 @@ static struct dma_buf *mic_buffer_alloc(size_t len, unsigned int heap_id_mask,
 	 * Write the zeroed pages back to memory once, so non-coherent devices
 	 * and write-combined CPU mappings never see stale cache lines.
 	 */
-	ret = dma_map_sgtable(mic_misc.this_device, &buffer->sgt,
-			      DMA_BIDIRECTIONAL, 0);
+	ret = dma_map_sgtable(&mic_fdev->dev, &buffer->sgt, DMA_BIDIRECTIONAL,
+			      0);
 	if (ret)
 		goto err_free_pages;
-	dma_unmap_sgtable(mic_misc.this_device, &buffer->sgt, DMA_BIDIRECTIONAL,
+	dma_unmap_sgtable(&mic_fdev->dev, &buffer->sgt, DMA_BIDIRECTIONAL,
 			  DMA_ATTR_SKIP_CPU_SYNC);
 
 	exp_info.exp_name = MIC_EXP_NAME;
@@ -1438,24 +1441,30 @@ static int __init mic_init(void)
 {
 	int ret;
 
+	mic_fdev = faux_device_create("mtk_ion_compat", NULL, NULL);
+	if (!mic_fdev)
+		return -ENODEV;
+
+	ret = dma_coerce_mask_and_coherent(&mic_fdev->dev, DMA_BIT_MASK(64));
+	if (ret)
+		goto err_destroy;
+
+	mic_misc.parent = &mic_fdev->dev;
 	ret = misc_register(&mic_misc);
 	if (ret)
-		return ret;
-
-	/* Used only for the initial cache clean of new buffers. */
-	ret = dma_coerce_mask_and_coherent(mic_misc.this_device,
-					   DMA_BIT_MASK(64));
-	if (ret) {
-		misc_deregister(&mic_misc);
-		return ret;
-	}
+		goto err_destroy;
 
 	return 0;
+
+err_destroy:
+	faux_device_destroy(mic_fdev);
+	return ret;
 }
 
 static void __exit mic_exit(void)
 {
 	misc_deregister(&mic_misc);
+	faux_device_destroy(mic_fdev);
 }
 
 module_init(mic_init);
