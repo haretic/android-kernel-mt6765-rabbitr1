@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# The ICM-42607 IMU has no known interrupt line, so it samples on an IIO
+# hrtimer trigger. The mainline sensors HAL picks up "<iio name>-trigger" by
+# itself and sets its rate, so it needs no configfs access of its own.
+on post-fs
+    mkdir /config/iio/triggers/hrtimer/icm42607-trigger
