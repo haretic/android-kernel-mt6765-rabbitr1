@@ -204,10 +204,13 @@
 	/* Experimental: stock AP channel and touch wiring, not board-tested. */
 	status = "okay";
 
-	touchscreen@15 {
-		/* Primary vendor configuration; CST328 variants need another driver. */
-		compatible = "hynitron,cst836";
-		reg = <0x15>;
+	touchscreen@1a {
+		/*
+		 * This r1 carries the stock driver's fallback controller: a CST3xx
+		 * at 0x1a answering the 0xd1xx info and 0xd0xx report registers.
+		 */
+		compatible = "hynitron,cst340";
+		reg = <0x1a>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&r1_touch_pins>;
 		interrupt-parent = <&pio>;
