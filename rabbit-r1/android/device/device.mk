@@ -68,6 +68,16 @@ PRODUCT_SYSTEM_PROPERTIES += sys.use_memfd=true
 # outlasts the 60 s framework watchdog on first boot.
 PRODUCT_VENDOR_PROPERTIES += ro.hw_timeout_multiplier=5
 
+# Handheld features; without them system_server skips the appwidget service and Launcher3 crash-loops.
+PRODUCT_COPY_FILES += \
+    frameworks/native/data/etc/handheld_core_hardware.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/handheld_core_hardware.xml
+
+# Side button (PMIC power key and keypad) and the OCH1970 scroll wheel.
+PRODUCT_COPY_FILES += \
+    $(LOCAL_PATH)/keylayout/mtk-pmic-keys.kl:$(TARGET_COPY_OUT_VENDOR)/usr/keylayout/mtk-pmic-keys.kl \
+    $(LOCAL_PATH)/keylayout/mt6779-keypad.kl:$(TARGET_COPY_OUT_VENDOR)/usr/keylayout/mt6779-keypad.kl \
+    $(LOCAL_PATH)/keylayout/och1970-wheel.kl:$(TARGET_COPY_OUT_VENDOR)/usr/keylayout/och1970-wheel.kl
+
 # Recovery-as-boot copies root/ into its ramdisk for the normal-boot switch.
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/rootdir/fstab.r1:$(TARGET_COPY_OUT_VENDOR)/etc/fstab.r1 \
