@@ -30,6 +30,8 @@ service watchdogd /system/bin/watchdogd 10 20
 
 on property:sys.boot_completed=1
     start watchdogd
+    # The logcat mirror is for boot debugging; it costs most of a core afterwards.
+    stop vendor.r1-logcat-kmsg
 
 # With the gadget HAL (sys.usb.configfs=2) init never sets sys.usb.state.
 on property:init.svc.adbd=running
