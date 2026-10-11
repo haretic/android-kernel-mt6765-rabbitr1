@@ -98,12 +98,12 @@ static const char *pvr_sw_fence_get_timeline_name(struct dma_fence *fence)
 	return pvr_sw_fence_context_name(pvr_sw_fence->fence_context);
 }
 
-static void pvr_sw_fence_value_str(struct dma_fence *fence, char *str, int size)
+static void __maybe_unused pvr_sw_fence_value_str(struct dma_fence *fence, char *str, int size)
 {
 	snprintf(str, size, "%llu", (u64) fence->seqno);
 }
 
-static void pvr_sw_fence_timeline_value_str(struct dma_fence *fence,
+static void __maybe_unused pvr_sw_fence_timeline_value_str(struct dma_fence *fence,
 					    char *str, int size)
 {
 	struct pvr_sw_fence *pvr_sw_fence = to_pvr_sw_fence(fence);
@@ -143,8 +143,10 @@ static void pvr_sw_fence_release(struct dma_fence *fence)
 static const struct dma_fence_ops pvr_sw_fence_ops = {
 	.get_driver_name = pvr_sw_fence_get_driver_name,
 	.get_timeline_name = pvr_sw_fence_get_timeline_name,
+#if PVR_DMA_FENCE_HAS_VALUE_STR
 	.fence_value_str = pvr_sw_fence_value_str,
 	.timeline_value_str = pvr_sw_fence_timeline_value_str,
+#endif
 	.enable_signaling = pvr_sw_fence_enable_signaling,
 	.wait = dma_fence_default_wait,
 	.release = pvr_sw_fence_release,

@@ -101,4 +101,40 @@ dma_fence_wait_timeout(struct dma_fence *fence, bool intr, signed long timeout)
 
 #endif
 
+/*
+ * dma_fence_ops lost fence_value_str/timeline_value_str upstream. They were
+ * only used for debug output, so fall back to the seqno when they are gone.
+ */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 17, 0))
+#define PVR_DMA_FENCE_HAS_VALUE_STR 0
+#else
+#define PVR_DMA_FENCE_HAS_VALUE_STR 1
+#endif
+
+static inline void
+pvr_dma_fence_value_str(struct dma_fence *fence, char *str, int size)
+{
+#if PVR_DMA_FENCE_HAS_VALUE_STR
+	if (fence->ops->fence_value_str) {
+		fence->ops->fence_value_str(fence, str, size);
+		return;
+	}
+#endif
+	snprintf(str, size, "%llu", (u64) fence->seqno);
+}
+
+static inline bool
+pvr_dma_fence_timeline_value_str(struct dma_fence *fence, char *str, int size)
+{
+#if PVR_DMA_FENCE_HAS_VALUE_STR
+	if (fence->ops->timeline_value_str) {
+		fence->ops->timeline_value_str(fence, str, size);
+		return true;
+	}
+#endif
+	if (size > 0)
+		str[0] = '\0';
+	return false;
+}
+
 #endif /* !defined(__PVR_LINUX_FENCE_H__) */
