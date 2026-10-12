@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0
+config MTK_CCCI_R1_MD_PROBE
+	tristate "Rabbit r1 MT6765 modem bring-up probe"
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	depends on OF && PM && MMU
+	select MFD_SYSCON
+	help
+	  Bring-up tool for the integrated MD1 modem of the MT6765. It
+	  decodes the modem handoff LK leaves in the device tree and, when
+	  loaded with stage=1 or stage=2, powers the modem up with the
+	  vendor sequence, releases it and waits for its first handshake,
+	  logging every step. It never loads on its own and does nothing
+	  beyond reading state unless asked to.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called r1-md-probe. If unsure, say N.
