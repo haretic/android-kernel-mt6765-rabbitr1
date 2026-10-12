@@ -16,7 +16,6 @@
 #include <media/v4l2-fwnode.h>
 
 #define HI846_MEDIA_BUS_FORMAT		MEDIA_BUS_FMT_SGBRG10_1X10
-#define HI846_RGB_DEPTH			10
 
 /* Frame length lines / vertical timings */
 #define HI846_REG_FLL			0x0006
@@ -25,6 +24,12 @@
 /* Horizontal timing */
 #define HI846_REG_LLP			0x0008
 #define HI846_LINE_LENGTH		3800
+/*
+ * The clock the line and frame lengths count in, the same in every mode:
+ * 3800 x 2526 at 30 fps, 3800 x 842 at 90 fps and 3800 x 631 at 120 fps.
+ * It isn't derived from the link frequency, which differs between modes.
+ */
+#define HI846_PIXEL_RATE		288000000
 
 #define HI846_REG_BINNING_MODE		0x000c
 
@@ -1204,15 +1209,6 @@ static u64 hi846_get_link_freq(struct hi846 *hi846)
 	return hi846_link_freqs[index];
 }
 
-static u64 hi846_calc_pixel_rate(struct hi846 *hi846)
-{
-	u64 link_freq = hi846_get_link_freq(hi846);
-	u64 pixel_rate = link_freq * 2 * hi846->nr_lanes;
-
-	do_div(pixel_rate, HI846_RGB_DEPTH);
-
-	return pixel_rate;
-}
 
 static int hi846_read_reg(struct hi846 *hi846, u16 reg, u8 *val)
 {
@@ -1432,9 +1428,8 @@ static int hi846_init_controls(struct hi846 *hi846)
 
 	hi846->pixel_rate =
 		v4l2_ctrl_new_std(ctrl_hdlr, &hi846_ctrl_ops,
-				  V4L2_CID_PIXEL_RATE, 0,
-				  hi846_calc_pixel_rate(hi846), 1,
-				  hi846_calc_pixel_rate(hi846));
+				  V4L2_CID_PIXEL_RATE, HI846_PIXEL_RATE,
+				  HI846_PIXEL_RATE, 1, HI846_PIXEL_RATE);
 	hi846->vblank = v4l2_ctrl_new_std(ctrl_hdlr, &hi846_ctrl_ops,
 					  V4L2_CID_VBLANK,
 					  hi846->cur_mode->frame_len -
@@ -1748,8 +1743,6 @@ static int hi846_set_format(struct v4l2_subdev *sd,
 	mf->field = V4L2_FIELD_NONE;
 
 	__v4l2_ctrl_s_ctrl(hi846->link_freq, hi846_get_link_freq_index(hi846));
-	__v4l2_ctrl_s_ctrl_int64(hi846->pixel_rate,
-				 hi846_calc_pixel_rate(hi846));
 
 	/* Update limits and set FPS to default */
 	vblank_def = hi846->cur_mode->frame_len - hi846->cur_mode->height;
