@@ -440,6 +440,13 @@ INT32 wmt_ctrl_hw_pwr_on(P_WMT_CTRL_DATA pWmtCtrlData)
 	} else {
 		WMT_DBG_FUNC("off->on\n");
 		iret = wmt_plat_pwr_ctrl(FUNC_ON);
+		/*
+		 * The platform layer has already undone a failed power on;
+		 * leaving the bit set made every later attempt skip the
+		 * hardware and fail further up in STP instead.
+		 */
+		if (iret)
+			osal_clear_bit(WMT_STAT_PWR, &pDev->state);
 	}
 
 	return iret;
