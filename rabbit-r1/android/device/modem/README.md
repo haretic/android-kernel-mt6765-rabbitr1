@@ -14,7 +14,7 @@ Plan and background: `docs/research/r1-modem-ril-feasibility.md`.
 |---|---|
 | `modem.mk` | Product side: blobs, shim, AOSP HIDL `.vendor` libraries, rc and ueventd files, VINTF fragment, telephony feature, stock radio properties. |
 | `BoardConfigModem.mk` | Board side: sepolicy dir, framework matrix fragment, `BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES`. |
-| `blobs.txt` | The 45 files to import from `out/stock-vendor/tree`. |
+| `blobs.txt` | The 55 files to import from `out/stock-vendor/tree`. gsm0710muxd and its three lib/ libraries are arm32 (BoardConfig.mk enables the 2nd arch for them). |
 | `shim/` | `libr1_base_shim.so`: the old libbase `Trim(const std::string&)` and `Basename(const std::string&)`. |
 | `init.r1.modem.rc` | `insmod mtk-ccci.ko`; the stock services, all gated on the NV check. |
 | `r1-modem-nvcheck.sh` | Sets `vendor.r1.modem.nv_ready=1` only if all four NV filesystems are mounted rw. |
@@ -42,6 +42,7 @@ Plan and background: `docs/research/r1-modem-ril-feasibility.md`.
 7. **Blobs**: create `vendor/rabbit/r1-modem/proprietary/`, the same way as `vendor/rabbit/r1-pvr`.
    - Copy every path in `blobs.txt` from `out/stock-vendor/tree`.
    - Then run `patchelf --add-needed libr1_base_shim.so` on `lib64/libnvram.so` and `lib64/libsysenv.so`. Those two are the only unresolved imports against our Android 17 libraries; this was checked with `nm -D` over the whole closure.
+   - Then run `rename-mtkutils.py out/target/product/r1/vendor/lib64/libutils.so vendor/rabbit/r1-modem/proprietary/lib64`. `libmtkutils.so` is MediaTek's private copy of an Android 12 libutils, and it shares a global lookup group with our libutils in mtkfusionrild. Each copy interposes the other: our libbinder crashes in the old `SharedBuffer::acquire`, or `libmtk-ril` aborts in the new `Thread::run`. The script renames the 290 clashing symbols (`android::` becomes `mtkandr::`) in libmtkutils and in the blobs that link it. It does this in place, because `patchelf --rename-dynamic-symbols` reorders `.dynsym` and breaks the blobs' packed relocations.
 
 ## Boot flow
 

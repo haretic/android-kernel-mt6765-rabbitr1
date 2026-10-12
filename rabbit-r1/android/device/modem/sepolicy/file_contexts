@@ -1,6 +1,7 @@
 # Daemons (stock vendor_file_contexts labels)
 /vendor/bin/ccci_mdinit                                     u:object_r:ccci_mdinit_exec:s0
 /vendor/bin/ccci_rpcd                                       u:object_r:ccci_rpcd_exec:s0
+/vendor/bin/gsm0710muxd                                     u:object_r:gsm0710muxd_exec:s0
 /vendor/bin/nvram_daemon                                    u:object_r:nvram_daemon_exec:s0
 /vendor/bin/hw/vendor\.mediatek\.hardware\.nvram@1\.1-service u:object_r:mtk_hal_nvramagent_exec:s0
 /vendor/bin/hw/mtkfusionrild                                u:object_r:rild_exec:s0
