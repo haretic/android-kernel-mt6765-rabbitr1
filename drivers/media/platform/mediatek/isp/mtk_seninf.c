@@ -28,7 +28,6 @@
 
 #define SENINF_TIMESTAMP_STEP		0x67
 #define SENINF_SETTLE_DELAY		0x15
-#define SENINF_HS_TRAIL_PARAMETER	0x8
 
 #define SENINF_MAX_NUM_INPUTS		4
 #define SENINF_MAX_NUM_OUTPUTS		6
@@ -103,6 +102,8 @@ enum mtk_seninf_format_flag {
  *		   output N is routed from MUX N through CAM MUX
  *		   (camsv_cam_mux + N). When zero, the fixed MT8365 routing is
  *		   used.
+ * @hs_trail: CSI2 HS trail parameter
+ * @csi2_spare0_hq: Set the CSI2 SPARE0 "HQ" bits; otherwise only clear bit 0
  */
 struct mtk_seninf_conf {
 	const char *model;
@@ -110,6 +111,8 @@ struct mtk_seninf_conf {
 	u8 nb_muxes;
 	u8 nb_outputs;
 	u8 camsv_cam_mux;
+	u8 hs_trail;
+	bool csi2_spare0_hq;
 };
 
 /**
@@ -491,6 +494,18 @@ static void mtk_seninf_csi2_setup_phy(struct mtk_seninf *priv)
 		mtk_seninf_update(priv, SENINF_TOP_PHY_SENINF_CTL_CSI1,
 				  PHY_SENINF_LANE_MUX_CSI1_EN, 1);
 	}
+
+	/* CSI2 */
+	if (priv->inputs[CSI_PORT_2].phy) {
+		const struct mtk_seninf_input *input = &priv->inputs[CSI_PORT_2];
+
+		mtk_seninf_update(priv, SENINF_TOP_PHY_SENINF_CTL_CSI2,
+				  DPHY_MODE, 0 /* 4D1C */);
+		mtk_seninf_update(priv, SENINF_TOP_PHY_SENINF_CTL_CSI2,
+				  CK_SEL_1, input->bus.clock_lane);
+		mtk_seninf_update(priv, SENINF_TOP_PHY_SENINF_CTL_CSI2,
+				  PHY_SENINF_LANE_MUX_CSI2_EN, 1);
+	}
 }
 
 static void mtk_seninf_input_setup_csi2_rx(struct mtk_seninf_input *input)
@@ -556,7 +571,8 @@ static s64 mtk_seninf_get_clk_divider(struct mtk_seninf_input *input,
 	return div > 0 ? div - 1 : 0;
 }
 
-static void mtk_seninf_input_setup_csi2(struct mtk_seninf_input *input,
+static void mtk_seninf_input_setup_csi2(const struct mtk_seninf_conf *conf,
+				       struct mtk_seninf_input *input,
 				       struct v4l2_subdev_state *state)
 {
 	const struct mtk_seninf_format_info *fmtinfo;
@@ -635,14 +651,22 @@ static void mtk_seninf_input_setup_csi2(struct mtk_seninf_input *input,
 	mtk_seninf_input_update(input, SENINF_CSI2_CTL, HSRX_DET_EN, 0);
 	mtk_seninf_input_update(input, SENINF_CSI2_CTL, HS_TRAIL_EN, 1);
 	mtk_seninf_input_update(input, SENINF_CSI2_HS_TRAIL, HS_TRAIL_PARAMETER,
-				SENINF_HS_TRAIL_PARAMETER);
+				conf->hs_trail);
 
 	/* Set debug port to output packet number */
 	mtk_seninf_input_update(input, SENINF_CSI2_DGB_SEL, DEBUG_EN, 1);
 	mtk_seninf_input_update(input, SENINF_CSI2_DGB_SEL, DEBUG_SEL, 0x1a);
 
-	/* HQ */
-	mtk_seninf_input_write(input, SENINF_CSI2_SPARE0, 0xfffffffe);
+	if (conf->csi2_spare0_hq)
+		mtk_seninf_input_write(input, SENINF_CSI2_SPARE0, 0xfffffffe);
+	else
+		mtk_seninf_input_write(input, SENINF_CSI2_SPARE0,
+				       mtk_seninf_inuput_read(input, SENINF_CSI2_SPARE0) & ~BIT(0));
+
+	/* Enable and clear all CSI2 interrupts so that the status latches. */
+	mtk_seninf_input_write(input, SENINF_CSI2_INT_EN, 0xffffffff);
+	mtk_seninf_input_write(input, SENINF_CSI2_INT_STATUS, 0xffffffff);
+	mtk_seninf_input_write(input, SENINF_CSI2_INT_EN_EXT, 0x1f);
 
 	/* Reset the CSI2 to commit changes */
 	mtk_seninf_input_update(input, SENINF_CTRL, CSI2_SW_RST, 1);
@@ -766,7 +790,7 @@ static void mtk_seninf_start(struct mtk_seninf *priv,
 	phy_power_on(input->phy);
 
 	mtk_seninf_input_setup_csi2_rx(input);
-	mtk_seninf_input_setup_csi2(input, state);
+	mtk_seninf_input_setup_csi2(priv->conf, input, state);
 
 	mtk_seninf_mux_setup(mux, input, state);
 	mtk_seninf_top_mux_setup(priv, input->seninf_id, mux);
@@ -1436,6 +1460,8 @@ static const struct mtk_seninf_dbg_reg mtk_seninf_dbg_top_regs[] = {
 		       SENINF_TOP_PHY_SENINF_CTL_CSI0),
 	SENINF_DBG_REG("TOP_PHY_SENINF_CTL_CSI1",
 		       SENINF_TOP_PHY_SENINF_CTL_CSI1),
+	SENINF_DBG_REG("TOP_PHY_SENINF_CTL_CSI2",
+		       SENINF_TOP_PHY_SENINF_CTL_CSI2),
 };
 
 static const struct mtk_seninf_dbg_reg mtk_seninf_dbg_input_regs[] = {
@@ -1601,6 +1627,8 @@ static const struct mtk_seninf_conf seninf_8365_conf = {
 	.nb_inputs = 4,
 	.nb_muxes = 6,
 	.nb_outputs = 4,
+	.hs_trail = 0x8,
+	.csi2_spare0_hq = true,
 };
 
 static const struct mtk_seninf_conf seninf_6765_conf = {
@@ -1609,6 +1637,8 @@ static const struct mtk_seninf_conf seninf_6765_conf = {
 	.nb_muxes = 4,
 	.nb_outputs = 4,
 	.camsv_cam_mux = 2,
+	/* Stock HAL values. */
+	.hs_trail = 0x1b,
 };
 
 static const struct of_device_id mtk_seninf_of_match[] = {
