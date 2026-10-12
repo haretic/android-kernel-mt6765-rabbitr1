@@ -644,6 +644,18 @@ config MCHP_LAN966X_PCI
 	    - lan966x-miim (MDIO_MSCC_MIIM)
 	    - lan966x-switch (LAN966X_SWITCH)
 
+config MS35774
+	tristate "Relmon MS35774 stepper motor driver"
+	depends on GPIOLIB && REGULATOR
+	depends on OF || COMPILE_TEST
+	help
+	  Say Y here to support a Relmon MS35774 STEP/DIR stepper motor
+	  driver rotating a part over a limited range, such as the camera
+	  of the Rabbit R1. The position is set in degrees through sysfs.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called ms35774.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"

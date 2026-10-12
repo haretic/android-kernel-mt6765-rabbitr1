@@ -20,6 +20,7 @@ description:
 properties:
   compatible:
     enum:
+      - mediatek,mt6765-csi-rx
       - mediatek,mt8365-csi-rx
 
   reg:
