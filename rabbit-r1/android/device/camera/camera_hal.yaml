@@ -6,8 +6,20 @@
 
 cameras:
   "/base/soc/i2c@11009000/camera@20":
-    location: back
-    # Frames need a 270 degree clockwise rotation to be upright. The
-    # libcamera Rotation property from the device tree (rotation = <90>,
-    # counter-clockwise) takes precedence; keep the two in agreement.
-    rotation: 270
+    # The module turns with the MS35774 stepper motor (init.r1.camera.rc):
+    # 0 degrees faces the front, 90 hides the sensor, 180 faces the back.
+    # Android gets a back and a front camera; opening one turns the module
+    # that way, closing it parks the module with the sensor hidden.
+    position_control: /sys/devices/platform/stepper-motor/orientation
+    park_position: 90
+    # The rotation is the clockwise turn that makes frames upright. Facing
+    # the front the sensor is a quarter turn counter-clockwise to the
+    # display (rotation = <90> in the device tree), and turning the module
+    # over to the back turns it upside down.
+    views:
+      - location: back
+        rotation: 90
+        position: 180
+      - location: front
+        rotation: 270
+        position: 0

@@ -1,0 +1,5 @@
+# The camera HAL turns the camera module with the MS35774 stepper motor:
+# 0 degrees faces the front, 90 hides the sensor (privacy), 180 faces the back.
+on boot
+    chown cameraserver cameraserver /sys/devices/platform/stepper-motor/orientation
+    chmod 0664 /sys/devices/platform/stepper-motor/orientation
