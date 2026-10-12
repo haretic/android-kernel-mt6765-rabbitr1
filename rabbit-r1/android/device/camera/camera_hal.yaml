@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: CC0-1.0
+#
+# libcamera Android HAL configuration, installed to
+# /vendor/etc/libcamera/camera_hal.yaml. The key is the libcamera camera ID,
+# the device tree path of the sensor node (hi846 at 0x20 on i2c2).
+
+cameras:
+  "/base/soc/i2c@11009000/camera@20":
+    location: back
+    # PLACEHOLDER: the mounting rotation of the Hi-846 is not measured yet.
+    # Capture a frame of a known scene and set the clockwise rotation (0,
+    # 90, 180 or 270) that makes it upright on the display.
+    rotation: 0

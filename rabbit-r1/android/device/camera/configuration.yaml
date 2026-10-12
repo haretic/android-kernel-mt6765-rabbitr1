@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: CC0-1.0
+#
+# libcamera global configuration, installed to
+# /vendor/etc/libcamera/configuration.yaml.
+
+---
+version: 1
+configuration:
+  software_isp:
+    # The kernel runs with maxcpus=1, extra debayer threads only add overhead.
+    threads: 1

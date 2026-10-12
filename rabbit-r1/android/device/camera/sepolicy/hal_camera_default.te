@@ -1,0 +1,11 @@
+# /dev/media*, /dev/v4l-subdev* (mainline common) and /dev/video* (platform)
+# are video_device, which hal_camera may already open and use. ueventd gives
+# them to media:camera 0660; the provider runs as cameraserver in group camera.
+# The DMA heap outputs come from /dev/dma_heap/system (0444, opened read-only).
+
+# libcamera: enumerate the media devices and read their device tree nodes
+# (/sys/bus/media/devices, /sys/dev/char/*, /sys/firmware/devicetree).
+r_dir_file(hal_camera_default, sysfs)
+
+# libcamera: logging levels from vendor.camera.libcamera.log_levels
+get_prop(hal_camera_default, vendor_camera_prop)
