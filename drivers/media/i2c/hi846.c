@@ -1370,20 +1370,15 @@ static int hi846_set_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 
 	case V4L2_CID_EXPOSURE:
-		shutter = ctrl->val;
-		frame_len = hi846->cur_mode->frame_len;
+		shutter = clamp_t(u32, ctrl->val, 6, 0xffff - 6);
 
-		if (shutter > frame_len - 6) { /* margin */
-			frame_len = shutter + 6;
-			if (frame_len > 0xffff) { /* max frame len */
-				frame_len = 0xffff;
-			}
-		}
-
-		if (shutter < 6)
-			shutter = 6;
-		if (shutter > (0xffff - 6))
-			shutter = 0xffff - 6;
+		/*
+		 * Keep the frame length the vertical blanking set, unless the
+		 * exposure needs a longer frame.
+		 */
+		frame_len = max_t(u32, hi846->cur_mode->height + hi846->vblank->val,
+				  shutter + 6);
+		frame_len = min_t(u32, frame_len, 0xffff);
 
 		hi846_write_reg_16(hi846, HI846_REG_FLL, frame_len, &ret);
 		hi846_write_reg_16(hi846, HI846_REG_EXPOSURE, shutter, &ret);
