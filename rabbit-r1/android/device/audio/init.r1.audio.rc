@@ -6,3 +6,9 @@ on post-fs
     insmod /vendor/lib/modules/crc8.ko
     insmod /vendor/lib/modules/snd-soc-aw88395-lib.ko
     insmod /vendor/lib/modules/snd-soc-aw87390.ko
+
+# audioserver.rc only restarts the HAL under its stock service names. Without
+# this the HAL keeps the dead audioserver's speaker stream open, and the new
+# audioserver comes up with no primary output.
+on property:init.svc.audioserver=restarting
+    restart vendor.audio-hal-aidl-mainline
