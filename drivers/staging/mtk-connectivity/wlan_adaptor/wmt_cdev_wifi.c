@@ -825,7 +825,7 @@ static int WIFI_init(void)
 		goto error;
 
 #if CREATE_NODE_DYNAMIC	/* mknod replace */
-	wmtwifi_class = class_create(THIS_MODULE, "wmtWifi");
+	wmtwifi_class = class_create("wmtWifi");
 	if (IS_ERR(wmtwifi_class))
 		goto error;
 	wmtwifi_dev = device_create(wmtwifi_class, NULL, wifi_devno, NULL,

@@ -460,8 +460,9 @@ static INT32 osal_thread_sched_retrieve(P_OSAL_THREAD pThread, P_OSAL_THREAD_SCH
 
 	sched->time = sec*1000 + usec/1000;
 	sched->exec = se.sum_exec_runtime;
-	sched->runnable = se.statistics.wait_sum;
-	sched->iowait = se.statistics.iowait_sum;
+	/* sched_entity.statistics moved to task_struct.stats in 5.15 */
+	sched->runnable = pThread->pThread->stats.wait_sum;
+	sched->iowait = pThread->pThread->stats.iowait_sum;
 
 	return 0;
 #else

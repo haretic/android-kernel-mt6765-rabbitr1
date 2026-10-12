@@ -132,7 +132,7 @@ static void connlog_emi_status_dump(void);
 
 /* connlog when suspend */
 static int connlog_alarm_init(void);
-static enum alarmtimer_restart alarm_timer_handler(struct alarm *alarm, ktime_t);
+static void alarm_timer_handler(struct alarm *alarm, ktime_t);
 static inline bool connlog_is_alarm_enable(void);
 static int connlog_set_alarm_timer(void);
 static int connlog_cancel_alarm_timer(void);
@@ -558,7 +558,7 @@ static int connlog_set_alarm_timer(void)
 	ktime_t kt;
 
 	kt = ktime_set(gDev.log_alarm.alarm_sec, 0);
-	alarm_start_relative(&gDev.log_alarm.alarm_timer, kt);
+	alarm_start_timer(&gDev.log_alarm.alarm_timer, kt, true);
 
 	pr_info("[connsys_log_alarm] alarm timer enabled timeout=[%d]", gDev.log_alarm.alarm_sec);
 	return 0;
@@ -680,7 +680,7 @@ EXPORT_SYMBOL(connsys_log_blank_state_changed);
 * RETURNS
 *  void
 *****************************************************************************/
-static enum alarmtimer_restart alarm_timer_handler(struct alarm *alarm,
+static void alarm_timer_handler(struct alarm *alarm,
 	ktime_t now)
 {
 	ktime_t kt;
@@ -697,10 +697,9 @@ static enum alarmtimer_restart alarm_timer_handler(struct alarm *alarm,
 
 	spin_lock_irqsave(&gDev.log_alarm.alarm_lock, gDev.log_alarm.flags);
 	kt = ktime_set(gDev.log_alarm.alarm_sec, 0);
-	alarm_start_relative(&gDev.log_alarm.alarm_timer, kt);
+	alarm_start_timer(&gDev.log_alarm.alarm_timer, kt, true);
 	spin_unlock_irqrestore(&gDev.log_alarm.alarm_lock, gDev.log_alarm.flags);
 
-	return ALARMTIMER_NORESTART;
 }
 
 /*****************************************************************************

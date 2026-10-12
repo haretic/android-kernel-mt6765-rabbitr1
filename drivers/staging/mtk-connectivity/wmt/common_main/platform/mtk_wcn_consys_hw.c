@@ -41,7 +41,8 @@
 #include "wmt_ic.h"
 #include <linux/of_reserved_mem.h>
 #include <linux/pinctrl/consumer.h>
-#include <linux/of_gpio.h>
+#include <linux/gpio.h>
+#include <linux/of.h>
 #include <connectivity_build_in_adapter.h>
 #include "wmt_lib.h"
 
@@ -73,7 +74,7 @@
 ********************************************************************************
 */
 static INT32 mtk_wmt_probe(struct platform_device *pdev);
-static INT32 mtk_wmt_remove(struct platform_device *pdev);
+static void mtk_wmt_remove(struct platform_device *pdev);
 static int mtk_wmt_suspend(void);
 static int mtk_wmt_resume(void);
 
@@ -174,8 +175,8 @@ static void plat_resume_handler(struct work_struct *work);
 struct regmap *g_regmap;
 #endif
 
-static int wmt_thermal_get_temp_cb(void *data, int *temp);
-static const struct thermal_zone_of_device_ops tz_wmt_thermal_ops = {
+static int wmt_thermal_get_temp_cb(struct thermal_zone_device *tz, int *temp);
+static const struct thermal_zone_device_ops tz_wmt_thermal_ops = {
 	.get_temp = wmt_thermal_get_temp_cb,
 };
 
@@ -324,7 +325,7 @@ static int wmt_allocate_connsys_emi_by_lk2(struct platform_device *pdev)
 	return 0;
 }
 
-static int wmt_thermal_get_temp_cb(void *data, int *temp)
+static int wmt_thermal_get_temp_cb(struct thermal_zone_device *tz, int *temp)
 {
 #define MAX_PRINT_TEMP     70000 /* Max temperature for print log */
 
@@ -348,7 +349,7 @@ static INT32 wmt_thermal_register(struct platform_device *pdev)
 	int ret;
 
 	/* register thermal zone */
-	tz = devm_thermal_zone_of_sensor_register(
+	tz = devm_thermal_of_zone_register(
 		&pdev->dev, 0, NULL, &tz_wmt_thermal_ops);
 
 	if (IS_ERR(tz)) {
@@ -490,7 +491,7 @@ static INT32 mtk_wmt_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static INT32 mtk_wmt_remove(struct platform_device *pdev)
+static void mtk_wmt_remove(struct platform_device *pdev)
 {
 	if (wmt_consys_ic_ops->consys_ic_need_store_pdev) {
 		if (wmt_consys_ic_ops->consys_ic_need_store_pdev() == MTK_WCN_BOOL_TRUE)
@@ -511,7 +512,6 @@ static INT32 mtk_wmt_remove(struct platform_device *pdev)
 	osal_sleepable_lock_deinit(&g_adie_chipid_lock);
 
 	atomic_set(&g_probe_called, 0);
-	return 0;
 }
 
 static int mtk_wmt_suspend(void)
