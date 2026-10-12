@@ -1396,7 +1396,7 @@ static int ccci_modem_probe(struct platform_device *plat_dev)
 	}
 /*need review:wakeup_source_register*/
 	md->trm_wake_lock = wakeup_source_register(NULL, md->trm_wakelock_name);
-	if (!md->trm_wake_lock) {
+	if (ccci_ws_register_failed(md->trm_wake_lock)) {
 		CCCI_ERROR_LOG(md->index, TAG,
 			"%s %d: init wakeup source fail\n",
 			__func__, __LINE__);
@@ -1414,7 +1414,7 @@ static int ccci_modem_probe(struct platform_device *plat_dev)
 
 	md_info->peer_wake_lock =
 		wakeup_source_register(NULL, md_info->peer_wakelock_name);
-	if (!md_info->peer_wake_lock) {
+	if (ccci_ws_register_failed(md_info->peer_wake_lock)) {
 		CCCI_ERROR_LOG(md->index, TAG,
 			"%s %d: init wakeup source fail\n",
 			__func__, __LINE__);

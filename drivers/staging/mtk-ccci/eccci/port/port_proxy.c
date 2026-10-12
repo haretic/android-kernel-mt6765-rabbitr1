@@ -737,7 +737,7 @@ static inline int port_struct_init(struct port_t *port,
 	port->md_id = port_p->md_id;
 
 	port->rx_wakelock = wakeup_source_register(NULL, port->name);
-	if (!port->rx_wakelock) {
+	if (ccci_ws_register_failed(port->rx_wakelock)) {
 		CCCI_ERROR_LOG(port->md_id, TAG,
 			"%s %d: init wakeup source fail",
 			__func__, __LINE__);
