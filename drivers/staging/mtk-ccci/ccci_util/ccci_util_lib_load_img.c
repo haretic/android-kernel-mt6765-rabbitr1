@@ -89,28 +89,11 @@ static struct md_check_header_v6 md_img_header_v6[MAX_MD_NUM];
 /*static struct ccci_image_info		img_info[MAX_MD_NUM][IMG_NUM]; */
 char md_img_info_str[MAX_MD_NUM][256];
 
-static char *s_ap_platform_info;
+/* stock DT: mediatek,ap_plat_info = <6765> */
+static char s_ap_platform_info[] = "MT6765";
 
 char *ccci_get_ap_platform(void)
 {
-	struct device_node *node;
-	int ret;
-	u32 ap_plat_numb;
-
-	if (!s_ap_platform_info) {
-		/* stock DT: mediatek,ap_plat_info = <6765> */
-		node = of_find_compatible_node(NULL, NULL,
-				"mediatek,mt6765-ccci");
-		if (!node)
-			return NULL;
-		of_node_put(node);
-		ap_plat_numb = 6765;
-		ret = 0;
-
-		s_ap_platform_info = kzalloc(16, GFP_KERNEL);
-		scnprintf(s_ap_platform_info, 16, "MT%d", ap_plat_numb);
-	}
-
 	return s_ap_platform_info;
 }
 EXPORT_SYMBOL(ccci_get_ap_platform);
