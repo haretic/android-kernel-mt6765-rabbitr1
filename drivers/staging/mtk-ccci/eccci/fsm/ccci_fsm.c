@@ -897,7 +897,7 @@ int ccci_fsm_init(int md_id)
 		return -1;
 	}
 	ctl->wakelock = wakeup_source_register(NULL, ctl->wakelock_name);
-	if (ccci_ws_register_failed(ctl->wakelock)) {
+	if (!ctl->wakelock) {
 		CCCI_ERROR_LOG(ctl->md_id, FSM,
 			"%s %d: init wakeup source fail",
 			__func__, __LINE__);

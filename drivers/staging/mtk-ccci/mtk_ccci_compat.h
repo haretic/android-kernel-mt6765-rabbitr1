@@ -18,17 +18,6 @@
 #include <linux/of_irq.h>
 
 /*
- * Without CONFIG_PM_SLEEP wakeup_source_register() returns NULL and the
- * __pm_stay_awake()/__pm_relax() stubs ignore it: nothing can be held then.
- */
-struct wakeup_source;
-
-static inline bool ccci_ws_register_failed(struct wakeup_source *ws)
-{
-	return !ws && IS_ENABLED(CONFIG_PM_SLEEP);
-}
-
-/*
  * The stock driver found its registers and interrupts by index in the
  * vendor DT layout; the mainline node names them.
  */
