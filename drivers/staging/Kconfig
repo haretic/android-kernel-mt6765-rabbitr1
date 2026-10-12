@@ -54,4 +54,6 @@ source "drivers/staging/mtk-ged/Kconfig"
 
 source "drivers/staging/mtk-connectivity/Kconfig"
 
+source "drivers/staging/mtk-ccci/Kconfig"
+
 endif # STAGING

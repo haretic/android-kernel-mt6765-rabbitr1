@@ -485,6 +485,41 @@
 			status = "disabled";
 		};
 
+		/*
+		 * MD1 modem: CLDMA (data) and CCIF (control) host interfaces
+		 * and the AP view of the modem boot status registers.
+		 */
+		modem: modem@10014000 {
+			compatible = "mediatek,mt6765-ccci";
+			reg = <0 0x10014000 0 0x1000>,
+			      <0 0x1021b000 0 0x1000>,
+			      <0 0x10209000 0 0x1000>,
+			      <0 0x1020a000 0 0x1000>,
+			      <0 0x1020e300 0 0x8>;
+			reg-names = "cldma-ao", "cldma-pd", "ap-ccif", "md-ccif",
+				    "md-boot-sta";
+			interrupts = <GIC_SPI 165 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 148 IRQ_TYPE_LEVEL_LOW>,
+				     <GIC_SPI 149 IRQ_TYPE_LEVEL_LOW>,
+				     <GIC_SPI 261 IRQ_TYPE_EDGE_FALLING>;
+			interrupt-names = "cldma", "ccif0", "ccif1", "md-wdt";
+			clocks = <&infracfg CLK_IFR_CLDMA_BCLK>,
+				 <&infracfg CLK_IFR_CCIF_AP>,
+				 <&infracfg CLK_IFR_CCIF_MD>,
+				 <&infracfg CLK_IFR_CCIF1_AP>,
+				 <&infracfg CLK_IFR_CCIF1_MD>,
+				 <&infracfg CLK_IFR_CCIF2_AP>,
+				 <&infracfg CLK_IFR_CCIF2_MD>;
+			clock-names = "cldma-bclk", "ccif-ap", "ccif-md",
+				      "ccif1-ap", "ccif1-md", "ccif2-ap",
+				      "ccif2-md";
+			power-domains = <&spm MT6765_POWER_DOMAIN_MD1>;
+			mediatek,infracfg = <&infracfg>;
+			mediatek,topckgen = <&topckgen>;
+			mediatek,apmixedsys = <&apmixed>;
+			status = "disabled";
+		};
+
 		systimer: timer@10017000 {
 			compatible = "mediatek,mt6765-timer";
 			reg = <0 0x10017000 0 0x1000>;

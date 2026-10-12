@@ -675,6 +675,16 @@
 	status = "okay";
 };
 
+/*
+ * MD1 core rail. The stock modem driver sets it to 0.8 V before every
+ * modem power on and never switches it off; do the same from boot.
+ */
+&mt6357_vmodem_reg {
+	regulator-min-microvolt = <800000>;
+	regulator-max-microvolt = <800000>;
+	regulator-always-on;
+};
+
 &i2c4 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&r1_i2c4_pins>;
@@ -842,6 +852,30 @@
 	 * Enable only for an instrumented storage test after PMIC validation.
 	 */
 	status = "disabled";
+};
+
+/*
+ * Only the r1-md-probe bring-up module binds here, and only when loaded
+ * by hand with stage=1 or stage=2.
+ */
+&modem {
+	pinctrl-names = "default";
+	pinctrl-0 = <&r1_sim_pins>;
+	vmodem-supply = <&mt6357_vmodem_reg>;
+	vcore-supply = <&mt6357_vcore_reg>;
+	status = "okay";
+
+	/* stock gpio_usage_mapping; the modem asks for these by name over RPC */
+	gpio-usage-mapping {
+		GPIO_SIM1_HOT_PLUG = <&pio 47 0>;
+		GPIO_SIM2_HOT_PLUG = <&pio 46 0>;
+		GPIO_SIM1_SIO = <&pio 40 0>;
+		GPIO_SIM1_SRST = <&pio 39 0>;
+		GPIO_SIM1_SCLK = <&pio 38 0>;
+		GPIO_SIM2_SCLK = <&pio 37 0>;
+		GPIO_SIM2_SRST = <&pio 36 0>;
+		GPIO_SIM2_SIO = <&pio 35 0>;
+	};
 };
 
 &usb2 {
@@ -1069,6 +1103,24 @@
 			pinmux = <PINMUX_GPIO133__FUNC_AUX1_MSDC0_RSTB>;
 			drive-strength = <3>;
 			bias-pull-up = <MTK_PUPD_SET_R1R0_01>;
+		};
+	};
+
+	/*
+	 * Both SIM interfaces and their hot plug inputs belong to the modem.
+	 * Stock gpio_init_default puts GPIO35-40 and GPIO46/47 in mode 1 and
+	 * sets their pulls; only the function is claimed here.
+	 */
+	r1_sim_pins: sim-pins {
+		pins-sim {
+			pinmux = <PINMUX_GPIO35__FUNC_MD1_SIM2_SIO>,
+				 <PINMUX_GPIO36__FUNC_MD1_SIM2_SRST>,
+				 <PINMUX_GPIO37__FUNC_MD1_SIM2_SCLK>,
+				 <PINMUX_GPIO38__FUNC_MD1_SIM1_SCLK>,
+				 <PINMUX_GPIO39__FUNC_MD1_SIM1_SRST>,
+				 <PINMUX_GPIO40__FUNC_MD1_SIM1_SIO>,
+				 <PINMUX_GPIO46__FUNC_MD_INT2_C2K_UIM1_HOT_PLUG>,
+				 <PINMUX_GPIO47__FUNC_MD_INT1_C2K_UIM0_HOT_PLUG>;
 		};
 	};
 };

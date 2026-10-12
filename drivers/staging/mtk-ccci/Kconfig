@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: GPL-2.0
+config MTK_CCCI_R1_MD_PROBE
+	tristate "Rabbit r1 MT6765 modem bring-up probe"
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	depends on OF && PM && MMU
+	select MFD_SYSCON
+	help
+	  Bring-up tool for the integrated MD1 modem of the MT6765. It
+	  decodes the modem handoff LK leaves in the device tree and, when
+	  loaded with stage=1 or stage=2, powers the modem up with the
+	  vendor sequence, releases it and waits for its first handshake,
+	  logging every step. It never loads on its own and does nothing
+	  beyond reading state unless asked to.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called r1-md-probe. If unsure, say N.
+
+config MTK_CCCI
+	tristate "MediaTek MT6765 CCCI modem interface (vendor port)"
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	depends on OF && PM && MMU && NET && INET
+	select MFD_SYSCON
+	help
+	  Port of the CCCI driver stack of the stock MT6765 Linux 4.19
+	  vendor kernel: the CCCI core and state machine, the CCIF control
+	  and CLDMA data host interfaces of the gen93 modem, the character
+	  device ports (/dev/ccci_*, /dev/ttyC*) used by the MediaTek
+	  modem userspace and the ccmni network devices. The userspace ABI
+	  is kept identical to the stock kernel so that the stock Android
+	  vendor blobs (ccci_mdinit, ccci_fsd, rild) can use it.
+
+	  The modem image is loaded and protected by LK; this driver only
+	  powers, boots and talks to it. It binds the same device tree node
+	  as the bring-up probe, so load one or the other. Nothing loads it
+	  automatically.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called mtk-ccci. If unsure, say N.
+
+config MTK_ECCCI_C2K
+	bool "CDMA2000 (C2K) support in the MT6765 modem"
+	depends on MTK_CCCI
+	default y
+	help
+	  The stock MT6765 modem image is built with C2K; this keeps the
+	  C2K ports and modem type handling of the stock kernel.

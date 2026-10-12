@@ -166,6 +166,10 @@ static int scpsys_sram_enable(struct scpsys_domain *pd)
 		regmap_clear_bits(scpsys->base, pd->data->ctl_offs, PWR_SRAM_CLKISO_BIT);
 	}
 
+	if (pd->data->ext_sram_iso_offs && MTK_SCPD_CAPS(pd, MTK_SCPD_EXT_SRAM_ISO))
+		regmap_set_bits(scpsys->base, pd->data->ext_sram_iso_offs,
+				pd->data->ext_sram_iso_mask);
+
 	return 0;
 }
 
@@ -174,6 +178,10 @@ static int scpsys_sram_disable(struct scpsys_domain *pd)
 	u32 expected_ack, pdn_ack = pd->data->sram_pdn_ack_bits;
 	struct scpsys *scpsys = pd->scpsys;
 	unsigned int tmp;
+
+	if (pd->data->ext_sram_iso_offs && MTK_SCPD_CAPS(pd, MTK_SCPD_EXT_SRAM_ISO))
+		regmap_clear_bits(scpsys->base, pd->data->ext_sram_iso_offs,
+				  pd->data->ext_sram_iso_mask);
 
 	if (MTK_SCPD_CAPS(pd, MTK_SCPD_SRAM_ISO)) {
 		regmap_set_bits(scpsys->base, pd->data->ctl_offs, PWR_SRAM_CLKISO_BIT);
@@ -627,6 +635,73 @@ static void scpsys_modem_pwrseq_off(struct scpsys_domain *pd)
 		regmap_clear_bits(scpsys->base, pd->data->ctl_offs, PWR_RST_B_BIT);
 }
 
+/*
+ * Modem sequence of the MT6765 generation: the SRAM is powered and its
+ * isolation released while the domain is still isolated and in reset, and
+ * the external buck isolation is released last. Power down is the reverse.
+ */
+static int scpsys_modem_legacy_pwrseq_on(struct scpsys_domain *pd)
+{
+	struct scpsys *scpsys = pd->scpsys;
+	bool tmp;
+	int ret;
+
+	regmap_clear_bits(scpsys->base, pd->data->ctl_offs, PWR_RST_B_BIT);
+	regmap_set_bits(scpsys->base, pd->data->ctl_offs, PWR_ON_BIT);
+	regmap_set_bits(scpsys->base, pd->data->ctl_offs, PWR_ON_2ND_BIT);
+
+	/* wait until PWR_ACK = 1 */
+	ret = readx_poll_timeout(scpsys_domain_is_on, pd, tmp, tmp, MTK_POLL_DELAY_US,
+				 MTK_POLL_TIMEOUT);
+	if (ret < 0)
+		return ret;
+
+	ret = scpsys_sram_enable(pd);
+	if (ret < 0)
+		return ret;
+
+	regmap_clear_bits(scpsys->base, pd->data->ctl_offs, PWR_ISO_BIT);
+	regmap_clear_bits(scpsys->base, pd->data->ctl_offs, PWR_CLK_DIS_BIT);
+	regmap_set_bits(scpsys->base, pd->data->ctl_offs, PWR_RST_B_BIT);
+
+	if (pd->data->ext_buck_iso_offs)
+		regmap_clear_bits(scpsys->base, pd->data->ext_buck_iso_offs,
+				  pd->data->ext_buck_iso_mask);
+
+	return 0;
+}
+
+static int scpsys_modem_legacy_pwrseq_off(struct scpsys_domain *pd)
+{
+	struct scpsys *scpsys = pd->scpsys;
+	bool tmp;
+	int ret;
+
+	if (pd->data->ext_buck_iso_offs)
+		regmap_set_bits(scpsys->base, pd->data->ext_buck_iso_offs,
+				pd->data->ext_buck_iso_mask);
+
+	regmap_set_bits(scpsys->base, pd->data->ctl_offs, PWR_CLK_DIS_BIT);
+	regmap_set_bits(scpsys->base, pd->data->ctl_offs, PWR_ISO_BIT);
+
+	ret = scpsys_sram_disable(pd);
+	if (ret < 0)
+		return ret;
+
+	regmap_clear_bits(scpsys->base, pd->data->ctl_offs, PWR_ON_BIT);
+	regmap_clear_bits(scpsys->base, pd->data->ctl_offs, PWR_ON_2ND_BIT);
+
+	/* wait until PWR_ACK = 0 */
+	ret = readx_poll_timeout(scpsys_domain_is_on, pd, tmp, !tmp, MTK_POLL_DELAY_US,
+				 MTK_POLL_TIMEOUT);
+	if (ret < 0)
+		return ret;
+
+	regmap_clear_bits(scpsys->base, pd->data->ctl_offs, PWR_RST_B_BIT);
+
+	return 0;
+}
+
 static int scpsys_power_on(struct generic_pm_domain *genpd)
 {
 	struct scpsys_domain *pd = container_of(genpd, struct scpsys_domain, genpd);
@@ -647,6 +722,8 @@ static int scpsys_power_on(struct generic_pm_domain *genpd)
 
 	if (MTK_SCPD_CAPS(pd, MTK_SCPD_MODEM_PWRSEQ))
 		ret = scpsys_modem_pwrseq_on(pd);
+	else if (MTK_SCPD_CAPS(pd, MTK_SCPD_MODEM_LEGACY_PWRSEQ))
+		ret = scpsys_modem_legacy_pwrseq_on(pd);
 	else
 		ret = scpsys_ctl_pwrseq_on(pd);
 
@@ -674,9 +751,12 @@ static int scpsys_power_on(struct generic_pm_domain *genpd)
 			goto err_pwr_ack;
 	}
 
-	ret = scpsys_sram_enable(pd);
-	if (ret < 0)
-		goto err_disable_subsys_clks;
+	/* The legacy modem sequence has already powered its SRAM */
+	if (!MTK_SCPD_CAPS(pd, MTK_SCPD_MODEM_LEGACY_PWRSEQ)) {
+		ret = scpsys_sram_enable(pd);
+		if (ret < 0)
+			goto err_disable_subsys_clks;
+	}
 
 	ret = scpsys_bus_protect_disable(pd, 0);
 	if (ret < 0)
@@ -717,9 +797,12 @@ static int scpsys_power_off(struct generic_pm_domain *genpd)
 	if (ret < 0)
 		return ret;
 
-	ret = scpsys_sram_disable(pd);
-	if (ret < 0)
-		return ret;
+	/* The legacy modem sequence powers its SRAM down after isolation */
+	if (!MTK_SCPD_CAPS(pd, MTK_SCPD_MODEM_LEGACY_PWRSEQ)) {
+		ret = scpsys_sram_disable(pd);
+		if (ret < 0)
+			return ret;
+	}
 
 	if (pd->data->ext_buck_iso_offs && MTK_SCPD_CAPS(pd, MTK_SCPD_EXT_BUCK_ISO))
 		regmap_set_bits(scpsys->base, pd->data->ext_buck_iso_offs,
@@ -731,10 +814,15 @@ static int scpsys_power_off(struct generic_pm_domain *genpd)
 	if (ret < 0)
 		return ret;
 
-	if (MTK_SCPD_CAPS(pd, MTK_SCPD_MODEM_PWRSEQ))
+	if (MTK_SCPD_CAPS(pd, MTK_SCPD_MODEM_PWRSEQ)) {
 		scpsys_modem_pwrseq_off(pd);
-	else
+	} else if (MTK_SCPD_CAPS(pd, MTK_SCPD_MODEM_LEGACY_PWRSEQ)) {
+		ret = scpsys_modem_legacy_pwrseq_off(pd);
+		if (ret < 0)
+			return ret;
+	} else {
 		scpsys_ctl_pwrseq_off(pd);
+	}
 
 	/* wait until PWR_ACK = 0 */
 	ret = readx_poll_timeout(scpsys_domain_is_on, pd, tmp, !tmp, MTK_POLL_DELAY_US,
