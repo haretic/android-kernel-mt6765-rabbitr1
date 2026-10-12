@@ -1250,10 +1250,15 @@ static int mtk_seninf_notifier_bound(struct v4l2_async_notifier *notifier,
 			return -EINVAL;
 		}
 
-		ret = v4l2_create_fwnode_links_to_pad(&priv->subdev,
-						      &sd->entity.pads[0],
-						      MEDIA_LNK_FL_IMMUTABLE |
-						      MEDIA_LNK_FL_ENABLED);
+		/*
+		 * Output ports map 1:1 to source pads. Link explicitly: the
+		 * fwnode helper silently creates nothing when the endpoint
+		 * match fails, e.g. after the output rebinds.
+		 */
+		ret = media_create_pad_link(&priv->subdev.entity, asd->port,
+					    &sd->entity, 0,
+					    MEDIA_LNK_FL_IMMUTABLE |
+					    MEDIA_LNK_FL_ENABLED);
 	}
 
 	if (ret) {
