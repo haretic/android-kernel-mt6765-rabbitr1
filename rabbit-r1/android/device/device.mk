@@ -49,6 +49,7 @@ $(call inherit-product, device/rabbit/r1/charging/product.mk)
 PRODUCT_PACKAGES += \
     android.hardware.boot-service.r1 \
     android.hardware.boot-service.r1_recovery \
+    FrameworksResR1 \
     r1-expdb
 
 # The logger validates expdb and bounds its mapping before loading pstore.

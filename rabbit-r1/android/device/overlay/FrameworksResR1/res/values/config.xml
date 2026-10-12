@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Lowest level the panel still shows (2 of 512 on the MT6370 backlight), measured on the device. -->
+    <item name="config_screenBrightnessSettingMinimumFloat" format="float" type="dimen">0.004315791</item>
+</resources>
