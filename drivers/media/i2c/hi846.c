@@ -1357,6 +1357,9 @@ static int hi846_set_ctrl(struct v4l2_ctrl *ctrl)
 	if (!ret || ret == -EAGAIN)
 		return 0;
 
+	/* hi846_write_reg_16() only sets ret on error; drop the "in use" 1. */
+	ret = 0;
+
 	switch (ctrl->id) {
 	case V4L2_CID_ANALOGUE_GAIN:
 		ret = hi846_write_reg(hi846, HI846_REG_ANALOG_GAIN, ctrl->val);
