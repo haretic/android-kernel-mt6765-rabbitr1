@@ -27,7 +27,7 @@ struct work_struct { int unused; };
 struct delayed_work { struct work_struct work; unsigned long delay; };
 struct mutex { bool held; };
 struct notifier_block { int unused; };
-struct device { void *data; };
+struct device { void *data; bool awake; };
 struct device_attribute { int unused; };
 typedef struct { int value; } atomic_t;
 static int atomic_read(atomic_t *a) { return a->value; }
@@ -35,6 +35,8 @@ static void atomic_inc(atomic_t *a) { a->value++; }
 static void mutex_lock(struct mutex *m) { assert(!m->held); m->held=true; }
 static void mutex_unlock(struct mutex *m) { assert(m->held); m->held=false; }
 static void *dev_get_drvdata(struct device *d) { return d->data; }
+static void pm_stay_awake(struct device *d) { assert(!d->awake); d->awake=true; }
+static void pm_relax(struct device *d) { assert(d->awake); d->awake=false; }
 static int kstrtoint(const char *s, int base, int *value)
 {
     char *end; errno=0; long n=strtol(s,&end,base);
@@ -89,7 +91,7 @@ static struct r1_charge_sample good(void)
 }
 static void reset(void)
 {
-    memset(&p,0,sizeof(p)); memset(&charger,0,sizeof(charger)); memset(&battery,0,sizeof(battery));
+    memset(&p,0,sizeof(p)); dev.awake=false; memset(&charger,0,sizeof(charger)); memset(&battery,0,sizeof(battery));
     memset(&gadget,0,sizeof(gadget)); memset(&typec,0,sizeof(typec));
     reads=writes=read_fail=write_fail=change_on_write=0; jiffies=100;
     p.dev=&dev; p.charger=&charger; p.battery=&battery; p.gadget=&gadget;
@@ -186,9 +188,18 @@ static void transactions(void)
     assert(p.applied.charge_ua==1000000);
     jiffies+=R1_SESSION_TIMEOUT; r1_charge_work(&p.work.work); assert(p.applied.reason==R1_TIMER);
     reset(); p.typec=&typec; r1_charge_work(&p.work.work); assert(!p.applied.charge_ua);
+    reset(); r1_charge_work(&p.work.work); assert(dev.awake && p.awake);
+    read_fail=reads+1; r1_charge_work(&p.work.work); assert(dev.awake);
+    charger.values[POWER_SUPPLY_PROP_PRESENT]=0; r1_charge_work(&p.work.work); assert(!dev.awake);
+    read_fail=reads+1; r1_charge_work(&p.work.work); assert(!dev.awake);
+    charger.values[POWER_SUPPLY_PROP_PRESENT]=1; r1_charge_work(&p.work.work); assert(dev.awake);
+    reset(); p.typec=&typec; r1_charge_work(&p.work.work); assert(!dev.awake);
     reset(); r1_charge_work(&p.work.work); assert(!r1_charge_suspend(&dev));
     assert(p.suspended && !p.applied.charge_ua && charger.values[POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR]==1);
-    assert(!r1_charge_resume(&dev) && !p.suspended && p.work.delay==0);
+    assert(!r1_charge_resume(&dev) && !p.suspended && p.work.delay==0 && dev.awake);
+    charger.values[POWER_SUPPLY_PROP_PRESENT]=0; assert(!r1_charge_suspend(&dev) && dev.awake);
+    assert(!r1_charge_resume(&dev) && dev.awake);
+    r1_charge_work(&p.work.work); assert(!dev.awake);
     reset(); r1_charge_work(&p.work.work); write_fail=writes+1;
     assert(r1_charge_suspend(&dev)==-EIO && !p.suspended && p.work.delay==0);
     reset(); assert(charge_control_limit_store(&dev,NULL,"600000\n",7)==7 && p.requested_ua==600000);

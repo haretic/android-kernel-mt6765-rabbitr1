@@ -44,7 +44,7 @@ struct r1_charge_policy {
     struct delayed_work work;
     struct notifier_block notifier;
     atomic_t generation;
-    bool stopping, suspended, cold, hot, full, session, timeout, notifier_registered;
+    bool stopping, suspended, cold, hot, full, session, timeout, notifier_registered, awake;
     unsigned long session_start;
     int requested_ua, measured_ua, error;
     struct { int reason; } applied;
@@ -138,6 +138,10 @@ static int r1_charge_isolate(struct r1_charge_policy *p) {
     if (p->stopping) stop_calls++;
     return isolate_fail ? -EIO : 0;
 }
+static void r1_charge_hold_awake(struct r1_charge_policy *p, bool hold) {
+    assert(p->stopping && p->lock.held && !hold); p->awake = hold;
+}
+static int devm_device_init_wakeup(struct device *d) { assert(d == &consumer.dev); return 0; }
 static bool device_property_read_bool(struct device *d, const char *name) {
     assert(d == &providers[0].dev && links[0] && !strcmp(name, "richtek,managed-charging")); return managed;
 }

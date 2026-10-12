@@ -8,6 +8,7 @@
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
+#include <linux/pm_wakeup.h>
 #include <linux/power_supply.h>
 #include <linux/property.h>
 #include <linux/workqueue.h>
@@ -52,7 +53,7 @@ struct r1_charge_policy {
 	struct notifier_block notifier;
 	atomic_t generation;
 	bool stopping, suspended, cold, hot, full, session, timeout;
-	bool notifier_registered;
+	bool notifier_registered, awake;
 	unsigned long session_start;
 	int requested_ua, measured_ua, error;
 	struct r1_charge_target applied;
@@ -221,6 +222,22 @@ static int r1_charge_sample(struct r1_charge_policy *p, struct r1_charge_sample 
 	return 0;
 }
 
+/*
+ * Suspend isolates the charger input, since nothing supervises charging then.
+ * Keep the system awake while a source is attached, so that it charges with
+ * the screen off; a failed read keeps the previous decision.
+ */
+static void r1_charge_hold_awake(struct r1_charge_policy *p, bool hold)
+{
+	if (hold == p->awake)
+		return;
+	p->awake = hold;
+	if (hold)
+		pm_stay_awake(p->dev);
+	else
+		pm_relax(p->dev);
+}
+
 static bool r1_charge_fresh(struct r1_charge_policy *p, unsigned long start, int generation)
 {
 	return atomic_read(&p->generation) == generation &&
@@ -277,6 +294,8 @@ static void r1_charge_work(struct work_struct *work)
 	if (p->stopping || p->suspended)
 		goto out;
 	ret = r1_charge_sample(p, &sample);
+	if (!ret)
+		r1_charge_hold_awake(p, sample.plugged);
 	p->measured_ua = sample.current_ua;
 	target = r1_charge_decide(p, &sample);
 	if (!ret && !r1_charge_fresh(p, start, generation)) {
@@ -393,6 +412,7 @@ static void r1_charge_stop(void *data)
 	mutex_lock(&p->lock);
 	p->error = r1_charge_isolate(p);
 	p->applied.reason = R1_STOPPED;
+	r1_charge_hold_awake(p, false);
 	mutex_unlock(&p->lock);
 }
 
@@ -508,6 +528,9 @@ static int r1_charge_probe(struct platform_device *pdev)
 		if (ret)
 			return dev_err_probe(dev, ret, "Missing Type-C budget\n");
 	}
+	ret = devm_device_init_wakeup(dev);
+	if (ret)
+		return ret;
 	ret = devm_add_action_or_reset(dev, r1_charge_stop, p);
 	if (ret)
 		return ret;
@@ -551,8 +574,11 @@ static int r1_charge_resume(struct device *dev)
 
 	mutex_lock(&p->lock);
 	p->suspended = false;
-	if (!p->stopping)
+	if (!p->stopping) {
+		/* A plug-in may have woken us: stay up until the policy samples. */
+		r1_charge_hold_awake(p, true);
 		mod_delayed_work(system_highpri_wq, &p->work, 0);
+	}
 	mutex_unlock(&p->lock);
 	return 0;
 }

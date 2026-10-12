@@ -19,7 +19,7 @@ def function(name):
     return s[m.start():s.index('\n}\n', m.end()) + 2] + '\n'
 parts = s[s.index('#define R1_CHARGE_MIN_UA'):s.index('static bool r1_charge_limit_valid')]
 for name in ('r1_charge_limit_valid', 'r1_charge_decide', 'r1_get', 'r1_set',
-             'r1_charge_isolate', 'r1_charge_sample', 'r1_charge_fresh',
+             'r1_charge_isolate', 'r1_charge_sample', 'r1_charge_hold_awake', 'r1_charge_fresh',
              'r1_charge_apply', 'r1_charge_work', 'r1_charge_notify',
              'charge_control_limit_store', 'r1_charge_suspend', 'r1_charge_resume'):
     parts += function(name)
