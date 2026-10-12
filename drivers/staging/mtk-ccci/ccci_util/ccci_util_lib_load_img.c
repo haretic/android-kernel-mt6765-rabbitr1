@@ -27,8 +27,6 @@
 #include <asm/setup.h>
 #include <linux/atomic.h>
 #ifdef ENABLE_MD_IMG_SECURITY_FEATURE
-#include <sec_osal.h>
-#include <sec_export.h>
 #endif
 #include "mt-plat/mtk_boot_common.h"
 #include "mt-plat/mtk_ccci_common.h"
@@ -100,15 +98,14 @@ char *ccci_get_ap_platform(void)
 	u32 ap_plat_numb;
 
 	if (!s_ap_platform_info) {
+		/* stock DT: mediatek,ap_plat_info = <6765> */
 		node = of_find_compatible_node(NULL, NULL,
-				"mediatek,mddriver");
+				"mediatek,mt6765-ccci");
 		if (!node)
 			return NULL;
-
-		ret = of_property_read_u32(node,
-				"mediatek,ap_plat_info", &ap_plat_numb);
-		if (ret < 0)
-			return NULL;
+		of_node_put(node);
+		ap_plat_numb = 6765;
+		ret = 0;
 
 		s_ap_platform_info = kzalloc(16, GFP_KERNEL);
 		scnprintf(s_ap_platform_info, 16, "MT%d", ap_plat_numb);
@@ -1009,7 +1006,7 @@ int ccci_load_firmware(int md_id, void *img_inf,
 			"Firmware:read_size=%d, size_per_read=%d\n",
 			read_size, size_per_read);
 		/* size_per_read 8 bytes aligned remap memory */
-		start = ioremap_nocache((load_addr + read_size),
+		start = ioremap((load_addr + read_size),
 					roundup(size_per_read, 8));
 		if (start == 0) {
 			CCCI_UTIL_ERR_MSG_WITH_ID(md_id,
@@ -1032,7 +1029,7 @@ int ccci_load_firmware(int md_id, void *img_inf,
 		"Firmware check header:load_addr=%lx, size=%d\n",
 		load_addr, img->size);
 	if (img->type == IMG_MD) {
-		start = ioremap_nocache(
+		start = ioremap(
 				round_down(load_addr
 					+ img->size - 0x4000, 0x4000),
 				round_up(img->size, 0x4000)
@@ -1047,7 +1044,7 @@ int ccci_load_firmware(int md_id, void *img_inf,
 			goto out;
 		}
 	} else if (img->type == IMG_DSP) {
-		start = ioremap_nocache(load_addr, dsp_header_size);
+		start = ioremap(load_addr, dsp_header_size);
 		check_ret = check_dsp_header(md_id, start, img);
 		if (check_ret < 0) {
 			ret = check_ret;

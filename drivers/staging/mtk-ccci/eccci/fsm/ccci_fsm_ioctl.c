@@ -51,15 +51,11 @@ static int fsm_md_data_ioctl(int md_id, unsigned int cmd, unsigned long arg)
 	unsigned int sim_slot_cfg[4] = {0};
 	char ap_platform[5] = {0};
 	int md_gen = 0;
-	struct device_node *node = NULL;
 	struct ccci_per_md *per_md_data = ccci_get_per_md_data(md_id);
 	struct ccci_per_md *other_per_md_data
 			= ccci_get_per_md_data(GET_OTHER_MD_ID(md_id));
 
-	node = of_find_compatible_node(NULL, NULL,
-		"mediatek,mddriver");
-	of_property_read_u32(node,
-		"mediatek,md_generation", &md_gen);
+	md_gen = MD_GENERATION;
 
 	switch (cmd) {
 	case CCCI_IOC_GET_MD_PROTOCOL_TYPE:
@@ -111,12 +107,7 @@ static int fsm_md_data_ioctl(int md_id, unsigned int cmd, unsigned long arg)
 				sizeof(unsigned int)))
 			CCCI_ERROR_LOG(md_id, FSM,
 				"CCCI_IOC_DL_TRAFFIC_CONTROL: copy_from_user fail\n");
-		if (data == 1)
-			;/* turn off downlink queue */
-		else if (data == 0)
-			;/* turn on donwlink queue */
-		else
-			;
+		/* downlink queue control is not implemented */
 		ret = 0;
 		break;
 #ifdef CONFIG_MTK_SIM_LOCK_POWER_ON_WRITE_PROTECT

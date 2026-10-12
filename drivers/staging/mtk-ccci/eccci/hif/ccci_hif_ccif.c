@@ -44,6 +44,7 @@
 #include <linux/of_fdt.h>
 #include <linux/of_irq.h>
 #include <linux/of_address.h>
+#include "mtk_ccci_main.h"
 #endif
 
 #define TAG "cif"
@@ -53,17 +54,15 @@ spinlock_t devapc_flag_lock;
 
 /* this table maybe can be set array when multi, or else. */
 static struct ccci_clk_node ccif_clk_table[] = {
-	{ NULL, "infra-ccif-ap"},
-	{ NULL, "infra-ccif-md"},
-	{ NULL, "infra-ccif1-ap"},
-	{ NULL, "infra-ccif1-md"},
-	{ NULL, "infra-ccif4-md"},
-	{ NULL, "infra-ccif5-md"},
+	{ NULL, "ccif-ap"},
+	{ NULL, "ccif-md"},
+	{ NULL, "ccif1-ap"},
+	{ NULL, "ccif1-md"},
 };
 
 static struct ccci_clk_node scp_clk_table[] = {
-	{ NULL, "infra-ccif2-ap"},
-	{ NULL, "infra-ccif2-md"},
+	{ NULL, "ccif2-ap"},
+	{ NULL, "ccif2-md"},
 };
 
 #define IS_PASS_SKB(per_md_data, qno)	\
@@ -847,7 +846,7 @@ err_exit1:
 
 static void md_ccif_traffic_monitor_func(struct timer_list *t)
 {
-	struct md_ccif_ctrl *md_ctrl = from_timer(md_ctrl, t, traffic_monitor);
+	struct md_ccif_ctrl *md_ctrl = timer_container_of(md_ctrl, t, traffic_monitor);
 	if (!md_ctrl) {
 		CCCI_ERROR_LOG(0, TAG, "%s: md_ctl get fail\n",
 			__func__);
@@ -1151,7 +1150,7 @@ void md_ccif_reset_queue(unsigned char hif_id, unsigned char for_start)
 		mod_timer(&md_ctrl->traffic_monitor,
 			jiffies + CCIF_TRAFFIC_MONITOR_INTERVAL * HZ);
 	} else {
-		del_timer(&md_ctrl->traffic_monitor);
+		timer_delete(&md_ctrl->traffic_monitor);
 		/*
 		 *ccci_reset_ccif_hw(md_ctrl->md_id,
 		 *	ccif_id, md_ctrl->ccif_ap_base,
@@ -1925,8 +1924,8 @@ void scp_set_clk_off(void)
 	void __iomem *ap_ccif2_base;
 	void __iomem *md_ccif2_base;
 
-	ap_ccif2_base = ioremap_nocache(0x1023c000, 0x20);
-	md_ccif2_base = ioremap_nocache(0x1023d000, 0x20);
+	ap_ccif2_base = ioremap(0x1023c000, 0x20);
+	md_ccif2_base = ioremap(0x1023d000, 0x20);
 	if (ap_ccif2_base != NULL && md_ccif2_base != NULL) {
 		ccci_write32(ap_ccif2_base, APCCIF_ACK, 0xFFFF);
 		ccci_write32(md_ccif2_base, APCCIF_ACK, 0xFFFF);
@@ -1996,7 +1995,7 @@ static void set_md_ccif5_dummy(void)
 		pericfg_addr = 0x1000330c;
 #endif
 
-	pericfg_dummy = ioremap_nocache(pericfg_addr, 0x10);
+	pericfg_dummy = ioremap(pericfg_addr, 0x10);
 	if (pericfg_dummy == NULL) {
 		CCCI_NORMAL_LOG(MD_SYS1, TAG,
 			"%s failed ioremap 0x10 bytes from 0x%x\n", __func__, pericfg_addr);
@@ -2184,14 +2183,14 @@ static int ccif_hif_hw_init(struct device *dev, struct md_ccif_ctrl *md_ctrl)
 		ret = -3;
 		return ret;
 	}
-	md_ctrl->ccif_ap_base = of_iomap(node, 0);
-	md_ctrl->ccif_md_base = of_iomap(node, 1);
+	md_ctrl->ccif_ap_base = ccci_of_iomap_byname(node, "ap-ccif");
+	md_ctrl->ccif_md_base = ccci_of_iomap_byname(node, "md-ccif");
 
-	md_ctrl->ap_ccif_irq0_id = irq_of_parse_and_map(node, 0);
-	md_ctrl->ap_ccif_irq1_id = irq_of_parse_and_map(node, 1);
+	md_ctrl->ap_ccif_irq0_id = ccci_of_irq_byname(node, "ccif0");
+	md_ctrl->ap_ccif_irq1_id = ccci_of_irq_byname(node, "ccif1");
 
 	md_ctrl->md_pcore_pccif_base =
-		ioremap_nocache(MD_PCORE_PCCIF_BASE, 0x20);
+		ioremap(MD_PCORE_PCCIF_BASE, 0x20);
 	CCCI_BOOTUP_LOG(-1, TAG, "pccif:%x\n", MD_PCORE_PCCIF_BASE);
 
 	/* Device tree using none flag to register irq,
@@ -2225,9 +2224,8 @@ static int ccif_hif_hw_init(struct device *dev, struct md_ccif_ctrl *md_ctrl)
 			scp_clk_table[idx].clk_ref = NULL;
 		}
 	}
-	dev->dma_mask = &ccif_dmamask;
-	dev->coherent_dma_mask = ccif_dmamask;
-	dev->platform_data = md_ctrl;
+	/* shared with the modem device, whose platform_data is the modem */
+	dma_set_mask_and_coherent(dev, ccif_dmamask);
 
 	node = of_find_compatible_node(NULL, NULL,
 		"mediatek,md_ccif4");
@@ -2291,13 +2289,13 @@ static int ccif_hif_hw_init(struct device *dev, struct md_ccif_ctrl *md_ctrl)
 
 }
 
-static int ccci_ccif_syssuspend(void)
+static int ccci_ccif_syssuspend(void *data)
 {
 
 	return 0;
 }
 
-static void ccci_ccif_sysresume(void)
+static void ccci_ccif_sysresume(void *data)
 {
 	struct ccci_modem *md;
 	struct md_sys1_info *md_info;
@@ -2315,6 +2313,10 @@ static void ccci_ccif_sysresume(void)
 static struct syscore_ops ccci_ccif_sysops = {
 	.suspend = ccci_ccif_syssuspend,
 	.resume = ccci_ccif_sysresume,
+};
+
+static struct syscore ccci_ccif_syscore = {
+	.ops = &ccci_ccif_sysops,
 };
 
 int ccci_ccif_hif_init(struct platform_device *pdev,
@@ -2343,13 +2345,13 @@ int ccci_ccif_hif_init(struct platform_device *pdev,
 	md_ctrl->channel_id = 0;
 	md_ctrl->md_id = md_id;
 	md_ctrl->hif_id = hif_id;
-	node_md = of_find_compatible_node(NULL, NULL,
-		"mediatek,mddriver");
-	of_property_read_u32(node_md,
-		"mediatek,md_generation", &md_ctrl->plat_val.md_gen);
+	node_md = pdev->dev.of_node;
+	md_ctrl->plat_val.md_gen = MD_GENERATION;
 	md_ctrl->plat_val.infra_ao_base =
 		syscon_regmap_lookup_by_phandle(node_md,
-		"ccci-infracfg");
+		"mediatek,infracfg");
+	if (IS_ERR(md_ctrl->plat_val.infra_ao_base))
+		md_ctrl->plat_val.infra_ao_base = NULL;
 	atomic_set(&md_ctrl->reset_on_going, 1);
 	md_ctrl->wakeup_ch = 0;
 	atomic_set(&md_ctrl->ccif_irq_enabled, 1);
@@ -2375,59 +2377,8 @@ int ccci_ccif_hif_init(struct platform_device *pdev,
 	ccci_hif_register(md_ctrl->hif_id, (void *)md_ctrl, &ccci_hif_ccif_ops);
 
 	/* register SYS CORE suspend resume call back */
-	register_syscore_ops(&ccci_ccif_sysops);
+	register_syscore(&ccci_ccif_syscore);
 
 	return 0;
 }
 
-int ccci_hif_ccif_probe(struct platform_device *pdev)
-{
-	int ret;
-
-	ret = ccci_ccif_hif_init(pdev, CCIF_HIF_ID, MD_SYS1);
-	if (ret < 0) {
-		CCCI_ERROR_LOG(-1, TAG, "ccci ccif init fail");
-		return ret;
-	}
-
-	return 0;
-}
-
-static const struct of_device_id ccci_ccif_of_ids[] = {
-	{.compatible = "mediatek,ccci_ccif"},
-	{}
-};
-
-static struct platform_driver ccci_hif_ccif_driver = {
-
-	.driver = {
-		.name = "ccci_hif_ccif",
-		.of_match_table = ccci_ccif_of_ids,
-	},
-
-	.probe = ccci_hif_ccif_probe,
-};
-
-static int __init ccci_hif_ccif_init(void)
-{
-	int ret;
-
-	ret = platform_driver_register(&ccci_hif_ccif_driver);
-	if (ret) {
-		CCCI_ERROR_LOG(-1, TAG, "ccci hif_ccif driver init fail %d",
-			ret);
-		return ret;
-	}
-	return 0;
-}
-
-static void __exit ccci_hif_ccif_exit(void)
-{
-}
-
-module_init(ccci_hif_ccif_init);
-module_exit(ccci_hif_ccif_exit);
-
-MODULE_AUTHOR("ccci");
-MODULE_DESCRIPTION("ccci hif ccif driver");
-MODULE_LICENSE("GPL");

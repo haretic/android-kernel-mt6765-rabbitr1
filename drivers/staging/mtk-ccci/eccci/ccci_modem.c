@@ -31,7 +31,6 @@
 #include <linux/of_address.h>
 #endif
 
-#include <memory-amms.h>
 #include "mt-plat/mtk_ccci_common.h"
 #include <mt-plat/mtk_boot_common.h>
 
@@ -1255,14 +1254,9 @@ static const struct sysfs_ops ccci_md_sysfs_ops = {
 	.store = ccci_md_attr_store
 };
 
-static struct attribute *ccci_md_default_attrs[] = {
-	NULL
-};
-
 static struct kobj_type ccci_md_ktype = {
 	.release = ccci_md_obj_release,
 	.sysfs_ops = &ccci_md_sysfs_ops,
-	.default_attrs = ccci_md_default_attrs
 };
 
 void ccci_sysfs_add_md(int md_id, void *kobj)
@@ -2029,7 +2023,7 @@ int ccci_md_prepare_runtime_data(unsigned char md_id, unsigned char *data,
 	struct md_query_ap_feature md_feature_ap;
 	struct ccci_runtime_boot_info boot_info;
 	unsigned int random_seed = 0;
-	struct timeval t;
+	struct __kernel_old_timeval t;
 	unsigned int c2k_flags = 0;
 
 	CCCI_BOOTUP_LOG(md->index, TAG,
@@ -2295,7 +2289,7 @@ int ccci_md_prepare_runtime_data(unsigned char md_id, unsigned char *data,
 			case MISC_INFO_CLIB_TIME:
 				rt_feature.data_len =
 				sizeof(struct ccci_misc_info_element);
-				do_gettimeofday(&t);
+				ccci_gettimeofday(&t);
 
 				/*set seconds information */
 				rt_f_element.feature[0] =

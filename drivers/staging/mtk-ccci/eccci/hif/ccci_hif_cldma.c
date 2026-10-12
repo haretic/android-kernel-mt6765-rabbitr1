@@ -50,6 +50,7 @@
 #if defined(CLDMA_TRACE) || defined(CCCI_SKB_TRACE)
 #define CREATE_TRACE_POINTS
 #include "modem_cldma_events.h"
+#include "mtk_ccci_main.h"
 #endif
 unsigned int trace_sample_time = 200000000;
 
@@ -146,7 +147,7 @@ struct md_cd_ctrl *cldma_ctrl;
 static unsigned int g_cd_uid_mask_count;
 
 struct ccci_clk_node cldma_clk_table[CLDMA_CLOCK_COUNT] = {
-	{ NULL,	"infra-cldma-bclk"},
+	{ NULL,	"cldma-bclk"},
 
 };
 
@@ -195,13 +196,7 @@ void cldma_dump_register(struct md_cd_ctrl *md_ctrl)
 static inline void cldma_write32_ao_misc(struct md_cd_ctrl *md_ctrl,
 	u32 reg, u32 val)
 {
-	int md_gen;
-	struct device_node *node = NULL;
-
-	node = of_find_compatible_node(NULL, NULL,
-		"mediatek,mddriver");
-	of_property_read_u32(node,
-		"mediatek,md_generation", &md_gen);
+	int md_gen = MD_GENERATION;
 
 	if (md_gen == 6293) {
 		u32 reg2, reg2_val;
@@ -512,7 +507,7 @@ void md_cd_traffic_monitor_func(struct timer_list *t)
 {
 	int i;
 	//struct md_cd_ctrl *md_ctrl = (struct md_cd_ctrl *)data;
-	struct md_cd_ctrl *md_ctrl = from_timer(md_ctrl, t, traffic_monitor);
+	struct md_cd_ctrl *md_ctrl = timer_container_of(md_ctrl, t, traffic_monitor);
 
 	struct ccci_hif_traffic *tinfo = &md_ctrl->traffic_info;
 	unsigned long q_rx_rem_nsec[CLDMA_RXQ_NUM] = {0};
@@ -1833,7 +1828,7 @@ static void cldma_irq_work_cb(struct md_cd_ctrl *md_ctrl)
 					md_ctrl->txq[i].timeout_end
 					= local_clock();
 					ret =
-					del_timer(
+					timer_delete(
 					&md_ctrl->txq[i].timeout_timer);
 					CCCI_DEBUG_LOG(md_ctrl->md_id, TAG,
 						"qno%d del_timer %d ptr=0x%p\n",
@@ -1984,7 +1979,7 @@ int cldma_stop(unsigned char hif_id)
 	/* stop timer */
 #ifdef ENABLE_CLDMA_TIMER
 	for (qno = 0; qno < CLDMA_TXQ_NUM; qno++)
-		del_timer(&md_ctrl->txq[qno].timeout_timer);
+		timer_delete(&md_ctrl->txq[qno].timeout_timer);
 #endif
 
 	spin_unlock_irqrestore(&md_ctrl->cldma_timeout_lock,
@@ -3015,7 +3010,7 @@ static struct ccci_hif_ops ccci_hif_cldma_ops = {
 
 };
 
-static int ccci_cldma_syssuspend(void)
+static int ccci_cldma_syssuspend(void *data)
 {
 	if (cldma_ctrl->cldma_plat_ops.syssuspend)
 		return cldma_ctrl->cldma_plat_ops.syssuspend(0);
@@ -3023,7 +3018,7 @@ static int ccci_cldma_syssuspend(void)
 	return 0;
 }
 
-static void ccci_cldma_sysresume(void)
+static void ccci_cldma_sysresume(void *data)
 {
 	if (cldma_ctrl->cldma_plat_ops.sysresume)
 		cldma_ctrl->cldma_plat_ops.sysresume(0);
@@ -3032,6 +3027,10 @@ static void ccci_cldma_sysresume(void)
 static struct syscore_ops ccci_cldma_sysops = {
 	.suspend = ccci_cldma_syssuspend,
 	.resume = ccci_cldma_sysresume,
+};
+
+static struct syscore ccci_cldma_syscore = {
+	.ops = &ccci_cldma_sysops,
 };
 
 static int ccci_cldma_set_plat_ops(void)
@@ -3047,10 +3046,9 @@ static int ccci_cldma_set_plat_ops(void)
 	return 0;
 }
 
-#define DMA_BIT_MASK(n) (((n) == 64) ? ~0ULL : ((1ULL<<(n))-1))
 static u64 s_cldma_dmamask = DMA_BIT_MASK(36);
 
-static int ccci_cldma_hif_init(struct platform_device *pdev,
+int ccci_cldma_hif_init(struct platform_device *pdev,
 		unsigned char hif_id, unsigned char md_id)
 {
 	struct md_cd_ctrl *md_ctrl;
@@ -3062,8 +3060,7 @@ static int ccci_cldma_hif_init(struct platform_device *pdev,
 		return -1;
 	}
 
-	pdev->dev.dma_mask = &s_cldma_dmamask;
-	pdev->dev.coherent_dma_mask = s_cldma_dmamask;
+	dma_set_mask_and_coherent(&pdev->dev, s_cldma_dmamask);
 
 	md_ctrl = kzalloc(sizeof(struct md_cd_ctrl), GFP_KERNEL);
 	if (md_ctrl == NULL) {
@@ -3079,18 +3076,21 @@ static int ccci_cldma_hif_init(struct platform_device *pdev,
 	md_ctrl->md_id = md_id;
 	md_ctrl->hif_id = hif_id;
 
-	of_property_read_u32(pdev->dev.of_node,
-		"mediatek,md_generation", &md_ctrl->plat_val.md_gen);
-
-	of_property_read_u32(pdev->dev.of_node,
-		"mediatek,platform", &md_ctrl->cldma_platform);
+	/* stock DT: mediatek,md_generation and mediatek,platform */
+	md_ctrl->plat_val.md_gen = MD_GENERATION;
+	md_ctrl->cldma_platform = 6765;
 
 	if (ccci_cldma_set_plat_ops())
 		return -1;
 
 	md_ctrl->plat_val.infra_ao_base =
 			syscon_regmap_lookup_by_phandle(pdev->dev.of_node,
-			"cldma-infracfg");
+			"mediatek,infracfg");
+	if (IS_ERR(md_ctrl->plat_val.infra_ao_base)) {
+		CCCI_ERROR_LOG(md_id, TAG, "no infracfg\n");
+		kfree(md_ctrl);
+		return -1;
+	}
 
 	//md_ctrl->plat_val.offset_epof_md1 = 7*1024+0x234;
 	//; offset_epof_md1: %lld
@@ -3101,15 +3101,17 @@ static int ccci_cldma_hif_init(struct platform_device *pdev,
 		md_ctrl->plat_val.infra_ao_base);
 
 	md_ctrl->cldma_irq_flags = IRQF_TRIGGER_NONE;
-	md_ctrl->cldma_irq_id = irq_of_parse_and_map(pdev->dev.of_node, 0);
+	md_ctrl->cldma_irq_id = ccci_of_irq_byname(pdev->dev.of_node, "cldma");
 	if (md_ctrl->cldma_irq_id == 0) {
 		CCCI_ERROR_LOG(md_id, TAG, "no cldma irq id set in dts\n");
 		kfree(md_ctrl);
 		return -1;
 	}
 
-	md_ctrl->cldma_ap_ao_base = of_iomap(pdev->dev.of_node, 0);
-	md_ctrl->cldma_ap_pdn_base = of_iomap(pdev->dev.of_node, 1);
+	md_ctrl->cldma_ap_ao_base =
+		ccci_of_iomap_byname(pdev->dev.of_node, "cldma-ao");
+	md_ctrl->cldma_ap_pdn_base =
+		ccci_of_iomap_byname(pdev->dev.of_node, "cldma-pd");
 	if (md_ctrl->cldma_ap_pdn_base == NULL ||
 		md_ctrl->cldma_ap_ao_base == NULL) {
 		CCCI_ERROR_LOG(md_id, TAG, "no cldma register set in dts\n");
@@ -3161,7 +3163,7 @@ static int ccci_cldma_hif_init(struct platform_device *pdev,
 		&ccci_hif_cldma_ops);
 
 	/* register SYS CORE suspend resume call back */
-	register_syscore_ops(&ccci_cldma_sysops);
+	register_syscore(&ccci_cldma_syscore);
 
 	return 0;
 }
@@ -3264,60 +3266,3 @@ static int md_cd_late_init(unsigned char hif_id)
 
 	return 0;
 }
-
-int ccci_hif_cldma_probe(struct platform_device *pdev)
-{
-	int ret;
-
-	CCCI_NORMAL_LOG(-1, TAG, "[%s] start", __func__);
-
-	ret = ccci_cldma_hif_init(pdev, CLDMA_HIF_ID, MD_SYS1);
-	if (ret < 0) {
-		CCCI_ERROR_LOG(-1, TAG, "ccci cldma init fail");
-		return ret;
-	}
-
-	return 0;
-}
-
-static const struct of_device_id ccci_cldma_of_ids[] = {
-	{.compatible = "mediatek,ccci_cldma"},
-	{}
-};
-
-static struct platform_driver ccci_cldma_driver = {
-
-	.driver = {
-		.name = "ccci_hif_cldma",
-		.of_match_table = ccci_cldma_of_ids,
-	},
-
-	.probe = ccci_hif_cldma_probe,
-};
-
-static int __init ccci_cldma_init(void)
-{
-	int ret;
-
-	ret = platform_driver_register(&ccci_cldma_driver);
-	if (ret) {
-		CCCI_ERROR_LOG(-1, TAG, "ccci hif_cldma driver init fail %d",
-			ret);
-		return ret;
-	}
-	return 0;
-}
-
-static void __exit ccci_cldma_exit(void)
-{
-	CCCI_NORMAL_LOG(-1, TAG,
-		"[%S] CLDMA driver is exit.", __func__);
-}
-
-module_init(ccci_cldma_init);
-module_exit(ccci_cldma_exit);
-
-MODULE_AUTHOR("ccci");
-MODULE_DESCRIPTION("ccci hif ccif driver");
-MODULE_LICENSE("GPL");
-

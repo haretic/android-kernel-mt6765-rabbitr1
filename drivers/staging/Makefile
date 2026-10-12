@@ -17,3 +17,4 @@ obj-$(CONFIG_MTK_ION_COMPAT)	+= mtk-ion-compat/
 obj-$(CONFIG_MTK_GED_COMPAT)	+= mtk-ged/
 obj-$(CONFIG_MTK_CONNECTIVITY)	+= mtk-connectivity/
 obj-$(CONFIG_MTK_CCCI_R1_MD_PROBE)	+= mtk-ccci/
+obj-$(CONFIG_MTK_CCCI)		+= mtk-ccci/

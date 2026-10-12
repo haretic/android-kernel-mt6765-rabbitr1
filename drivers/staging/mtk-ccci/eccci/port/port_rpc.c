@@ -21,7 +21,9 @@
 #include <linux/of.h>
 #include <linux/of_fdt.h>
 #include <linux/of_irq.h>
-#include <linux/of_gpio.h>
+#include <linux/gpio/consumer.h>
+#include <linux/random.h>
+#include <linux/gpio/driver.h>
 #include <linux/of_address.h>
 #include <linux/arm-smccc.h>
 #include <linux/soc/mediatek/mtk_sip_svc.h>
@@ -72,9 +74,29 @@ static struct gpio_item gpio_mapping_table[] = {
 		"GPIO_RF_PWREN_RST_PIN",},
 };
 
+/*
+ * GPIO ids exchanged with the modem are SoC pin numbers. Read the level
+ * without claiming the pin, which may well be muxed to the modem.
+ */
 static int get_md_gpio_val(unsigned int num)
 {
-	return gpio_get_value(num);
+	struct device_node *np;
+	struct gpio_device *gdev;
+	struct gpio_desc *desc;
+	int val = -1;
+
+	np = of_find_compatible_node(NULL, NULL, "mediatek,mt6765-pinctrl");
+	if (!np)
+		return -1;
+	gdev = gpio_device_find_by_fwnode(of_fwnode_handle(np));
+	of_node_put(np);
+	if (!gdev)
+		return -1;
+	desc = gpio_device_get_desc(gdev, num);
+	if (!IS_ERR(desc))
+		val = gpiod_get_raw_value(desc);
+	gpio_device_put(gdev);
+	return val;
 }
 
 static int get_md_adc_val(__attribute__((unused))unsigned int num)
@@ -137,28 +159,31 @@ static char *md_gpio_name_convert(char *gpio_name, unsigned int len)
 static int get_gpio_id_from_dt(struct device_node *node,
 	char *gpio_name, int *md_view_id)
 {
-	int gpio_id = -1;
-	int md_view_gpio_id = -1;
+	struct of_phandle_args args;
 	int ret;
 
-	/* For new API, there is a shift between AP GPIO ID and MD GPIO ID */
-	gpio_id = of_get_named_gpio(node, gpio_name, 0);
-	ret = of_property_read_u32_index(node, gpio_name, 1, &md_view_gpio_id);
+	/* <&pio pin flags>: the AP and MD views are both the pin number */
+	ret = of_parse_phandle_with_fixed_args(node, gpio_name, 2, 0, &args);
 	if (ret)
 		return ret;
+	of_node_put(args.np);
 
-	if (gpio_id >= 0)
-		*md_view_id = md_view_gpio_id;
-	return gpio_id;
+	*md_view_id = args.args[0];
+	return args.args[0];
 }
 
 static int get_md_gpio_info(char *gpio_name,
 	unsigned int len, int *md_view_gpio_id)
 {
-	struct device_node *node = of_find_compatible_node(NULL, NULL,
-		"mediatek,gpio_usage_mapping");
+	/* the stock gpio_usage_mapping node is a child of the modem node */
+	struct device_node *md_node = of_find_compatible_node(NULL, NULL,
+		"mediatek,mt6765-ccci");
+	struct device_node *node = of_get_child_by_name(md_node,
+		"gpio-usage-mapping");
 	int gpio_id = -1;
 	char *name;
+
+	of_node_put(md_node);
 
 	if (len >= 4096) {
 		CCCI_NORMAL_LOG(0, RPC,
@@ -1165,8 +1190,8 @@ static void ccci_rpc_work_helper(struct port_t *port, struct rpc_pkt *pkt,
 				pkt[pkt_num++].buf = (void *)&tmp_data[0];
 				break;
 			}
-			arm_smccc_smc(MTK_SIP_KERNEL_GET_RND,
-				TRNG_MAGIC, 0, 0, 0, 0, 0, 0, &res);
+			/* stock asked the ATF TRNG; the kernel RNG serves */
+			res.a0 = get_random_u32();
 			pkt_num = 0;
 			tmp_data[0] = 0;
 			tmp_data[1] = res.a0;

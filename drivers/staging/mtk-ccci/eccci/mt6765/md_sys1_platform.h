@@ -9,7 +9,6 @@
 
 #include <linux/skbuff.h>
 #include "ccif_hif_platform.h"
-#include <linux/soc/mediatek/mtk-pm-qos.h>
 
 
 /* this is the platform header file for CLDMA MODEM, not just CLDMA! */
@@ -219,7 +218,7 @@ struct md_hw_info {
 };
 
 
-int ccci_modem_remove(struct platform_device *dev);
+void ccci_modem_remove(struct platform_device *dev);
 void ccci_modem_shutdown(struct platform_device *dev);
 int ccci_modem_suspend(struct platform_device *dev, pm_message_t state);
 int ccci_modem_resume(struct platform_device *dev);

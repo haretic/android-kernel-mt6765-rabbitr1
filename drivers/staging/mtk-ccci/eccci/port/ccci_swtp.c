@@ -12,7 +12,7 @@
 #include <linux/of_fdt.h>
 #include <linux/of_irq.h>
 #include <linux/of_address.h>
-#include <linux/of_gpio.h>
+#include <linux/gpio/consumer.h>
 
 #include <mt-plat/mtk_boot_common.h>
 #include "ccci_debug.h"
@@ -198,11 +198,8 @@ static void swtp_init_delayed_work(struct work_struct *work)
 		struct swtp_t, init_delayed_work);
 	int md_id;
 	int i, ret = 0;
-#ifdef CONFIG_MTK_EIC
-	u32 ints[2] = { 0, 0 };
-#else
+	struct gpio_desc *deb;
 	u32 ints[1] = { 0 };
-#endif
 	u32 ints1[2] = { 0, 0 };
 	struct device_node *node = NULL;
 
@@ -252,16 +249,12 @@ static void swtp_init_delayed_work(struct work_struct *work)
 					__func__, i);
 				break;
 			}
-#ifdef CONFIG_MTK_EIC /* for chips before mt6739 */
-			swtp_data[md_id].gpiopin[i] = ints[0];
-			swtp_data[md_id].setdebounce[i] = ints[1];
-#else /* for mt6739,and chips after mt6739 */
 			swtp_data[md_id].setdebounce[i] = ints[0];
-			swtp_data[md_id].gpiopin[i] =
-				of_get_named_gpio(node, "deb-gpios", 0);
-#endif
-			gpio_set_debounce(swtp_data[md_id].gpiopin[i],
-				swtp_data[md_id].setdebounce[i]);
+			deb = fwnode_gpiod_get_index(of_fwnode_handle(node),
+				"deb", 0, GPIOD_IN, irq_name[i]);
+			if (!IS_ERR(deb))
+				gpiod_set_debounce(deb,
+					swtp_data[md_id].setdebounce[i]);
 			swtp_data[md_id].eint_type[i] = ints1[1];
 			swtp_data[md_id].irq[i] = irq_of_parse_and_map(node, 0);
 

@@ -27,7 +27,7 @@ static ssize_t ccci_sib_read(struct file *file, char __user *buf,
 	read_len = size < available ? size : available;
 	if (read_len == 0)
 		return 0;
-	__inval_dcache_area(ccci_sib.base_ap_view_vir + read_pos, read_len);
+	/* ccci_map_phy_addr() maps write-combined: no cache to invalidate */
 	if (copy_to_user(buf,
 			ccci_sib.base_ap_view_vir + read_pos,
 			read_len)) {
@@ -76,11 +76,11 @@ static int ccci_sib_close(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static const struct file_operations ccci_sib_fops = {
-	.read = ccci_sib_read,
-	.open = ccci_sib_open,
-	.release = ccci_sib_close,
-	.poll = ccci_sib_poll,
+static const struct proc_ops ccci_sib_fops = {
+	.proc_read = ccci_sib_read,
+	.proc_open = ccci_sib_open,
+	.proc_release = ccci_sib_close,
+	.proc_poll = ccci_sib_poll,
 };
 
 static void ccci_sib_smem_remap(void)

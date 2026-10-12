@@ -443,7 +443,7 @@ static inline int ccci_cldma_hif_set_wakeup_src(unsigned char hif_id,
 		(struct md_cd_ctrl *)ccci_hif_get_by_id(hif_id);
 
 	if (md_ctrl)
-		return atomic_set(&md_ctrl->wakeup_src, value);
+		{ atomic_set(&md_ctrl->wakeup_src, value); return 0; }
 	else
 		return -1;
 

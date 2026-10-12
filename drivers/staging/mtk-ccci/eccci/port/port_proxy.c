@@ -85,7 +85,7 @@ EXPORT_SYMBOL(ccci_port_get_dev_name);
 #if MD_GENERATION > (6295)
 int send_new_time_to_new_md(int md_id, int tz)
 {
-	struct timeval tv;
+	struct __kernel_old_timeval tv;
 	unsigned int timeinfo[4];
 	char ccci_time[45];
 	int ret;
@@ -93,7 +93,7 @@ int send_new_time_to_new_md(int md_id, int tz)
 	char *name = "ccci_0_202";
 	int has_write;
 
-	do_gettimeofday(&tv);
+	ccci_gettimeofday(&tv);
 	timeinfo[0] = tv.tv_sec;
 	timeinfo[1] = sizeof(tv.tv_sec) > 4 ? tv.tv_sec >> 32 : 0;
 	timeinfo[2] = tz;
@@ -693,7 +693,7 @@ int port_dev_mmap(struct file *fp, struct vm_area_struct *vma)
 	pfn = wifi_smem->base_ap_view_phy;
 	pfn >>= PAGE_SHIFT;
 	/* ensure that memory does not get swapped to disk */
-	vma->vm_flags |= VM_IO;
+	vm_flags_set(vma, VM_IO);
 	/* ensure non-cacheable */
 	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 	ret = remap_pfn_range(vma, vma->vm_start, pfn,
@@ -1900,10 +1900,10 @@ static int ccci_lp_mem_close(struct inode *inode, struct file *file)
 	return 0;
 }
 
-const struct file_operations ccci_dbm_ops = {
-	.open = ccci_lp_mem_open,
-	.read = ccci_lp_mem_read,
-	.release = ccci_lp_mem_close,
+static const struct proc_ops ccci_dbm_ops = {
+	.proc_open = ccci_lp_mem_open,
+	.proc_read = ccci_lp_mem_read,
+	.proc_release = ccci_lp_mem_close,
 };
 
 static void ccci_proc_init(void)

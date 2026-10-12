@@ -27,7 +27,7 @@
 
 /* Broadcast event defination */
 struct md_status_event {
-	struct timeval time_stamp;
+	struct __kernel_old_timeval time_stamp;
 	int md_id;
 	int event_type;
 	char reason[32];
@@ -35,7 +35,7 @@ struct md_status_event {
 
 #ifdef CONFIG_COMPAT
 struct md_status_compat_event {
-	struct compat_timeval time_stamp;
+	struct old_timeval32 time_stamp;
 	int md_id;
 	int event_type;
 	char reason[32];
@@ -61,7 +61,7 @@ struct cdev s_bd_char_dev;
 struct last_md_status_event {
 	int has_value;
 	int md_id;
-	struct timeval time_stamp;
+	struct __kernel_old_timeval time_stamp;
 	int event_type;
 	char reason[32];
 };
@@ -96,7 +96,7 @@ struct ccci_util_bc_user_ctlb {
 };
 
 static void inject_event_helper(struct ccci_util_bc_user_ctlb *user_ctlb,
-	int md_id, const struct timeval *ev_rtime,
+	int md_id, const struct __kernel_old_timeval *ev_rtime,
 	int event_type, char reason[])
 {
 	int ret = 0;
@@ -136,7 +136,7 @@ static void inject_event_helper(struct ccci_util_bc_user_ctlb *user_ctlb,
 }
 
 static void save_last_md_status(int md_id,
-		const struct timeval *time_stamp, int event_type, char reason[])
+		const struct __kernel_old_timeval *time_stamp, int event_type, char reason[])
 {
 	/* MD_STA_EV_HS1 = 9
 	 * ignore events before MD_STA_EV_HS1
@@ -183,7 +183,7 @@ static void send_last_md_status_to_user(int md_id,
 
 void inject_md_status_event(int md_id, int event_type, char reason[])
 {
-	struct timeval time_stamp;
+	struct __kernel_old_timeval time_stamp;
 	struct ccci_util_bc_user_ctlb *user_ctlb = NULL;
 	unsigned int md_mark;
 	int i;
@@ -196,7 +196,7 @@ void inject_md_status_event(int md_id, int event_type, char reason[])
 	else
 		md_mark = 0;
 
-	do_gettimeofday(&time_stamp);
+	ccci_gettimeofday(&time_stamp);
 
 	spin_lock_irqsave(&s_event_update_lock, flag);
 	save_last_md_status(md_id, &time_stamp, event_type, reason);
@@ -636,7 +636,7 @@ int ccci_util_broadcast_init(void)
 	spin_lock_init(&s_event_update_lock);
 	spin_lock_init(&s_md1_user_lock_cnt_lock);
 	spin_lock_init(&s_md3_user_lock_cnt_lock);
-	s_ccci_bd_class = class_create(THIS_MODULE, "ccci_md_sta");
+	s_ccci_bd_class = class_create("ccci_md_sta");
 	s_md1_user_request_lock_cnt = 0;
 	s_md3_user_request_lock_cnt = 0;
 

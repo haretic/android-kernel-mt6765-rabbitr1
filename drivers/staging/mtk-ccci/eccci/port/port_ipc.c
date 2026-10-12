@@ -481,9 +481,9 @@ int send_new_time_to_md(int md_id, int tz)
 	struct ipc_ilm in_ilm;
 	char local_param[sizeof(struct local_para) + 16];
 	unsigned int timeinfo[4];
-	struct timeval tv = { 0 };
+	struct __kernel_old_timeval tv = { 0 };
 
-	do_gettimeofday(&tv);
+	ccci_gettimeofday(&tv);
 
 	timeinfo[0] = tv.tv_sec;
 	timeinfo[1] = sizeof(tv.tv_sec) > 4 ? tv.tv_sec >> 32 : 0;
