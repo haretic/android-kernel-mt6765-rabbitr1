@@ -5,7 +5,8 @@
 #
 # Blobs: vendor/rabbit/r1-modem/proprietary/ holds the files in blobs.txt,
 # copied verbatim from out/stock-vendor/tree except libnvram.so and
-# libsysenv.so, which get "patchelf --add-needed libr1_base_shim.so".
+# libsysenv.so, which get "patchelf --add-needed libr1_base_shim.so", and
+# libmtkutils.so and its users, renamed by rename-mtkutils.py (README.md).
 # Board side: BoardConfigModem.mk (sepolicy, framework matrix).
 
 R1_MODEM_PATH := device/rabbit/r1/modem
@@ -15,6 +16,10 @@ R1_MODEM_BLOBS := vendor/rabbit/r1-modem/proprietary
 PRODUCT_COPY_FILES += \
     $(R1_MODEM_BLOBS)/bin/ccci_mdinit:$(TARGET_COPY_OUT_VENDOR)/bin/ccci_mdinit \
     $(R1_MODEM_BLOBS)/bin/ccci_rpcd:$(TARGET_COPY_OUT_VENDOR)/bin/ccci_rpcd \
+    $(R1_MODEM_BLOBS)/bin/gsm0710muxd:$(TARGET_COPY_OUT_VENDOR)/bin/gsm0710muxd \
+    $(R1_MODEM_BLOBS)/lib/libmtkcutils.so:$(TARGET_COPY_OUT_VENDOR)/lib/libmtkcutils.so \
+    $(R1_MODEM_BLOBS)/lib/libmtkproperty.so:$(TARGET_COPY_OUT_VENDOR)/lib/libmtkproperty.so \
+    $(R1_MODEM_BLOBS)/lib/libmtkrillog.so:$(TARGET_COPY_OUT_VENDOR)/lib/libmtkrillog.so \
     $(R1_MODEM_BLOBS)/bin/hw/mtkfusionrild:$(TARGET_COPY_OUT_VENDOR)/bin/hw/mtkfusionrild \
     $(R1_MODEM_BLOBS)/bin/hw/vendor.mediatek.hardware.nvram@1.1-service:$(TARGET_COPY_OUT_VENDOR)/bin/hw/vendor.mediatek.hardware.nvram@1.1-service \
     $(R1_MODEM_BLOBS)/bin/netdagent:$(TARGET_COPY_OUT_VENDOR)/bin/netdagent \
@@ -67,6 +72,11 @@ PRODUCT_COPY_FILES += \
 
 # Old libbase Trim/Basename for libnvram.so and libsysenv.so.
 PRODUCT_PACKAGES += libr1_base_shim
+
+# gsm0710muxd is arm32 only (lib/ above); its AOSP dependencies.
+PRODUCT_PACKAGES += \
+    libc++.vendor:32 \
+    liblog:32
 
 # AOSP HIDL interfaces the blobs link against, as vendor variants. The stock
 # copies are not shipped so that they match our libhidlbase.

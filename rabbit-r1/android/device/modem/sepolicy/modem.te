@@ -11,6 +11,11 @@ type ccci_mdinit_exec, exec_type, vendor_file_type, file_type;
 init_daemon_domain(ccci_mdinit)
 permissive ccci_mdinit;
 
+type gsm0710muxd, domain;
+type gsm0710muxd_exec, exec_type, vendor_file_type, file_type;
+init_daemon_domain(gsm0710muxd)
+permissive gsm0710muxd;
+
 type ccci_rpcd, domain;
 type ccci_rpcd_exec, exec_type, vendor_file_type, file_type;
 init_daemon_domain(ccci_rpcd)

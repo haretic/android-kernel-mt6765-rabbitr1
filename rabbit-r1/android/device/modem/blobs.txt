@@ -10,12 +10,16 @@
 #   --add-needed libr1_base_shim.so (see shim/).
 bin/ccci_mdinit
 bin/ccci_rpcd
+bin/gsm0710muxd
 bin/hw/mtkfusionrild
 bin/hw/vendor.mediatek.hardware.nvram@1.1-service
 bin/netdagent
 bin/nvram_daemon
 etc/ecc_list.xml
 etc/ecc_list_preference.xml
+lib/libmtkcutils.so
+lib/libmtkproperty.so
+lib/libmtkrillog.so
 lib64/hw/vendor.mediatek.hardware.nvram@1.1-impl.so
 lib64/libaedv.so
 lib64/libcapctrl.so

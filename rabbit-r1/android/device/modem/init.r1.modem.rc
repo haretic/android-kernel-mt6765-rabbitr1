@@ -13,6 +13,8 @@
 on post-fs
     # Binding the driver does not boot the modem; ccci_mdinit does.
     insmod /vendor/lib/modules/mtk-ccci.ko
+    # gsm0710muxd links its channel ptys here (stock init.mt6765.rc)
+    mkdir /dev/radio 0770 radio radio
 
 on post-fs-data
     # Stock init.cccimdinit.rc
@@ -71,6 +73,15 @@ service vendor.ccci_rpcd /vendor/bin/ccci_rpcd 0
     class core
     oneshot
     disabled
+
+# Stock gsm0710muxd.rc. ccci_mdinit starts it once MD1 is ready (without
+# ro.vendor.mtk_mipc_support), and it starts vendor.ril-daemon-mtk.
+service vendor.gsm0710muxd /vendor/bin/gsm0710muxd -s /dev/ttyC0 -f 512 -n 8 -m basic
+    class main
+    user radio
+    group radio cache inet misc
+    disabled
+    oneshot
 
 service vendor.ril-daemon-mtk /vendor/bin/hw/mtkfusionrild -l libmtk-ril.so
     class main
