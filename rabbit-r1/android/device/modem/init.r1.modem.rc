@@ -12,7 +12,7 @@
 
 on post-fs
     # Binding the driver does not boot the modem; ccci_mdinit does.
-    insmod /vendor/lib/modules/mtk-ccci.ko
+    exec u:r:vendor_modprobe:s0 -- /vendor/bin/modprobe -a -d /vendor/lib/modules mtk-ccci
     # gsm0710muxd links its channel ptys here (stock init.mt6765.rc)
     mkdir /dev/radio 0770 radio radio
 
@@ -24,6 +24,8 @@ on post-fs-data
     restorecon /data/vendor/mdlpm
     mkdir /data/vendor_de/md 0770 system radio
     restorecon /data/vendor_de/md
+    restorecon_recursive /mnt/vendor/nvdata
+    restorecon_recursive /mnt/vendor/nvcfg
     restorecon_recursive /mnt/vendor/protect_f
     restorecon_recursive /mnt/vendor/protect_s
     # Stock mtkrild.rc

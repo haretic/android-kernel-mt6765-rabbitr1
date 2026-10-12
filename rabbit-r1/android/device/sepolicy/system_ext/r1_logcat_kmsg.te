@@ -1,0 +1,9 @@
+# logging/r1-logcat-kmsg.sh: mirrors logcat into the kernel log while a
+# debuggable build boots.
+type r1_logcat_kmsg, domain, coredomain;
+type r1_logcat_kmsg_exec, exec_type, file_type, system_file_type;
+init_daemon_domain(r1_logcat_kmsg)
+
+allow r1_logcat_kmsg { shell_exec toolbox_exec logcat_exec }:file rx_file_perms;
+read_logd(r1_logcat_kmsg)
+allow r1_logcat_kmsg kmsg_device:chr_file w_file_perms;

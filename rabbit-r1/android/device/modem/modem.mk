@@ -113,7 +113,6 @@ PRODUCT_COPY_FILES += \
 
 # Single SIM, as stock. Values are the stock vendor build.prop ones.
 PRODUCT_VENDOR_PROPERTIES += \
-    ro.telephony.sim.count=1 \
     persist.radio.multisim.config=ss \
     ro.vendor.radio.max.multisim=ss \
     persist.vendor.radio.msimmode=ss \

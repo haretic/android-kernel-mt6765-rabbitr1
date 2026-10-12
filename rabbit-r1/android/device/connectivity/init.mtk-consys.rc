@@ -7,13 +7,9 @@
 # up, reads the chip id and checks /vendor/firmware/WMT_SOC.cfg at load; the
 # ROM patches are downloaded on the first Wi-Fi or Bluetooth power on.
 on post-fs
-    insmod /vendor/lib/modules/mtk_btif_drv.ko
-    insmod /vendor/lib/modules/wmt_drv.ko
-    insmod /vendor/lib/modules/wmt_chrdev_wifi.ko
-    insmod /vendor/lib/modules/wlan_drv_gen4m.ko
-    # Registers hci0; the core powers it on once (BT patch download) and
-    # off again until the Bluetooth HAL opens it.
-    insmod /vendor/lib/modules/btmtk_wmt.ko
+    # btmtk_wmt registers hci0; the core powers it on once (BT patch
+    # download) and off again until the Bluetooth HAL opens it.
+    exec u:r:vendor_modprobe:s0 -- /vendor/bin/modprobe -a -d /vendor/lib/modules mtk_btif_drv wmt_drv wmt_chrdev_wifi wlan_drv_gen4m btmtk_wmt
 
     # ueventd creates the node asynchronously; post-fs-data writes to it.
     wait /dev/wmtWifi 5

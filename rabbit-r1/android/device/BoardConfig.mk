@@ -27,6 +27,7 @@ TARGET_KERNEL_MIXED_MODE := false
 include $(MAINLINE_COMMON_PATH)/BoardConfigMainlineCommon.mk
 include $(DEVICE_PATH)/charging/board.mk
 BOARD_VENDOR_SEPOLICY_DIRS += $(DEVICE_PATH)/sepolicy
+SYSTEM_EXT_PRIVATE_SEPOLICY_DIRS += $(DEVICE_PATH)/sepolicy/system_ext
 include $(DEVICE_PATH)/connectivity/BoardConfigConnectivity.mk
 include $(DEVICE_PATH)/camera/BoardConfigCamera.mk
 ifeq ($(TARGET_PRODUCT),lineage_r1_soc)
@@ -56,6 +57,8 @@ BOARD_KERNEL_CMDLINE += $(MAINLINE_COMMON_ANDROIDBOOT_PARAMS)
 BOARD_KERNEL_CMDLINE += bootopt=64S3,32N2,64N2 androidboot.fstab_suffix=r1
 BOARD_KERNEL_CMDLINE += earlycon=uart8250,mmio32,0x11002000 console=ttyS0,921600n8
 BOARD_KERNEL_CMDLINE += maxcpus=1 clk_ignore_unused regulator_ignore_unused
+# Reboot on panic; the kernel default would hang.
+BOARD_KERNEL_CMDLINE += panic=-1
 
 BOARD_USES_RECOVERY_AS_BOOT := true
 TARGET_NO_RECOVERY := false

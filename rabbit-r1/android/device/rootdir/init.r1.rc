@@ -30,29 +30,14 @@ service watchdogd /system/bin/watchdogd 10 20
 
 on property:sys.boot_completed=1
     start watchdogd
-    # The logcat mirror is for boot debugging; it costs most of a core afterwards.
-    stop vendor.r1-logcat-kmsg
 
 # With the gadget HAL (sys.usb.configfs=2) init never sets sys.usb.state.
 on property:init.svc.adbd=running
     start watchdogd
 
-service vendor.r1-logcat-kmsg /vendor/bin/r1-logcat-kmsg.sh
-    user root
-    group log
-    disabled
-    seclabel u:r:shell:s0
-
-on post-fs-data
-    start vendor.r1-logcat-kmsg
-
-# Bring-up builds: allow adb root without the developer-options toggle.
-on post-fs-data && property:ro.debuggable=1
-    write /data/adbroot/enabled 1
-
 # PowerVR GE8320 (ported DDK 1.13). rgx.fw comes from /vendor/firmware on first use.
 on post-fs
-    insmod /vendor/lib/modules/pvrsrvkm.ko
+    exec u:r:vendor_modprobe:s0 -- /vendor/bin/modprobe -a -d /vendor/lib/modules pvrsrvkm
     wait /dev/pvr_sync 5
     chown system graphics /dev/pvr_sync
     chmod 0666 /dev/pvr_sync

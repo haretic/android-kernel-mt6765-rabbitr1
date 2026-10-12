@@ -1,0 +1,15 @@
+vendor.debug.gpu.                   u:object_r:vendor_mtk_gpu_prop:s0
+vendor.debug.gpud.                  u:object_r:vendor_mtk_gpu_prop:s0
+vendor.debug.ged_dvfs.              u:object_r:vendor_mtk_gpu_prop:s0
+ro.vendor.mtk_config_max_dram_size  u:object_r:vendor_mtk_gpu_prop:s0
+ro.vendor.mtk_pq_                   u:object_r:vendor_mtk_pq_prop:s0
+ro.vendor.mtk_appgamepq_support     u:object_r:vendor_mtk_pq_prop:s0
+ro.vendor.pq.                       u:object_r:vendor_mtk_pq_prop:s0
+ro.vendor.globalpq.                 u:object_r:vendor_mtk_pq_prop:s0
+ro.vendor.dp.                       u:object_r:vendor_mtk_pq_prop:s0
+persist.vendor.sys.pq.              u:object_r:vendor_mtk_pq_prop:s0
+persist.vendor.sys.isp.             u:object_r:vendor_mtk_pq_prop:s0
+persist.vendor.dp.                  u:object_r:vendor_mtk_pq_prop:s0
+vendor.sys.pq.                      u:object_r:vendor_mtk_pq_prop:s0
+vendor.debug.pq.                    u:object_r:vendor_mtk_pq_prop:s0
+vendor.dp.                          u:object_r:vendor_mtk_pq_prop:s0

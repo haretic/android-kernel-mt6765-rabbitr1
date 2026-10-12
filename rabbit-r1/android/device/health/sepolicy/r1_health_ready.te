@@ -7,3 +7,4 @@ binder_use(r1_health_ready)
 # Directory metadata and traversal only, matching the existing HAL server.
 allow r1_health_ready sysfs:dir r_dir_perms;
 r_dir_file(r1_health_ready, sysfs_batteryinfo)
+allow r1_health_ready kmsg_device:chr_file w_file_perms;

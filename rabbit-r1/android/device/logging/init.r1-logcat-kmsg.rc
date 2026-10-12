@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+service r1-logcat-kmsg /system_ext/bin/r1-logcat-kmsg.sh
+    user root
+    group log
+    disabled
+
+on post-fs-data
+    start r1-logcat-kmsg
+
+# The mirror is for boot debugging; it costs most of a core afterwards.
+on property:sys.boot_completed=1
+    stop r1-logcat-kmsg

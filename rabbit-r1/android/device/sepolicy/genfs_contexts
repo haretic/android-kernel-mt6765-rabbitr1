@@ -6,3 +6,5 @@ genfscon sysfs /devices/platform/soc/11016000.i2c/i2c-5/5-0034/mt6370-backlight 
 genfscon sysfs /bus/iio u:object_r:vendor_sysfs_iio:s0
 genfscon sysfs /devices/platform/soc/11014000.spi/spi_master/spi4/spi4.0 u:object_r:vendor_sysfs_iio:s0
 genfscon sysfs /devices/trigger u:object_r:vendor_sysfs_iio:s0
+# The HAL probes every IIO device's name; the PMIC AUXADC is one of them.
+genfscon sysfs /devices/platform/soc/1000d000.pwrap/1000d000.pwrap:pmic/mt6359-auxadc u:object_r:vendor_sysfs_iio:s0

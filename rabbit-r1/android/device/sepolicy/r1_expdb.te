@@ -39,3 +39,4 @@ allow r1_expdb r1_pstore_module_file:file r_file_perms;
 allow r1_expdb r1_pstore_module_file:system module_load;
 allow r1_expdb kernel:key search;
 allow r1_expdb kmsg_device:chr_file w_file_perms;
+set_prop(vendor_init, vendor_r1_expdb_prop)

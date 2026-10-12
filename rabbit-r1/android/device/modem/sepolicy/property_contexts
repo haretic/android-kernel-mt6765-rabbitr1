@@ -8,3 +8,7 @@ vendor.service.nvram_init       u:object_r:vendor_mtk_nvram_prop:s0
 vendor.service.nvram_restore    u:object_r:vendor_mtk_nvram_prop:s0
 ro.vendor.mtk_                  u:object_r:vendor_mtk_radio_config_prop:s0
 ro.vendor.md_                   u:object_r:vendor_mtk_radio_config_prop:s0
+vendor.gsm.                     u:object_r:vendor_mtk_ril_prop:s0
+ctl.vendor.gsm0710muxd          u:object_r:vendor_mtk_ctl_modem_prop:s0
+ctl.vendor.ril-daemon-mtk       u:object_r:vendor_mtk_ctl_modem_prop:s0
+ctl.vendor.ccci_rpcd            u:object_r:vendor_mtk_ctl_modem_prop:s0

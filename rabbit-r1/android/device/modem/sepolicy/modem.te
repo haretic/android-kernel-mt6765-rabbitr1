@@ -1,6 +1,5 @@
-# MT6765 modem userspace (stock MediaTek blobs). Bring-up policy: the types
-# and transitions are real, the domains are permissive. Stage 4 replaces the
-# permissive lines with rules ported from the stock vendor_sepolicy.cil.
+# MT6765 modem userspace (stock MediaTek blobs). The rules are the subset of
+# the stock vendor_sepolicy.cil that this port's modem path exercises.
 #
 # File and device types keep their stock names on purpose: the NV ext4
 # filesystems already carry these labels in their xattrs.
@@ -9,37 +8,30 @@
 type ccci_mdinit, domain;
 type ccci_mdinit_exec, exec_type, vendor_file_type, file_type;
 init_daemon_domain(ccci_mdinit)
-permissive ccci_mdinit;
 
 type gsm0710muxd, domain;
 type gsm0710muxd_exec, exec_type, vendor_file_type, file_type;
 init_daemon_domain(gsm0710muxd)
-permissive gsm0710muxd;
 
 type ccci_rpcd, domain;
 type ccci_rpcd_exec, exec_type, vendor_file_type, file_type;
 init_daemon_domain(ccci_rpcd)
-permissive ccci_rpcd;
 
 type nvram_daemon, domain;
 type nvram_daemon_exec, exec_type, vendor_file_type, file_type;
 init_daemon_domain(nvram_daemon)
-permissive nvram_daemon;
 
 type mtk_hal_nvramagent, domain;
 type mtk_hal_nvramagent_exec, exec_type, vendor_file_type, file_type;
 init_daemon_domain(mtk_hal_nvramagent)
-permissive mtk_hal_nvramagent;
 
 type netdagent, domain;
 type netdagent_exec, exec_type, vendor_file_type, file_type;
 init_daemon_domain(netdagent)
 net_domain(netdagent)
-permissive netdagent;
 
 # mtkfusionrild runs in the platform's rild domain (system/sepolicy/vendor/rild.te),
 # as on stock.
-permissive rild;
 
 type r1_modem_nvcheck, domain;
 type r1_modem_nvcheck_exec, exec_type, vendor_file_type, file_type;
@@ -85,3 +77,99 @@ vendor_restricted_prop(vendor_mtk_radio_config_prop)
 type mtk_hal_rild_hwservice, hwservice_manager_type;
 type nvram_hwservice, hwservice_manager_type;
 type netdagent_hwservice, hwservice_manager_type;
+type mtk_radio_device, dev_type;
+type sysfs_boot_info, fs_type, sysfs_type;
+# rild's init sockets; nothing in this port connects to them yet.
+type mtk_rild_socket, file_type;
+
+# Control properties for the services the modem daemons start themselves.
+vendor_internal_prop(vendor_mtk_ctl_modem_prop)
+
+# ccci_mdinit: boots MD1, serves its NV files (built-in ccci_fsd) and starts
+# gsm0710muxd and rild when the modem is ready.
+read_fstab(ccci_mdinit)
+r_dir_file(ccci_mdinit, sysfs_dt_firmware_android)
+wakelock_use(ccci_mdinit)
+binder_use(ccci_mdinit)
+allow ccci_mdinit hal_system_suspend_service:service_manager find;
+allow ccci_mdinit { ccci_device ccci_monitor_device }:chr_file { rw_file_perms map };
+allow ccci_mdinit block_device:dir search;
+allow ccci_mdinit mnt_vendor_file:dir search;
+allow ccci_mdinit { nvdata_file nvcfg_file protect_f_data_file protect_s_data_file }:dir create_dir_perms;
+allow ccci_mdinit { nvdata_file nvcfg_file protect_f_data_file protect_s_data_file }:file create_file_perms;
+allow ccci_mdinit { ccci_data_md1_file data_vendor_de_md_file }:dir create_dir_perms;
+allow ccci_mdinit { ccci_data_md1_file data_vendor_de_md_file }:file create_file_perms;
+allow ccci_mdinit sysfs_ccci:dir search;
+allow ccci_mdinit sysfs_ccci:file rw_file_perms;
+allow ccci_mdinit sysfs_boot_info:file r_file_perms;
+r_dir_file(ccci_mdinit, sysfs_r1_mmc)
+allow ccci_mdinit proc_version:file r_file_perms;
+allow ccci_mdinit kmsg_device:chr_file w_file_perms;
+set_prop(ccci_mdinit, vendor_mtk_md_prop)
+set_prop(ccci_mdinit, vendor_mtk_ril_prop)
+set_prop(ccci_mdinit, vendor_mtk_ctl_modem_prop)
+get_prop(ccci_mdinit, vendor_mtk_nvram_prop)
+get_prop(ccci_mdinit, vendor_mtk_radio_config_prop)
+
+# ccci_rpcd: modem RPC.
+allow ccci_rpcd ccci_device:chr_file rw_file_perms;
+allow ccci_rpcd block_device:dir search;
+allow ccci_rpcd sysfs_ccci:dir search;
+allow ccci_rpcd sysfs_ccci:file r_file_perms;
+
+# gsm0710muxd: multiplexes ttyC0 into ptys linked under /dev/radio.
+allow gsm0710muxd ccci_device:chr_file rw_file_perms;
+allow gsm0710muxd mtk_radio_device:dir rw_dir_perms;
+allow gsm0710muxd mtk_radio_device:lnk_file create_file_perms;
+allow gsm0710muxd devpts:chr_file { rw_file_perms setattr };
+allow gsm0710muxd self:global_capability_class_set { chown fowner setuid };
+allow gsm0710muxd sysfs_ccci:dir search;
+allow gsm0710muxd sysfs_ccci:file r_file_perms;
+get_prop(gsm0710muxd, radio_control_prop)
+get_prop(gsm0710muxd, vendor_mtk_radio_config_prop)
+set_prop(gsm0710muxd, vendor_mtk_ril_prop)
+set_prop(gsm0710muxd, vendor_mtk_ctl_modem_prop)
+
+# nvram_daemon and the NVRAM HAL: NV data and the nvram/proinfo partitions.
+read_fstab(nvram_daemon)
+read_fstab(mtk_hal_nvramagent)
+r_dir_file({ nvram_daemon mtk_hal_nvramagent }, sysfs_dt_firmware_android)
+allow { nvram_daemon mtk_hal_nvramagent } block_device:dir search;
+allow { nvram_daemon mtk_hal_nvramagent } mnt_vendor_file:dir search;
+allow { nvram_daemon mtk_hal_nvramagent } nvram_device:blk_file rw_file_perms;
+allow { nvram_daemon mtk_hal_nvramagent } nvdata_file:dir create_dir_perms;
+allow { nvram_daemon mtk_hal_nvramagent } nvdata_file:file create_file_perms;
+allow { nvram_daemon mtk_hal_nvramagent } self:global_capability_class_set { chown fowner fsetid };
+allow nvram_daemon kmsg_device:chr_file w_file_perms;
+set_prop(nvram_daemon, vendor_mtk_nvram_prop)
+get_prop(mtk_hal_nvramagent, vendor_mtk_radio_config_prop)
+hwbinder_use(mtk_hal_nvramagent)
+add_hwservice(mtk_hal_nvramagent, nvram_hwservice)
+
+# netdagent: data-path firewall rules through the platform's netutils
+# wrappers, plus an AT channel to the modem (/dev/radio/pttycmd4).
+hwbinder_use(netdagent)
+add_hwservice(netdagent, netdagent_hwservice)
+allow netdagent mtk_radio_device:dir search;
+allow netdagent mtk_radio_device:lnk_file read;
+allow netdagent devpts:chr_file rw_file_perms;
+allow netutils_wrapper netdagent:fd use;
+# The AT channel is not close-on-exec; the wrappers never use it.
+dontaudit netutils_wrapper devpts:chr_file rw_file_perms;
+
+# rild (mtkfusionrild).
+allow rild ccci_device:chr_file rw_file_perms;
+allow rild mtk_radio_device:dir search;
+allow rild mtk_radio_device:lnk_file read;
+allow rild devpts:chr_file rw_file_perms;
+vndbinder_use(rild)
+add_hwservice(rild, mtk_hal_rild_hwservice)
+set_prop(rild, vendor_mtk_ril_prop)
+set_prop(rild, vendor_mtk_radio_config_prop)
+set_prop(rild, vendor_mtk_ctl_modem_prop)
+# Only logged, to tell a modem reset after a kernel panic apart.
+dontaudit rild system_boot_reason_prop:file r_file_perms;
+
+# Values from the device's build.prop.
+set_prop(vendor_init, vendor_mtk_ril_prop)
+set_prop(vendor_init, vendor_mtk_radio_config_prop)

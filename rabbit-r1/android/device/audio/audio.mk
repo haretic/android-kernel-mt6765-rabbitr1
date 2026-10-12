@@ -21,6 +21,7 @@ PRODUCT_COPY_FILES += \
     $(R1_AUDIO_PATH)/ucm2/conf.d/mt6765-mt6357/rabbit-r1.conf:$(TARGET_COPY_OUT_VENDOR)/etc/alsa/ucm2/conf.d/mt6765-mt6357/rabbit-r1.conf \
     $(R1_AUDIO_PATH)/ucm2/Rabbit/r1/HiFi.conf:$(TARGET_COPY_OUT_VENDOR)/etc/alsa/ucm2/Rabbit/r1/HiFi.conf \
     $(R1_AUDIO_PATH)/init.r1.audio.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/init.r1.audio.rc \
+    $(R1_AUDIO_PATH)/init.r1.audio-restart.rc:$(TARGET_COPY_OUT_SYSTEM_EXT)/etc/init/init.r1.audio-restart.rc \
     device/rabbit/r1/prebuilt/firmware/aw87390_acf.bin:$(TARGET_COPY_OUT_VENDOR)/firmware/aw87390_acf.bin
 
 # Use the r1 card only, and give the amplifier module time to bind it.
