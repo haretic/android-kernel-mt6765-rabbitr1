@@ -907,6 +907,20 @@
 			reg = <0 0x11c10000 0 0x2000>;
 			num-lanes = <4>;
 			#phy-cells = <1>;
+			clocks = <&apmixed CLK_APMIXED_MIPIC0_26M>,
+				 <&apmixed CLK_APMIXED_MIPIC1_26M>;
+			status = "disabled";
+		};
+
+		/* CSI2A at 0x11c14000, CSI2B at 0x11c15000, D-PHY only */
+		mipi_csi2: mipi-csi2@11c14000 {
+			compatible = "mediatek,mt6765-csi-rx";
+			reg = <0 0x11c14000 0 0x2000>;
+			num-lanes = <4>;
+			phy-type = <PHY_TYPE_DPHY>;
+			#phy-cells = <0>;
+			clocks = <&apmixed CLK_APMIXED_MIPIC0_26M>,
+				 <&apmixed CLK_APMIXED_MIPIC1_26M>;
 			status = "disabled";
 		};
 
@@ -1184,15 +1198,16 @@
 		 */
 		seninf: seninf@1a040000 {
 			compatible = "mediatek,mt6765-seninf";
-			reg = <0 0x1a040000 0 0x4000>;
+			/* SENINF1-5 and their muxes: SENINF5 (CSI2) is at +0x4000. */
+			reg = <0 0x1a040000 0 0x8000>;
 			clocks = <&camsys CLK_CAM_SENINF>,
 				 <&topckgen CLK_TOP_SENINF_SEL>;
 			clock-names = "camsys", "top_mux";
 			assigned-clocks = <&topckgen CLK_TOP_SENINF_SEL>;
 			assigned-clock-parents = <&topckgen CLK_TOP_UNIVPLL1_D2>;
 			power-domains = <&spm MT6765_POWER_DOMAIN_CAM>;
-			phys = <&mipi_csi0 PHY_TYPE_DPHY>;
-			phy-names = "csi0";
+			phys = <&mipi_csi0 PHY_TYPE_DPHY>, <&mipi_csi2>;
+			phy-names = "csi0", "csi2";
 			status = "disabled";
 
 			ports {
