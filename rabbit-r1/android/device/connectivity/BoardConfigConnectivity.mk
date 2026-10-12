@@ -6,7 +6,7 @@
 #
 
 BOARD_VENDOR_SEPOLICY_DIRS += \
-    device/mainline/common/optional/connectivity/sepolicy
+    device/rabbit/r1/connectivity/sepolicy
 
 # Must match MTK_CONSYS_WIFI_POWER in connectivity.mk.
 MTK_CONSYS_WIFI_POWER ?= boot
