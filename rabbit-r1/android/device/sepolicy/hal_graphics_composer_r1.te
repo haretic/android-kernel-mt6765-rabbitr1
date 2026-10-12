@@ -2,3 +2,7 @@
 allow hal_graphics_composer_default vendor_sysfs_backlight:dir r_dir_perms;
 allow hal_graphics_composer_default vendor_sysfs_backlight:lnk_file read;
 allow hal_graphics_composer_default vendor_sysfs_backlight:file rw_file_perms;
+# drmfb sizes its hotplug uevent socket's receive buffer, and matches the
+# PowerVR device by its uevent while looking for the KMS card.
+allow hal_graphics_composer_default self:netlink_kobject_uevent_socket setopt;
+r_dir_file(hal_graphics_composer_default, sysfs_gpu)

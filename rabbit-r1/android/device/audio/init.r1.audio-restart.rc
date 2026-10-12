@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
+# audioserver.rc only restarts the HAL under its stock service names. Without
+# this the HAL keeps the dead audioserver's speaker stream open, and the new
+# audioserver comes up with no primary output. This lives on system_ext:
+# vendor_init may not read audioserver's service state.
+on property:init.svc.audioserver=restarting
+    restart vendor.audio-hal-aidl-mainline

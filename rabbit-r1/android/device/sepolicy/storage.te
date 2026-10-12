@@ -1,0 +1,9 @@
+# sysfs_r1_mmc covers the eMMC host's whole sysfs tree, including the block
+# devices the platform's storage daemons use there.
+# vold: coldboot "add" writes to every device's uevent.
+allow vold sysfs_r1_mmc:file w_file_perms;
+# init.rc: userdata's queue/discard_max_bytes.
+allow init sysfs_r1_mmc:file w_file_perms;
+
+# fsck checks the NV filesystems before they are mounted.
+allow fsck { nvdata_device nvcfg_block_device protect1_block_device protect2_block_device }:blk_file rw_file_perms;

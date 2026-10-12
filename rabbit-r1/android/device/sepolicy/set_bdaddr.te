@@ -1,0 +1,2 @@
+# set_bdaddr.sh leaves serialno.* unquoted; the shell globs it against /.
+dontaudit set_bdaddr rootfs:dir r_dir_perms;

@@ -10,3 +10,16 @@
 # Recovery-as-boot root files are also included in the system-as-root image.
 /first_stage_ramdisk u:object_r:rootfs:s0
 /first_stage_ramdisk/fstab\.r1 u:object_r:rootfs:s0
+
+# Partitions the platform uses, with their AOSP types (stock labels).
+/dev/block/by-name/userdata                                   u:object_r:userdata_block_device:s0
+/dev/block/by-name/md_udc                                     u:object_r:metadata_block_device:s0
+/dev/block/by-name/metadata                                   u:object_r:metadata_block_device:s0
+/dev/block/by-name/super                                      u:object_r:super_block_device:s0
+/dev/block/by-name/frp                                        u:object_r:frp_block_device:s0
+/dev/block/by-name/(boot|init_boot|vendor_boot)_[ab]          u:object_r:boot_block_device:s0
+# update_engine writes the non-super A/B partitions as boot_block_device.
+/dev/block/by-name/(dtbo|vbmeta(_system|_vendor)?)_[ab]       u:object_r:boot_block_device:s0
+
+# One True AWK, used by vendor scripts like set_bdaddr.sh.
+/vendor/bin/awk u:object_r:vendor_toolbox_exec:s0

@@ -1,0 +1,1 @@
+/(system_ext|system/system_ext)/bin/r1-logcat-kmsg\.sh u:object_r:r1_logcat_kmsg_exec:s0

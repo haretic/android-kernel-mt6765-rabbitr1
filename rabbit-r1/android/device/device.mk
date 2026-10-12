@@ -1,8 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 LOCAL_PATH := device/rabbit/r1
 
-# Keep these explicit: the common bring-up defaults include a simulated battery.
-TARGET_INITIAL_BRINGUP := true
 TARGET_HAS_BATTERY := true
 # inherit-product defers and sorts children; set the selector before common defaults.
 include device/rabbit/r1/health/product.mk
@@ -59,6 +57,9 @@ PRODUCT_PACKAGES += \
 # The logger validates expdb and bounds its mapping before loading pstore.
 PRODUCT_VENDOR_PROPERTIES += ro.vendor.r1.expdb.enabled=1
 
+# Factory reset protection data (stock value).
+PRODUCT_VENDOR_PROPERTIES += ro.frp.pst=/dev/block/by-name/frp
+
 # One online core: ueventd lags apexd's default 1 s wait for dm-verity links,
 # so boot APEX activation fails (and bpfloader with it) unless this waits longer.
 PRODUCT_VENDOR_PROPERTIES += \
@@ -96,8 +97,12 @@ PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/rootdir/fstab.r1:$(TARGET_COPY_OUT_ROOT)/first_stage_ramdisk/fstab.r1 \
     $(LOCAL_PATH)/rootdir/init.r1.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/init.r1.rc \
     $(LOCAL_PATH)/rootdir/ueventd.r1.rc:$(TARGET_COPY_OUT_VENDOR)/etc/ueventd.mt6765.rc \
-    $(LOCAL_PATH)/rootdir/init.mt6765.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/hw/init.mt6765.rc \
-    $(LOCAL_PATH)/rootdir/r1-logcat-kmsg.sh:$(TARGET_COPY_OUT_VENDOR)/bin/r1-logcat-kmsg.sh
+    $(LOCAL_PATH)/rootdir/init.mt6765.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/hw/init.mt6765.rc
+
+# Boot debugging aid; the script does nothing on non-debuggable builds.
+PRODUCT_COPY_FILES += \
+    $(LOCAL_PATH)/logging/r1-logcat-kmsg.sh:$(TARGET_COPY_OUT_SYSTEM_EXT)/bin/r1-logcat-kmsg.sh \
+    $(LOCAL_PATH)/logging/init.r1-logcat-kmsg.rc:$(TARGET_COPY_OUT_SYSTEM_EXT)/etc/init/init.r1-logcat-kmsg.rc
 
 # Match the physical panel. Revisit density after UI testing on the device.
 TARGET_SCREEN_WIDTH := 480
