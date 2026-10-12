@@ -84,6 +84,7 @@
 			enable-method = "psci";
 			capacity-dmips-mhz = <1024>;
 			clock-frequency = <2300000000>;
+			#cooling-cells = <2>;
 			i-cache-size = <32768>;
 			i-cache-line-size = <64>;
 			i-cache-sets = <256>;
@@ -100,6 +101,7 @@
 			enable-method = "psci";
 			capacity-dmips-mhz = <1024>;
 			clock-frequency = <2300000000>;
+			#cooling-cells = <2>;
 			i-cache-size = <32768>;
 			i-cache-line-size = <64>;
 			i-cache-sets = <256>;
@@ -116,6 +118,7 @@
 			enable-method = "psci";
 			capacity-dmips-mhz = <1024>;
 			clock-frequency = <2300000000>;
+			#cooling-cells = <2>;
 			i-cache-size = <32768>;
 			i-cache-line-size = <64>;
 			i-cache-sets = <256>;
@@ -132,6 +135,7 @@
 			enable-method = "psci";
 			capacity-dmips-mhz = <1024>;
 			clock-frequency = <2300000000>;
+			#cooling-cells = <2>;
 			i-cache-size = <32768>;
 			i-cache-line-size = <64>;
 			i-cache-sets = <256>;
@@ -148,6 +152,7 @@
 			enable-method = "psci";
 			capacity-dmips-mhz = <740>;
 			clock-frequency = <1800000000>;
+			#cooling-cells = <2>;
 			i-cache-size = <32768>;
 			i-cache-line-size = <64>;
 			i-cache-sets = <256>;
@@ -164,6 +169,7 @@
 			enable-method = "psci";
 			capacity-dmips-mhz = <740>;
 			clock-frequency = <1800000000>;
+			#cooling-cells = <2>;
 			i-cache-size = <32768>;
 			i-cache-line-size = <64>;
 			i-cache-sets = <256>;
@@ -180,6 +186,7 @@
 			enable-method = "psci";
 			capacity-dmips-mhz = <740>;
 			clock-frequency = <1800000000>;
+			#cooling-cells = <2>;
 			i-cache-size = <32768>;
 			i-cache-line-size = <64>;
 			i-cache-sets = <256>;
@@ -196,6 +203,7 @@
 			enable-method = "psci";
 			capacity-dmips-mhz = <740>;
 			clock-frequency = <1800000000>;
+			#cooling-cells = <2>;
 			i-cache-size = <32768>;
 			i-cache-line-size = <64>;
 			i-cache-sets = <256>;
@@ -271,6 +279,129 @@
 		compatible = "arm,armv8-pmuv3";
 		interrupt-parent = <&gic>;
 		interrupts = <GIC_PPI 7 IRQ_TYPE_LEVEL_LOW>;
+	};
+
+	/*
+	 * Trip points follow the stock R1 thermal policy. Its CPU zone, the
+	 * hottest of the five sensors, resets the SoC at 117 C, its thermal
+	 * manager (clctm in vendor/etc/.tp/thermal.conf, MT6765_Q) holds the
+	 * junction at 85 C at most, and its kernel defaults (tzcpu_initcfg.h)
+	 * limit the CPUs at 85 C and 95 C. Here each cluster is throttled from
+	 * 85 C at its own sensor and both clusters from 95 C at the hottest
+	 * sensor. The system shuts down at 110 C, as an orderly shutdown takes
+	 * a while and nothing programs the controller's 117 C hardware reset.
+	 */
+	thermal-zones {
+		soc_thermal: soc-thermal {
+			polling-delay-passive = <200>;
+			polling-delay = <500>;
+			thermal-sensors = <&thermal 0>;
+
+			trips {
+				soc_hot: trip-hot {
+					temperature = <95000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+
+				soc_crit: trip-crit {
+					temperature = <110000>;
+					hysteresis = <2000>;
+					type = "critical";
+				};
+			};
+
+			cooling-maps {
+				map0 {
+					trip = <&soc_hot>;
+					cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu1 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu2 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu3 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu5 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu6 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu7 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				};
+			};
+		};
+
+		/* TS1, at cores 0-3 */
+		cpu_big_thermal: cpu-big-thermal {
+			polling-delay-passive = <200>;
+			polling-delay = <500>;
+			thermal-sensors = <&thermal 1>;
+
+			trips {
+				cpu_big_alert: trip-alert {
+					temperature = <85000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+
+				cpu_big_crit: trip-crit {
+					temperature = <110000>;
+					hysteresis = <2000>;
+					type = "critical";
+				};
+			};
+
+			cooling-maps {
+				map0 {
+					trip = <&cpu_big_alert>;
+					cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu1 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu2 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu3 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				};
+			};
+		};
+
+		/* TS2, at cores 4-7 */
+		cpu_little_thermal: cpu-little-thermal {
+			polling-delay-passive = <200>;
+			polling-delay = <500>;
+			thermal-sensors = <&thermal 2>;
+
+			trips {
+				cpu_little_alert: trip-alert {
+					temperature = <85000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+
+				cpu_little_crit: trip-crit {
+					temperature = <110000>;
+					hysteresis = <2000>;
+					type = "critical";
+				};
+			};
+
+			cooling-maps {
+				map0 {
+					trip = <&cpu_little_alert>;
+					cooling-device = <&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu5 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu6 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu7 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				};
+			};
+		};
+
+		/* TS3, at the GPU, which has no cooling device yet */
+		gpu_thermal: gpu-thermal {
+			polling-delay-passive = <200>;
+			polling-delay = <500>;
+			thermal-sensors = <&thermal 3>;
+
+			trips {
+				gpu_crit: trip-crit {
+					temperature = <110000>;
+					hysteresis = <2000>;
+					type = "critical";
+				};
+			};
+		};
 	};
 
 	soc {
@@ -690,6 +821,21 @@
 			status = "disabled";
 		};
 
+		/* The EEM (SVS) registers follow at 0x1100bc00 */
+		thermal: thermal-sensor@1100b000 {
+			compatible = "mediatek,mt6765-thermal";
+			reg = <0 0x1100b000 0 0xc00>;
+			interrupts = <GIC_SPI 78 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&infracfg CLK_IFR_THERM>,
+				 <&infracfg CLK_IFR_AUXADC>;
+			clock-names = "therm", "auxadc";
+			mediatek,auxadc = <&auxadc>;
+			mediatek,apmixedsys = <&apmixed>;
+			nvmem-cells = <&thermal_calibration>;
+			nvmem-cell-names = "calibration-data";
+			#thermal-sensor-cells = <1>;
+		};
+
 		i2c3: i2c@1100f000 {
 			compatible = "mediatek,mt6765-i2c";
 			mediatek,secure-id = <3>;
@@ -936,6 +1082,10 @@
 
 			socinfo-data2@60 {
 				reg = <0x060 0x4>;
+			};
+
+			thermal_calibration: calib@190 {
+				reg = <0x190 0xc>;
 			};
 		};
 
