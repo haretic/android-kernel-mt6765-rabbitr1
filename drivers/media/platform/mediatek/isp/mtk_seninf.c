@@ -842,6 +842,10 @@ static int seninf_enable_streams(struct v4l2_subdev *sd,
 	}
 
 	input = &priv->inputs[sink_pad];
+	if (!input->base) {
+		dev_err(priv->dev, "No sensor connected to sink pad %u\n", sink_pad);
+		return -ENOLINK;
+	}
 	mux = &priv->muxes[pad - priv->conf->nb_inputs];
 
 	ret = pm_runtime_resume_and_get(priv->dev);
@@ -943,26 +947,39 @@ static int seninf_init_state(struct v4l2_subdev *sd,
 	struct v4l2_subdev_route routes[SENINF_MAX_NUM_OUTPUTS] = { };
 	struct v4l2_subdev_krouting routing = {
 		.routes = routes,
-		.num_routes = priv->conf->nb_outputs,
 	};
-	unsigned int i;
+	unsigned int i, n = 0;
 
 	/*
-	 * Initialize one route for supported source pads.
-	 * It is a single route from the first sink pad to the source pad,
-	 * while on SENINF 5.0 the routing table will map sink pads to source
-	 * pads connected to CAMSV 1:1 (skipping the first two source pads
-	 * connected to the CAM instances).
+	 * Route the sink pads that have a sensor connected, in port order, to
+	 * the source pads 1:1, so that the first connected input feeds the
+	 * first output. This runs before the endpoints are parsed, so ask the
+	 * firmware graph directly. Without any endpoint, fall back to the
+	 * identity mapping.
 	 */
-	for (i = 0; i < routing.num_routes; i++) {
-		struct v4l2_subdev_route *route = &routes[i];
+	for (i = 0; i < priv->conf->nb_inputs && n < priv->conf->nb_outputs; i++) {
+		struct fwnode_handle *ep;
 
-		route->sink_pad = i;
-		route->sink_stream = 0;
-		route->source_pad = priv->conf->nb_inputs + i;
-		route->source_stream = 0;
-		route->flags = V4L2_SUBDEV_ROUTE_FL_ACTIVE;
+		ep = fwnode_graph_get_endpoint_by_id(dev_fwnode(priv->dev), i, 0, 0);
+		if (!ep)
+			continue;
+		fwnode_handle_put(ep);
+
+		routes[n].sink_pad = i;
+		routes[n].source_pad = priv->conf->nb_inputs + n;
+		n++;
 	}
+
+	if (!n) {
+		for (n = 0; n < priv->conf->nb_outputs; n++) {
+			routes[n].sink_pad = n;
+			routes[n].source_pad = priv->conf->nb_inputs + n;
+		}
+	}
+
+	for (i = 0; i < n; i++)
+		routes[i].flags = V4L2_SUBDEV_ROUTE_FL_ACTIVE;
+	routing.num_routes = n;
 
 	return __seninf_set_routing(sd, state, &routing);
 }
