@@ -33,10 +33,12 @@ static const struct scpsys_domain_data scpsys_domain_data_mt6765[] = {
 		.ext_buck_iso_mask = BIT(0),
 		/*
 		 * Off until the modem driver boots the modem, instead of being
-		 * powered at probe and powered off again as unused.
+		 * powered at probe and powered off again as unused. A running
+		 * modem stays powered through system sleep: the modem driver
+		 * keeps the domain on by marking its device as awake path.
 		 */
 		.caps = MTK_SCPD_MODEM_LEGACY_PWRSEQ | MTK_SCPD_EXT_SRAM_ISO |
-			MTK_SCPD_KEEP_DEFAULT_OFF,
+			MTK_SCPD_KEEP_DEFAULT_OFF | MTK_SCPD_ACTIVE_WAKEUP,
 		.bp_cfg = {
 			/* PERI2MD, then the MD bus masters and MD2PERI */
 			BUS_PROT_WR_IGN(INFRA, BIT(7), 0x2a0, 0x2a4, 0x228),
