@@ -33,6 +33,8 @@
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/of.h>
+#include <linux/of_address.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
@@ -58,7 +60,6 @@ static_assert(sizeof(struct vcodec_frame_info32) == 28);
 #define GCON_VCODEC_SEL			0x20
 #define   VCODEC_SEL_VENC		0x1
 #define   VCODEC_SEL_VDEC		0x2
-#define   VCODEC_SEL_JPGENC		0x4
 #define GCON_VENC_DEBLOCK		0x24
 
 /* VDEC: VLD at the base, MISC 0x5000 above it. */
@@ -104,7 +105,6 @@ static_assert(sizeof(struct vcodec_frame_info32) == 28);
 enum vcodec_engine {
 	VCODEC_VDEC,
 	VCODEC_VENC,
-	VCODEC_JPGENC,
 };
 
 struct vcodec_client {
@@ -120,6 +120,7 @@ struct vcodec_dev {
 	void __iomem *vdec;
 	struct resource *venc_res;
 	struct resource *vdec_res;
+	struct resource gcon_res;
 	struct regmap *gcon;
 	struct clk *venc_clk;
 	struct clk *vdec_clk;
@@ -155,8 +156,8 @@ static int vcodec_engine_of(u32 driver_type, enum vcodec_engine *engine)
 		*engine = VCODEC_VENC;
 		return 0;
 	case VAL_DRIVER_TYPE_JPEG_ENC:
-		*engine = VCODEC_JPGENC;
-		return 0;
+		/* The JPEG encoder has no driver here to use the core with. */
+		return -EOPNOTSUPP;
 	default:
 		return -EINVAL;
 	}
@@ -223,11 +224,7 @@ static int vcodec_gcon_set(struct vcodec_dev *vdev, unsigned int reg, u32 val)
 
 static int vcodec_select(struct vcodec_dev *vdev, enum vcodec_engine engine)
 {
-	static const u32 sel[] = {
-		[VCODEC_VDEC] = VCODEC_SEL_VDEC,
-		[VCODEC_VENC] = VCODEC_SEL_VENC,
-		[VCODEC_JPGENC] = VCODEC_SEL_JPGENC,
-	};
+	u32 sel = engine == VCODEC_VDEC ? VCODEC_SEL_VDEC : VCODEC_SEL_VENC;
 	u32 cur;
 	int ret;
 
@@ -243,9 +240,8 @@ static int vcodec_select(struct vcodec_dev *vdev, enum vcodec_engine engine)
 	if (ret)
 		return ret;
 	if (cur)
-		dev_warn(vdev->dev, "VCODEC_SEL is %#x, not idle\n", cur);
-	else
-		ret = vcodec_gcon_set(vdev, GCON_VCODEC_SEL, sel[engine]);
+		dev_warn(vdev->dev, "VCODEC_SEL was left at %#x\n", cur);
+	ret = vcodec_gcon_set(vdev, GCON_VCODEC_SEL, sel);
 	if (ret)
 		return ret;
 
@@ -365,22 +361,13 @@ static void vcodec_irq_reset(struct vcodec_dev *vdev)
 
 static int vcodec_irq_of(struct vcodec_dev *vdev, enum vcodec_engine engine)
 {
-	switch (engine) {
-	case VCODEC_VDEC:
-		return vdev->vdec_irq;
-	case VCODEC_VENC:
-		return vdev->venc_irq;
-	default:
-		/* The JPEG encoder belongs to another driver. */
-		return 0;
-	}
+	return engine == VCODEC_VDEC ? vdev->vdec_irq : vdev->venc_irq;
 }
 
 /* Called with vdev->lock held and the core free. */
 static int vcodec_take(struct vcodec_dev *vdev, struct vcodec_client *client,
 		       u64 handle, u32 driver_type, enum vcodec_engine engine)
 {
-	int irq = vcodec_irq_of(vdev, engine);
 	int ret;
 
 	ret = vcodec_power_on(vdev, engine);
@@ -395,8 +382,7 @@ static int vcodec_take(struct vcodec_dev *vdev, struct vcodec_client *client,
 	vdev->owner_type = driver_type;
 	vdev->owner_engine = engine;
 
-	if (irq)
-		enable_irq(irq);
+	enable_irq(vcodec_irq_of(vdev, engine));
 	return 0;
 }
 
@@ -404,17 +390,15 @@ static int vcodec_take(struct vcodec_dev *vdev, struct vcodec_client *client,
 static void vcodec_give(struct vcodec_dev *vdev, bool abandoned)
 {
 	enum vcodec_engine engine = vdev->owner_engine;
-	int irq = vcodec_irq_of(vdev, engine);
 
-	if (irq)
-		disable_irq(irq);
+	disable_irq(vcodec_irq_of(vdev, engine));
 
 	if (abandoned) {
 		dev_warn(vdev->dev, "codec instance closed holding the core (type %u)\n",
 			 vdev->owner_type);
 		if (engine == VCODEC_VDEC)
 			vcodec_vdec_break(vdev);
-		else if (engine == VCODEC_VENC)
+		else
 			vcodec_venc_break(vdev);
 	}
 
@@ -439,14 +423,17 @@ static int vcodec_lock_hw(struct vcodec_client *client,
 {
 	struct vcodec_dev *vdev = client->vdev;
 	enum vcodec_engine engine;
-	unsigned long deadline;
+	unsigned long deadline, now;
 	long left;
 	int ret;
 
-	if (!req->handle || vcodec_engine_of(req->driver_type, &engine)) {
-		dev_dbg(vdev->dev, "LOCKHW: bad handle or type %u\n",
-			req->driver_type);
+	if (!req->handle)
 		return -EINVAL;
+	ret = vcodec_engine_of(req->driver_type, &engine);
+	if (ret) {
+		dev_dbg(vdev->dev, "LOCKHW: no lock for type %u\n",
+			req->driver_type);
+		return ret;
 	}
 	/* Secure instances need the TEE half of the stock stack. */
 	if (req->secure_inst)
@@ -479,11 +466,12 @@ static int vcodec_lock_hw(struct vcodec_client *client,
 
 		if (!req->timeout_ms)
 			return -EBUSY;
-		if (time_after_eq(jiffies, deadline))
+		now = jiffies;
+		if (time_after_eq(now, deadline))
 			return -ETIMEDOUT;
 		left = wait_event_interruptible_timeout(vdev->lock_wq,
 							!READ_ONCE(vdev->owner),
-							deadline - jiffies);
+							deadline - now);
 		if (left < 0)
 			return left;
 	}
@@ -512,9 +500,11 @@ static int vcodec_wait_isr(struct vcodec_client *client, u64 handle,
 	enum vcodec_engine engine;
 	bool *done;
 	long left;
+	int ret;
 
-	if (vcodec_engine_of(driver_type, &engine) || engine == VCODEC_JPGENC)
-		return -EINVAL;
+	ret = vcodec_engine_of(driver_type, &engine);
+	if (ret)
+		return ret;
 
 	mutex_lock(&vdev->lock);
 	if (!vcodec_is_owner(vdev, client, handle)) {
@@ -728,14 +718,19 @@ static long vcodec_compat_ioctl(struct file *filp, unsigned int cmd,
  * File operations
  */
 
-/* The blobs map the VENC and VDEC register windows by physical address. */
+/*
+ * The blobs map register windows by physical address: the encoder its VENC
+ * page, the decoder the VDEC blocks and the first page of vcodecsys.
+ */
 static int vcodec_mmap(struct file *filp, struct vm_area_struct *vma)
 {
 	struct vcodec_client *client = filp->private_data;
 	struct vcodec_dev *vdev = client->vdev;
 	phys_addr_t start = (phys_addr_t)vma->vm_pgoff << PAGE_SHIFT;
 	unsigned long size = vma->vm_end - vma->vm_start;
-	struct resource *windows[] = { vdev->venc_res, vdev->vdec_res };
+	struct resource *windows[] = {
+		vdev->venc_res, vdev->vdec_res, &vdev->gcon_res,
+	};
 
 	for (int i = 0; i < ARRAY_SIZE(windows); i++) {
 		struct resource *res = windows[i];
@@ -815,6 +810,24 @@ static void vcodec_pm_disable(void *data)
 	pm_runtime_disable(dev);
 }
 
+static int vcodec_get_gcon_window(struct device *dev, struct resource *res)
+{
+	struct device_node *np;
+	int ret;
+
+	np = of_parse_phandle(dev->of_node, "mediatek,vcodecsys", 0);
+	if (!np)
+		return -ENODEV;
+	ret = of_address_to_resource(np, 0, res);
+	of_node_put(np);
+	if (ret)
+		return ret;
+
+	/* The decoder only needs the GCON registers at its start. */
+	res->end = min(res->end, res->start + PAGE_SIZE - 1);
+	return 0;
+}
+
 static int vcodec_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -844,6 +857,9 @@ static int vcodec_probe(struct platform_device *pdev)
 	if (IS_ERR(vdev->gcon))
 		return dev_err_probe(dev, PTR_ERR(vdev->gcon),
 				     "no vcodecsys\n");
+	ret = vcodec_get_gcon_window(dev, &vdev->gcon_res);
+	if (ret)
+		return dev_err_probe(dev, ret, "no vcodecsys window\n");
 
 	vdev->venc_clk = devm_clk_get(dev, "venc");
 	if (IS_ERR(vdev->venc_clk))
