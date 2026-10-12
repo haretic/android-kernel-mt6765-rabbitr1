@@ -909,8 +909,13 @@ static int seninf_disable_streams(struct v4l2_subdev *sd,
 			source->entity.name, ret);
 
 	mtk_seninf_stop(input);
-	pm_runtime_mark_last_busy(priv->dev);
-	pm_runtime_put_autosuspend(priv->dev);
+
+	/*
+	 * Suspend now, so that the CAM power domain can power down when the
+	 * video device stops streaming: that resets the CSI-2 receiver for
+	 * the next stream.
+	 */
+	pm_runtime_put_sync(priv->dev);
 	return ret;
 }
 

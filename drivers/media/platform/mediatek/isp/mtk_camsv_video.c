@@ -482,8 +482,13 @@ static void mtk_cam_vb2_stop_streaming(struct vb2_queue *vq)
 	if (cam->conf->ops->unprepare)
 		cam->conf->ops->unprepare(cam);
 
-	pm_runtime_mark_last_busy(cam->dev);
-	pm_runtime_put_autosuspend(cam->dev);
+	/*
+	 * Power the CAM domain down now rather than after the autosuspend
+	 * delay. Only powering it up again resets the SENINF CSI-2 receiver
+	 * state: streaming again while it stayed on, as when the stream is
+	 * restarted right away, gets no frames.
+	 */
+	pm_runtime_put_sync_suspend(cam->dev);
 }
 
 static const struct vb2_ops mtk_cam_vb2_ops = {
