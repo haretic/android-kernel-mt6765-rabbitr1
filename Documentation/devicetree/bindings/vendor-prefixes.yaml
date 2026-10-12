@@ -1383,6 +1383,8 @@ patternProperties:
     description: Realtek Semiconductor Corp.
   "^relfor,.*":
     description: Relfor Labs Pvt. Ltd.
+  "^relmon,.*":
+    description: Hangzhou Ruimeng Technology Co., Ltd. (Relmon)
   "^remarkable,.*":
     description: reMarkable AS
   "^renesas,.*":
