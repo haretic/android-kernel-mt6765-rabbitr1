@@ -50,7 +50,13 @@
 ********************************************************************************
 */
 
-#define DEFAULT_PATCH_FRAG_SIZE (1000)
+/*
+ * The stock value is 1000. With 1000-byte fragments the BTIF Tx vFIFO
+ * overruns during the PDA patch download on MT676x ("MTK-BTIF: wait for
+ * tx allowed timeout", then "get hwcode fail(-3)"); 256 is what the
+ * MT6768 mainline and postmarketOS ports settled on.
+ */
+#define DEFAULT_PATCH_FRAG_SIZE (256)
 #define WMT_PATCH_FRAG_1ST (0x1)
 #define WMT_PATCH_FRAG_MID (0x2)
 #define WMT_PATCH_FRAG_LAST (0x3)
