@@ -26,6 +26,10 @@ properties:
   reg:
     maxItems: 1
 
+  clocks:
+    description: MIPI RX reference clocks (MT6765 CSI0 and CSI1 26 MHz gates).
+    maxItems: 2
+
   num-lanes:
     enum: [2, 3, 4]
 
