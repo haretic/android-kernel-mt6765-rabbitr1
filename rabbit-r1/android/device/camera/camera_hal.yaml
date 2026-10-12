@@ -7,7 +7,7 @@
 cameras:
   "/base/soc/i2c@11009000/camera@20":
     location: back
-    # PLACEHOLDER: the mounting rotation of the Hi-846 is not measured yet.
-    # Capture a frame of a known scene and set the clockwise rotation (0,
-    # 90, 180 or 270) that makes it upright on the display.
-    rotation: 0
+    # Frames need a 270 degree clockwise rotation to be upright. The
+    # libcamera Rotation property from the device tree (rotation = <90>,
+    # counter-clockwise) takes precedence; keep the two in agreement.
+    rotation: 270

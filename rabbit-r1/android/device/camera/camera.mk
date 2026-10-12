@@ -29,6 +29,7 @@ PRODUCT_VENDOR_PROPERTIES += \
 PRODUCT_COPY_FILES += \
     $(R1_CAMERA_PATH)/camera_hal.yaml:$(TARGET_COPY_OUT_VENDOR)/etc/libcamera/camera_hal.yaml \
     $(R1_CAMERA_PATH)/configuration.yaml:$(TARGET_COPY_OUT_VENDOR)/etc/libcamera/configuration.yaml \
+    $(R1_CAMERA_PATH)/hi846.yaml:$(TARGET_COPY_OUT_VENDOR)/etc/libcamera/ipa/simple/hi846.yaml \
     frameworks/native/data/etc/android.hardware.camera.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.camera.xml
 
 # libcamera test application: cam -l, cam -c1 --capture=5 --file=...
