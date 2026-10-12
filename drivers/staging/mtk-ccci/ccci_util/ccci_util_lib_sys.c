@@ -254,11 +254,6 @@ int __attribute__((weak)) ccci_get_plat_ft_inf(char buf[], int size)
 
 static ssize_t ccci_ft_inf_show(char *buf)
 {
-	if (ccci_get_plat_ft_inf) {
-		CCCI_UTIL_INF_MSG("using platform setting\n");
-		return (ssize_t)ccci_get_plat_ft_inf(buf, 4095);
-	}
-	/* Enter here means using default setting */
 	return (ssize_t)ccci_get_plat_ft_inf(buf, 4095);
 }
 
@@ -396,11 +391,12 @@ static struct attribute *ccci_default_attrs[] = {
 	&ccci_attr_pincfg.attr,
 	NULL
 };
+ATTRIBUTE_GROUPS(ccci_default);
 
 static struct kobj_type ccci_ktype = {
 	.release = ccci_obj_release,
 	.sysfs_ops = &ccci_sysfs_ops,
-	.default_attrs = ccci_default_attrs
+	.default_groups = ccci_default_groups
 };
 
 int ccci_sysfs_add_modem(int md_id, void *kobj, void *ktype,

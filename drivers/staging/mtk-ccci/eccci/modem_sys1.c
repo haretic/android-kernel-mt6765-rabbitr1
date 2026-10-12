@@ -5,6 +5,7 @@
 
 #include <linux/list.h>
 #include <linux/device.h>
+#include <linux/dma-mapping.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/err.h>
@@ -41,6 +42,7 @@
 #include "ccci_debug.h"
 #include "hif/ccci_hif_cldma.h"
 #include "hif/ccci_hif_ccif.h"
+#include "mtk_ccci_main.h"
 
 #define TAG "mcd"
 
@@ -1202,7 +1204,7 @@ static ssize_t md_cd_parameter_show(struct ccci_modem *md, char *buf)
 		return -1;
 	}
 	count += ret;
-	ret = snprintf(buf + count, 128, "BD_NUM=%ld\n", MAX_BD_NUM);
+	ret = snprintf(buf + count, 128, "BD_NUM=%d\n", MAX_BD_NUM);
 	if (ret < 0 || ret >= 128) {
 		CCCI_ERROR_LOG(md->index, TAG,
 			"%s-%d:snprintf fail,ret=%d\n", __func__, __LINE__, ret);
@@ -1272,7 +1274,7 @@ int __weak ccci_modem_plt_suspend(struct ccci_modem *md)
 	return 0;
 }
 
-int ccci_modem_syssuspend(void)
+int ccci_modem_syssuspend(void *data)
 {
 	struct ccci_modem *md;
 
@@ -1292,7 +1294,7 @@ void __weak ccci_modem_plt_resume(struct ccci_modem *md)
 			__func__, md->hif_flag);
 }
 
-void ccci_modem_sysresume(void)
+void ccci_modem_sysresume(void *data)
 {
 	struct ccci_modem *md;
 
@@ -1309,7 +1311,10 @@ static struct syscore_ops ccci_modem_sysops = {
 	.resume = ccci_modem_sysresume,
 };
 
-#define DMA_BIT_MASK(n) (((n) == 64) ? ~0ULL : ((1ULL<<(n))-1))
+static struct syscore ccci_modem_syscore = {
+	.ops = &ccci_modem_sysops,
+};
+
 static u64 cldma_dmamask = DMA_BIT_MASK(36);
 static int ccci_modem_probe(struct platform_device *plat_dev)
 {
@@ -1350,15 +1355,33 @@ static int ccci_modem_probe(struct platform_device *plat_dev)
 	md->hw_info = md_hw;
 
 	md->plat_dev = plat_dev;
-	md->plat_dev->dev.dma_mask = &cldma_dmamask;
-	md->plat_dev->dev.coherent_dma_mask = cldma_dmamask;
+	dma_set_mask_and_coherent(&plat_dev->dev, cldma_dmamask);
 	md->ops = &md_cd_ops;
 	CCCI_INIT_LOG(md_id, TAG,
 		"%s:md=%p,md->private_data=%p\n", __func__,
 		md, md->private_data);
 
+	/*
+	 * The stock DT had separate CCIF and CLDMA nodes with their own
+	 * drivers; here they share the modem node and probe with it.
+	 */
+	ret = ccci_ccif_hif_init(plat_dev, CCIF_HIF_ID, md_id);
+	if (ret < 0) {
+		CCCI_ERROR_LOG(md_id, TAG, "CCIF init fail %d\n", ret);
+		return ret;
+	}
+	ret = ccci_cldma_hif_init(plat_dev, CLDMA_HIF_ID, md_id);
+	if (ret < 0) {
+		CCCI_ERROR_LOG(md_id, TAG, "CLDMA init fail %d\n", ret);
+		return ret;
+	}
+
 	/* register modem */
-	ccci_md_register(md);
+	ret = ccci_md_register(md);
+	if (ret < 0) {
+		CCCI_ERROR_LOG(md_id, TAG, "register modem fail %d\n", ret);
+		return ret;
+	}
 
 	/* init modem private data */
 	md_info = (struct md_sys1_info *)md->private_data;
@@ -1420,7 +1443,7 @@ static int ccci_modem_probe(struct platform_device *plat_dev)
 //	ccci_hif_init(md->index, md->hif_flag);
 
 	/* register SYS CORE suspend resume call back */
-	register_syscore_ops(&ccci_modem_sysops);
+	register_syscore(&ccci_modem_syscore);
 
 	/* add sysfs entries */
 	md_cd_sysfs_init(md);
@@ -1457,7 +1480,7 @@ static const struct of_device_id ccci_modem_of_ids[] = {
 };
 #else */
 static const struct of_device_id ccci_modem_of_ids[] = {
-	{.compatible = "mediatek,mddriver",},
+	{.compatible = "mediatek,mt6765-ccci",},
 	{}
 };
 //#endif
@@ -1482,7 +1505,7 @@ static struct platform_driver ccci_modem_driver = {
 	.resume = ccci_modem_resume,
 };
 
-static int __init modem_cd_init(void)
+int __init modem_cd_init(void)
 {
 	int ret;
 
@@ -1496,9 +1519,4 @@ static int __init modem_cd_init(void)
 	return 0;
 }
 
-module_init(modem_cd_init);
-
-MODULE_AUTHOR("CCCI");
-MODULE_DESCRIPTION("CCCI modem driver v0.1");
-MODULE_LICENSE("GPL");
 

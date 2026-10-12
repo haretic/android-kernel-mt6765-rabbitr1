@@ -21,7 +21,6 @@
 #include <linux/of.h>
 #include <linux/of_fdt.h>
 #include <linux/of_irq.h>
-#include <linux/of_gpio.h>
 #include <linux/of_address.h>
 #include "ccci_config.h"
 #include "mt-plat/mtk_ccci_common.h"

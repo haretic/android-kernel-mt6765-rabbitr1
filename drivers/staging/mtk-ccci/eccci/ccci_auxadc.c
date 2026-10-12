@@ -14,6 +14,7 @@
 #include "ccci_common_config.h"
 #include "ccci_core.h"
 #include "ccci_debug.h"
+#include "mtk_ccci_main.h"
 
 #define TAG "ccci_adc"
 
@@ -96,7 +97,7 @@ static struct platform_driver ccci_auxadc_driver = {
 	.probe = get_auxadc_probe,
 };
 
-static int __init ccci_auxadc_init(void)
+int __init ccci_auxadc_init(void)
 {
 	int ret;
 
@@ -108,8 +109,3 @@ static int __init ccci_auxadc_init(void)
 	return 0;
 }
 
-module_init(ccci_auxadc_init);
-
-MODULE_AUTHOR("ccci");
-MODULE_DESCRIPTION("ccci auxadc driver");
-MODULE_LICENSE("GPL");

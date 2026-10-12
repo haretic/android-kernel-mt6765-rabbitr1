@@ -264,11 +264,11 @@ static int ccci_log_close(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static const struct file_operations ccci_log_fops = {
-	.read = ccci_log_read,
-	.open = ccci_log_open,
-	.release = ccci_log_close,
-	.poll = ccci_log_poll,
+static const struct proc_ops ccci_log_fops = {
+	.proc_read = ccci_log_read,
+	.proc_open = ccci_log_open,
+	.proc_release = ccci_log_close,
+	.proc_poll = ccci_log_poll,
 };
 
 
@@ -442,7 +442,7 @@ int ccci_dump_write(int md_id, int buf_type,
 	int buf_id;
 	int can_be_write;
 	int actual_write;
-	struct timeval savetv = {0};
+	struct __kernel_old_timeval savetv = {0};
 	struct rtc_time now_time;
 	struct ccci_dump_buffer *ptr = NULL;
 
@@ -488,12 +488,12 @@ int ccci_dump_write(int md_id, int buf_type,
 		rem_nsec = do_div(ts_nsec, 1000000000);
 
 		if (flag & CCCI_DUMP_ANDROID_TIME_FLAG) {
-			do_gettimeofday(&savetv);
+			ccci_gettimeofday(&savetv);
 			savetv.tv_sec -= sys_tz.tz_minuteswest * 60;
-			rtc_time_to_tm(savetv.tv_sec, &now_time);
+			rtc_time64_to_tm(savetv.tv_sec, &now_time);
 
 			write_len = scnprintf(temp_log, CCCI_LOG_MAX_WRITE,
-					     "[%04ld-%02d-%02d %02d:%02d:%02d.%03d]",
+					     "[%04d-%02d-%02d %02d:%02d:%02d.%03d]",
 					     now_time.tm_year + 1900,
 					     now_time.tm_mon + 1,
 					     now_time.tm_mday,
@@ -866,12 +866,12 @@ static int ccci_dump_fops_close(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static const struct file_operations ccci_dump_fops = {
-	.read = ccci_dump_fops_read,
-	.write = ccci_dump_fops_write,
-	.open = ccci_dump_fops_open,
-	.release = ccci_dump_fops_close,
-	.poll = ccci_dump_fops_poll,
+static const struct proc_ops ccci_dump_fops = {
+	.proc_read = ccci_dump_fops_read,
+	.proc_write = ccci_dump_fops_write,
+	.proc_open = ccci_dump_fops_open,
+	.proc_release = ccci_dump_fops_close,
+	.proc_poll = ccci_dump_fops_poll,
 };
 
 static void ccci_dump_buffer_init(void)
@@ -1120,8 +1120,8 @@ int ccci_event_log(const char *fmt, ...)
 	unsigned int wr_pose;
 	int can_be_write;
 	struct rtc_time tm;
-	struct timeval tv = { 0 };
-	struct timeval tv_android = { 0 };
+	struct __kernel_old_timeval tv = { 0 };
+	struct __kernel_old_timeval tv_android = { 0 };
 	struct rtc_time tm_android;
 
 	if (ccci_event_buffer.buffer == NULL)
@@ -1140,11 +1140,11 @@ int ccci_event_log(const char *fmt, ...)
 	preempt_enable();
 
 	/* prepare andorid time info */
-	do_gettimeofday(&tv);
+	ccci_gettimeofday(&tv);
 	tv_android = tv;
-	rtc_time_to_tm(tv.tv_sec, &tm);
+	rtc_time64_to_tm(tv.tv_sec, &tm);
 	tv_android.tv_sec -= sys_tz.tz_minuteswest * 60;
-	rtc_time_to_tm(tv_android.tv_sec, &tm_android);
+	rtc_time64_to_tm(tv_android.tv_sec, &tm_android);
 
 	write_len = scnprintf(temp_log, CCCI_LOG_MAX_WRITE,
 			"%d%02d%02d-%02d:%02d:%02d.%03d [%5lu.%06lu]%c(%x)[%d:%s]",

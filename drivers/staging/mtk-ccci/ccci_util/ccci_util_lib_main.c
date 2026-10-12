@@ -27,8 +27,9 @@
 #include <linux/atomic.h>
 
 #include "ccci_util_lib_main.h"
+#include "mtk_ccci_main.h"
 
-static int __init ccci_util_init(void)
+int __init ccci_util_init(void)
 {
 	ccci_log_init();
 	ccci_util_fo_init();
@@ -41,6 +42,3 @@ static int __init ccci_util_init(void)
 	return 0;
 }
 
-subsys_initcall(ccci_util_init);
-MODULE_DESCRIPTION("MTK CCCI UTIL Driver");
-MODULE_LICENSE("GPL");

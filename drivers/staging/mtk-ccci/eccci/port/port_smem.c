@@ -259,9 +259,9 @@ static void collect_ccb_info(int md_id, struct ccci_smem_port *smem_port)
 			smem_port->wakeup = 0;
 			smem_port->type = TYPE_CCB;
 			init_waitqueue_head(&smem_port->rx_wq);
-			hrtimer_init(&smem_port->notify_timer,
-			CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-			smem_port->notify_timer.function = smem_tx_timer_func;
+			hrtimer_setup(&smem_port->notify_timer,
+				smem_tx_timer_func, CLOCK_MONOTONIC,
+				HRTIMER_MODE_REL);
 			break;
 		}
 	}
@@ -741,7 +741,7 @@ static int smem_dev_mmap(struct file *fp, struct vm_area_struct *vma)
 		pfn = ccb_ctl->base_ap_view_phy;
 		pfn >>= PAGE_SHIFT;
 		/* ensure that memory does not get swapped to disk */
-		vma->vm_flags |= VM_IO;
+		vm_flags_set(vma, VM_IO);
 		/* ensure non-cacheable */
 		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 		ret = remap_pfn_range(vma, vma->vm_start, pfn,
@@ -784,7 +784,7 @@ static int smem_dev_mmap(struct file *fp, struct vm_area_struct *vma)
 		pfn = smem_port->addr_phy;
 		pfn >>= PAGE_SHIFT;
 		/* ensure that memory does not get swapped to disk */
-		vma->vm_flags |= VM_IO;
+		vm_flags_set(vma, VM_IO);
 		/* ensure non-cacheable */
 		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 		ret = remap_pfn_range(vma, vma->vm_start, pfn, len,

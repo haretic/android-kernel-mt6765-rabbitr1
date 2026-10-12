@@ -390,9 +390,8 @@ int fsm_ee_init(struct ccci_fsm_ee *ee_ctl)
 #elif (MD_GENERATION == 6291)
 		ret = mdee_dumper_v2_alloc(ee_ctl);
 #endif
-	} else if (ee_ctl->md_id == MD_SYS3) {
-		ret = mdee_dumper_v1_alloc(ee_ctl);
 	}
+	/* MD3 (C2K) dumping is not built: the MT6765 has MD1 only */
 	return ret;
 }
 

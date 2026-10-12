@@ -17,6 +17,7 @@
 #include "ccci_modem.h"
 #include "ccci_port.h"
 #include "ccci_hif.h"
+#include "mtk_ccci_main.h"
 #ifdef FEATURE_SCP_CCCI_SUPPORT
 /*need scp owner review,browse.zhang*/
 #include <scp.h>
@@ -79,33 +80,13 @@ static struct notifier_block apsync_notifier = {
 	.notifier_call = apsync_event,
 };
 #endif
-#ifndef CCCI_KMODULE_ENABLE
-static int __init ccci_init(void)
+int __init ccci_init(void)
 {
 	CCCI_INIT_LOG(-1, CORE, "ccci core init\n");
-	dev_class = class_create(THIS_MODULE, "ccci_node");
+	dev_class = class_create("ccci_node");
 	ccci_subsys_bm_init();
 #ifdef FEATURE_SCP_CCCI_SUPPORT
 	scp_A_register_notify(&apsync_notifier);
 #endif
 	return 0;
 }
-
-subsys_initcall(ccci_init);
-
-MODULE_AUTHOR("Xiao Wang <xiao.wang@mediatek.com>");
-MODULE_DESCRIPTION("Evolved CCCI driver");
-MODULE_LICENSE("GPL");
-
-#else
-int ccci_init(void)
-{
-	CCCI_INIT_LOG(-1, CORE, "ccci core init\n");
-	dev_class = class_create(THIS_MODULE, "ccci_node");
-	ccci_subsys_bm_init();
-#ifdef FEATURE_SCP_CCCI_SUPPORT
-	scp_A_register_notify(&apsync_notifier);
-#endif
-	return 0;
-}
-#endif

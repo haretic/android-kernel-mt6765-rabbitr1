@@ -21,7 +21,7 @@
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/memblock.h>
-#include <asm/memblock.h>
+#include <linux/vmalloc.h>
 
 #ifdef CONFIG_OF
 #include <linux/of.h>
@@ -99,7 +99,6 @@ static unsigned int s_g_md_usage_case;
 static unsigned int md_type_at_lk[MAX_MD_NUM_AT_LK];
 
 static unsigned int s_g_lk_load_img_status;
-static unsigned long s_g_dt_chosen_node;
 static int s_g_lk_ld_md_errno;
 static unsigned int s_g_tag_inf_size;
 
@@ -335,7 +334,6 @@ static unsigned int md_resv_mem_size[MAX_MD_NUM_AT_LK];
 /* share memory */
 static unsigned int md_resv_smem_size[MAX_MD_NUM_AT_LK];
 static unsigned int md_resv_size_list[MAX_MD_NUM_AT_LK];
-static unsigned int resv_smem_size;
 static unsigned int md1md3_resv_smem_size;
 
 static phys_addr_t md_resv_mem_list[MAX_MD_NUM_AT_LK];
@@ -758,11 +756,26 @@ static int md1_raw_img_size;
 static int md3_raw_img_size;
 
 
-void __weak *vmap_reserved_mem(phys_addr_t start,
-		phys_addr_t size, pgprot_t prot)
+/*
+ * Reserved memory that is still in the linear map: map an alias with the
+ * requested attributes, as the vendor memory-amms helper did.
+ */
+static void *vmap_reserved_mem(phys_addr_t start, phys_addr_t size,
+	pgprot_t prot)
 {
-	pr_debug("[ccci/dummy] %s is not supported!\n", __func__);
-	return NULL;
+	unsigned long pfn = PHYS_PFN(start);
+	unsigned long n = PFN_UP(size), i;
+	struct page **pages;
+	void *va;
+
+	pages = kvmalloc_array(n, sizeof(*pages), GFP_KERNEL);
+	if (!pages)
+		return NULL;
+	for (i = 0; i < n; i++)
+		pages[i] = pfn_to_page(pfn + i);
+	va = vmap(pages, n, VM_MAP, prot);
+	kvfree(pages);
+	return va;
 }
 
 void __iomem *ccci_map_phy_addr(phys_addr_t phy_addr, unsigned int size)
@@ -1049,31 +1062,20 @@ static void dump_retrieve_info(void)
 	}
 }
 
-static int __init early_init_dt_get_chosen(unsigned long node,
-	const char *uname, int depth, void *data)
-{
-	if (depth != 1 || (strcmp(uname, "chosen") != 0
-			&& strcmp(uname, "chosen@0") != 0))
-		return 0;
-	s_g_dt_chosen_node = node;
-	return 1;
-}
-
 static int __init collect_lk_boot_arguments(void)
 {
-	/* Device tree method */
+	/* Device tree method; a module only sees the unflattened tree */
+	struct device_node *chosen __free(device_node) =
+		of_find_node_by_path("/chosen");
 	int ret;
 	unsigned int *raw_ptr = NULL;
 
-	/* This function will initialize s_g_dt_chosen_node */
-	ret = of_scan_flat_dt(early_init_dt_get_chosen, NULL);
-	if (ret == 0) {
+	if (!chosen) {
 		CCCI_UTIL_INF_MSG("device node no chosen node\n");
 		return -1;
 	}
 
-	raw_ptr =
-		(unsigned int *)of_get_flat_dt_prop(s_g_dt_chosen_node,
+	raw_ptr = (unsigned int *)of_get_property(chosen,
 						"ccci,modem_info_v2", NULL);
 	if (raw_ptr != NULL) {
 		if (lk_info_parsing_v2(raw_ptr) == 1) /* No md enabled in LK */
@@ -1082,7 +1084,7 @@ static int __init collect_lk_boot_arguments(void)
 	}
 
 	CCCI_UTIL_INF_MSG("ccci,modem_info_v2 not found, try v1\n");
-	raw_ptr = (unsigned int *)of_get_flat_dt_prop(s_g_dt_chosen_node,
+	raw_ptr = (unsigned int *)of_get_property(chosen,
 				"ccci,modem_info", NULL);
 	if (raw_ptr != NULL) {
 		lk_info_parsing_v1(raw_ptr);
@@ -1107,7 +1109,10 @@ _common_process:
 	if (s_g_lk_inf_base && s_g_lk_info_tag_version < 3) {
 		/* clear memory to zero that used by tag info. */
 		memset_io(s_g_lk_inf_base, 0, s_g_tag_inf_size);
-		iounmap(s_g_lk_inf_base);
+		if (!pfn_valid(__phys_to_pfn(s_g_tag_phy_addr)))
+			iounmap(s_g_lk_inf_base);
+		else
+			vunmap((__force void *)s_g_lk_inf_base);
 	} else if (s_g_lk_info_tag_version >= 3) {
 		if (!pfn_valid(__phys_to_pfn(s_g_tag_phy_addr))) {
 			iounmap(s_g_lk_inf_base);
@@ -1662,55 +1667,12 @@ void ccci_md_mem_reserve(void)
 	CCCI_UTIL_INF_MSG("%s phased out.\n", __func__);
 }
 
-#ifdef CONFIG_OF_RESERVED_MEM
-#define CCCI_MD1_MEM_RESERVED_KEY "mediatek,reserve-memory-ccci_md1"
-#define CCCI_MD2_MEM_RESERVED_KEY "mediatek,reserve-memory-ccci_md2"
-#define CCCI_MD3_MEM_RESERVED_KEY "mediatek,reserve-memory-ccci_md3_ccif"
-#define CCCI_MD1MD3_SMEM_RESERVED_KEY "mediatek,reserve-memory-ccci_share"
-int ccci_reserve_mem_of_init(struct reserved_mem *rmem)
-{
-	phys_addr_t rptr = 0;
-	unsigned int rsize = 0;
-	int md_id = -1;
-
-	rptr = rmem->base;
-	rsize = (unsigned int)rmem->size;
-	if (strstr(CCCI_MD1_MEM_RESERVED_KEY, rmem->name))
-		md_id = MD_SYS1;
-	else if (strstr(CCCI_MD2_MEM_RESERVED_KEY, rmem->name))
-		md_id = MD_SYS2;
-	else if (strstr(CCCI_MD3_MEM_RESERVED_KEY, rmem->name))
-		md_id = MD_SYS3;
-	else {
-		if (strstr(CCCI_MD1MD3_SMEM_RESERVED_KEY, rmem->name)) {
-			CCCI_UTIL_INF_MSG(
-			"reserve_mem_of_init, rptr=0x%pa, rsize=0x%x\n",
-			&rptr, rsize);
-			resv_smem_addr = rptr;
-			resv_smem_size = rsize;
-		} else
-			CCCI_UTIL_INF_MSG("memory reserve key %s not support\n",
-				rmem->name);
-
-		return 0;
-	}
-	CCCI_UTIL_INF_MSG("reserve_mem_of_init, rptr=0x%pa, rsize=0x%x\n",
-			&rptr, rsize);
-	md_resv_mem_list[md_id] = rptr;
-	md_resv_size_list[md_id] = rsize;
-	s_g_md_usage_case |= (1U << md_id);
-	return 0;
-}
-
-RESERVEDMEM_OF_DECLARE(ccci_reserve_mem_md1_init,
-	CCCI_MD1_MEM_RESERVED_KEY, ccci_reserve_mem_of_init);
-RESERVEDMEM_OF_DECLARE(ccci_reserve_mem_md2_init,
-	CCCI_MD2_MEM_RESERVED_KEY, ccci_reserve_mem_of_init);
-RESERVEDMEM_OF_DECLARE(ccci_reserve_mem_md3_init,
-	CCCI_MD3_MEM_RESERVED_KEY, ccci_reserve_mem_of_init);
-RESERVEDMEM_OF_DECLARE(ccci_reserve_smem_md1md3_init,
-	CCCI_MD1MD3_SMEM_RESERVED_KEY, ccci_reserve_mem_of_init);
-#endif
+/*
+ * The vendor kernel also took the modem memory from early reserved-memory
+ * nodes (RESERVEDMEM_OF_DECLARE), which a module cannot hook. LK hands the
+ * layout over in the ccci,modem_info_v2 tags instead, which is what the
+ * Rabbit r1 LK does.
+ */
 
 
 /**************************************************************/

@@ -16,7 +16,6 @@
 #include <linux/of_irq.h>
 #include <linux/of_address.h>
 #endif
-#include <memory/mediatek/emi.h>
 #include "ccci_config.h"
 #if (MD_GENERATION >= 6297)
 #include <mt-plat/mtk_ccci_common.h>
@@ -568,31 +567,18 @@ static void fsm_routine_wdt(struct ccci_fsm_ctl *ctl,
 {
 	int reset_md = 0;
 	int is_epon_set = 0;
-	struct device_node *node;
 	unsigned int offset_apon_md1 = 0;
 	struct ccci_smem_region *mdss_dbg
 		= ccci_md_get_smem_by_user_id(ctl->md_id,
 			SMEM_USER_RAW_MDSS_DBG);
-	int ret;
 #ifdef CCCI_PLATFORM_MT6781
 			struct ccci_modem *md = NULL;
 			struct md_sys1_info *md_info = NULL;
 			struct md_pll_reg *md_reg = NULL;
 #endif
 
-	node = of_find_compatible_node(NULL, NULL, "mediatek,mddriver");
-	if (node) {
-		ret = of_property_read_u32(node,
-				"mediatek,offset_apon_md1", &offset_apon_md1);
-		if (ret < 0)
-			CCCI_ERROR_LOG(ctl->md_id, FSM,
-				"[%s] not found: mediatek,offset_apon_md1\n",
-				__func__);
-
-	} else
-		CCCI_ERROR_LOG(ctl->md_id, FSM,
-			"[%s] error: not found the mediatek,mddriver\n",
-			__func__);
+	/* stock DT: mediatek,offset_apon_md1 = <0x1c24> */
+	offset_apon_md1 = 0x1c24;
 
 #ifdef CCCI_PLATFORM_MT6781
 	md = ccci_md_get_modem_by_id(ctl->md_id);
@@ -731,7 +717,7 @@ int fsm_append_command(struct ccci_fsm_ctl *ctl,
 		return -CCCI_ERR_INVALID_PARAM;
 	}
 	cmd = kmalloc(sizeof(struct ccci_fsm_command),
-		(in_irq() || in_softirq()
+		(in_hardirq() || in_softirq()
 		|| irqs_disabled()) ? GFP_ATOMIC : GFP_KERNEL);
 	if (!cmd) {
 		CCCI_ERROR_LOG(ctl->md_id, FSM,
@@ -742,7 +728,7 @@ int fsm_append_command(struct ccci_fsm_ctl *ctl,
 	init_waitqueue_head(&cmd->complete_wq);
 	cmd->cmd_id = cmd_id;
 	cmd->complete = 0;
-	if (in_irq() || irqs_disabled())
+	if (in_hardirq() || irqs_disabled())
 		flag &= ~FSM_CMD_FLAG_WAIT_FOR_COMPLETE;
 	cmd->flag = flag;
 

@@ -100,12 +100,13 @@ int ccci_platform_init(struct ccci_modem *md)
 {
 	struct device_node *node;
 	/* Get infra cfg ao base */
-	node = of_find_compatible_node(NULL, NULL,
-		"mediatek,mt6765-infracfg");
+	node = of_parse_phandle(md->plat_dev->dev.of_node,
+		"mediatek,infracfg", 0);
 	md_cd_plat_val_ptr.infra_ao_base = of_iomap(node, 0);
+	of_node_put(node);
 	if (!md_cd_plat_val_ptr.infra_ao_base) {
 		CCCI_ERROR_LOG(md->index, TAG,
-			"%s: infra_ao_base of_iomap failed\n", node->full_name);
+			"infra_ao_base of_iomap failed\n");
 		return -1;
 	}
 	CCCI_INIT_LOG(-1, TAG, "infra_ao_base:0x%p\n",
