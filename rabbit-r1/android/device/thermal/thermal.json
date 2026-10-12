@@ -1,0 +1,81 @@
+{
+    "Sensors":[
+        {
+            "Name":"soc-thermal",
+            "Type":"SOC",
+            "Throttling":[
+                {
+                    "Type": "Hot",
+                    "Critical": 95,
+                    "Shutdown": 110
+                }
+            ]
+        },
+        {
+            "Name":"cpu-big-thermal",
+            "Type":"CPU",
+            "Throttling":[
+                {
+                    "Type": "Hot",
+                    "Severe": 85,
+                    "Shutdown": 110
+                }
+            ]
+        },
+        {
+            "Name":"cpu-little-thermal",
+            "Type":"CPU",
+            "Throttling":[
+                {
+                    "Type": "Hot",
+                    "Severe": 85,
+                    "Shutdown": 110
+                }
+            ]
+        },
+        {
+            "Name":"gpu-thermal",
+            "Type":"GPU",
+            "Throttling":[
+                {
+                    "Type": "Hot",
+                    "Shutdown": 110
+                }
+            ]
+        },
+        {
+            "Name":"ap-ntc-thermal",
+            "Type":"SKIN",
+            "Optional": true,
+            "Throttling":[
+                {
+                    "Type": "Hot",
+                    "Light": 45,
+                    "Severe": 53
+                }
+            ]
+        },
+        {
+            "Name":"mt6357-battery",
+            "Type":"BATTERY",
+            "Optional": true,
+            "Throttling":[
+                {
+                    "Type": "Hot",
+                    "Shutdown": 60
+                }
+            ]
+        }
+    ],
+    "CoolingDevices":[
+        {
+            "Name":"cpufreq-cpu0",
+            "Type":"CPU"
+        },
+        {
+            "Name":"cpufreq-cpu4",
+            "Type":"CPU",
+            "Optional": true
+        }
+    ]
+}

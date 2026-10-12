@@ -15,4 +15,6 @@
   <project path="external/alsa-lib" name="LineageOS/android_external_alsa-lib" remote="github" revision="533b21f75eb2bd3fe46e9259dccf1628e318f859" clone-depth="1" />
   <project path="external/alsa-ucm-conf" name="LineageOS/android_external_alsa-ucm-conf" remote="github" revision="b695e87520201d31a9207a1108648c3f83f71e11" clone-depth="1" />
   <project path="vendor/mainline" name="LineageOS/android_vendor_mainline" remote="github" revision="a3baa61e40ab74294ca0063b81155f259c855e6b" clone-depth="1" />
+  <!-- Thermal HAL selected by device/rabbit/r1/thermal/product.mk (TARGET_THERMAL_HAL := linaro-libpm). -->
+  <project path="hardware/linaro/libpm" name="LineageOS/android_hardware_linaro_libpm" remote="github" revision="d062161c81d3d2b61b27425c2e39c728eab7f9f0" clone-depth="1" />
 </manifest>
