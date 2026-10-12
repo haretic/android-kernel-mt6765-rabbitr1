@@ -739,8 +739,8 @@
   {
     "project": "system/core",
     "base_commit": "7c3f32fe89c52b4176fd288ba5bb4f907809c202",
-    "patch": "0010-prime-initial-battery-level.patch",
-    "sha256": "ea65ab5a8332d59f0cb603eb4f63c1386c4728f168d95c4f684acf0043527fe9",
+    "patch": "0010-prime-initial-battery-level-and-recognize-sandboxed-memfds.patch",
+    "sha256": "0b7d3567446f4bde91c7c41dac21595ed36ae2bd403499137e0b9686e124fe6e",
     "files": [
       {
         "path": "healthd/BatteryMonitor.cpp",
@@ -751,6 +751,11 @@
         "path": "healthd/include/healthd/BatteryMonitor.h",
         "before_sha256": "cfe869785539bbfe005bede01ae0724dc44e1540e68d0b3a199c2158c71ca9a9",
         "after_sha256": "257514f99cc5864b0cb141b7c567ca98b894c5013d8af8527f680f8538752889"
+      },
+      {
+        "path": "libcutils/ashmem-dev.cpp",
+        "before_sha256": "df16f5fa6f9f9b333a63adcc6e96abe2c7417f6de6cfe3635e9edc0a0e50db48",
+        "after_sha256": "96013734457cd32ff202b9f507aa3285b95c0e1ac5426a16285be4b4897b1180"
       }
     ]
   }
