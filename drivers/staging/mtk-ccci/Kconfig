@@ -18,7 +18,7 @@ config MTK_CCCI_R1_MD_PROBE
 config MTK_CCCI
 	tristate "MediaTek MT6765 CCCI modem interface (vendor port)"
 	depends on ARCH_MEDIATEK || COMPILE_TEST
-	depends on OF && PM && MMU && NET && INET
+	depends on OF && PM_SLEEP && MMU && NET && INET
 	select MFD_SYSCON
 	help
 	  Port of the CCCI driver stack of the stock MT6765 Linux 4.19
@@ -32,7 +32,8 @@ config MTK_CCCI
 	  The modem image is loaded and protected by LK; this driver only
 	  powers, boots and talks to it. It binds the same device tree node
 	  as the bring-up probe, so load one or the other. Nothing loads it
-	  automatically.
+	  automatically. The modem wakes the system through it and its ports
+	  hold wakeup sources, so it needs system sleep support.
 
 	  To compile this driver as a module, choose M here: the module
 	  will be called mtk-ccci. If unsure, say N.
