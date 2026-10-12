@@ -59,6 +59,9 @@ BOARD_KERNEL_CMDLINE += earlycon=uart8250,mmio32,0x11002000 console=ttyS0,921600
 BOARD_KERNEL_CMDLINE += maxcpus=1 clk_ignore_unused regulator_ignore_unused
 # Reboot on panic; the kernel default would hang.
 BOARD_KERNEL_CMDLINE += panic=-1
+# The stock ATF offers PSCI SYSTEM_SUSPEND, but it runs SPM firmware that only
+# the stock kernel hands over. "mem" must mean suspend-to-idle.
+BOARD_KERNEL_CMDLINE += mem_sleep_default=s2idle
 
 BOARD_USES_RECOVERY_AS_BOOT := true
 TARGET_NO_RECOVERY := false
