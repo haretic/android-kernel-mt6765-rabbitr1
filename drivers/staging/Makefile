@@ -15,6 +15,7 @@ obj-$(CONFIG_BCM2835_VCHIQ)	+= vc04_services/
 obj-$(CONFIG_XIL_AXIS_FIFO)	+= axis-fifo/
 obj-$(CONFIG_MTK_ION_COMPAT)	+= mtk-ion-compat/
 obj-$(CONFIG_MTK_GED_COMPAT)	+= mtk-ged/
+obj-$(CONFIG_MTK_VCODEC_COMPAT)	+= mtk-vcodec-compat/
 obj-$(CONFIG_MTK_CONNECTIVITY)	+= mtk-connectivity/
 obj-$(CONFIG_MTK_CCCI_R1_MD_PROBE)	+= mtk-ccci/
 obj-$(CONFIG_MTK_CCCI)		+= mtk-ccci/

@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: GPL-2.0
+config MTK_VCODEC_COMPAT
+	tristate "MediaTek MT6765 /dev/Vcodec for the stock video codec blobs"
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	depends on MTK_ION_COMPAT
+	depends on MFD_SYSCON
+	help
+	  Provides /dev/Vcodec with the ioctl ABI of the MT6765 Linux 4.19
+	  vendor kernel's video codec driver, for the stock MediaTek codec
+	  libraries (libvcodecdrv and the codec2 components built on it).
+	  Those libraries program the H.264 encoder and the H.264/HEVC
+	  decoder themselves; this driver arbitrates, powers and routes the
+	  shared codec core, delivers its interrupts and gives the libraries
+	  M4U addresses for their buffers through the ION compatibility
+	  device.
+
+	  If unsure, say N.
