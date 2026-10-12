@@ -12,6 +12,7 @@
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/of.h>
 #include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
@@ -21,10 +22,21 @@
 
 #define CSIXB_OFFSET		0x1000
 
+/**
+ * struct mtk_mipi_cdphy_data - SoC specific data
+ * @csi_en_gate: The CSIxA wrapper has a CSR_CSI_EN clock gate that is closed
+ *		 at reset and must be opened before the receiver is used. On
+ *		 MT6765 the vendor kernel models it as the "mipi0a" clock.
+ */
+struct mtk_mipi_cdphy_data {
+	bool csi_en_gate;
+};
+
 struct mtk_mipi_cdphy_port {
 	struct device *dev;
 	void __iomem *base;
 	struct phy *phy;
+	const struct mtk_mipi_cdphy_data *data;
 	u32 type;
 	u32 mode;
 	u32 num_lanes;
@@ -74,6 +86,9 @@ static int mtk_mipi_phy_power_on(struct phy *phy)
 {
 	struct mtk_mipi_cdphy_port *port = phy_get_drvdata(phy);
 	void __iomem *base = port->base;
+
+	if (port->data && port->data->csi_en_gate)
+		mtk_phy_set_bits(base + MIPI_RX_WRAPPER80_CSIXA, CSR_CSI_EN);
 
 	/*
 	 * The driver currently supports DPHY and CD-PHY phys,
@@ -161,6 +176,9 @@ static int mtk_mipi_phy_power_off(struct phy *phy)
 	mtk_phy_update_field(base + CSIXB_OFFSET + MIPI_RX_ANA00_CSIXA, RG_CSIXA_BG_CORE_EN, 0);
 	mtk_phy_update_field(base + CSIXB_OFFSET + MIPI_RX_ANA00_CSIXA, RG_CSIXA_BG_LPF_EN, 0);
 
+	if (port->data && port->data->csi_en_gate)
+		mtk_phy_clear_bits(base + MIPI_RX_WRAPPER80_CSIXA, CSR_CSI_EN);
+
 	return 0;
 }
 
@@ -223,6 +241,7 @@ static int mtk_mipi_cdphy_probe(struct platform_device *pdev)
 	dev_set_drvdata(dev, port);
 
 	port->dev = dev;
+	port->data = of_device_get_match_data(dev);
 
 	port->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(port->base))
@@ -274,7 +293,12 @@ static int mtk_mipi_cdphy_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static const struct mtk_mipi_cdphy_data mt6765_data = {
+	.csi_en_gate = true,
+};
+
 static const struct of_device_id mtk_mipi_cdphy_of_match[] = {
+	{ .compatible = "mediatek,mt6765-csi-rx", .data = &mt6765_data },
 	{ .compatible = "mediatek,mt8365-csi-rx" },
 	{ /* sentinel */},
 };
