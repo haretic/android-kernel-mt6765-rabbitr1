@@ -370,8 +370,8 @@ static int mtk_cam_vb2_buf_prepare(struct vb2_buffer *vb)
 		vb2_set_plane_payload(vb, i, size);
 	}
 
-	if (!buf->daddr)
-		buf->daddr = vb2_dma_contig_plane_dma_addr(vb, 0);
+	/* A DMABUF can be re-imported at another address, always refresh. */
+	buf->daddr = vb2_dma_contig_plane_dma_addr(vb, 0);
 
 	return 0;
 }
