@@ -115,6 +115,17 @@
 		pinctrl-0 = <&r1_motor_pins>;
 	};
 
+	/*
+	 * Stock drives the motor from VIBR at 2.3 - 3.2 V (regulator-vibrator);
+	 * VIBR's steps in that range are 2.8 and 3.0 V.
+	 */
+	vibrator {
+		compatible = "regulator-haptic";
+		haptic-supply = <&mt6357_vibr_reg>;
+		min-microvolt = <2800000>;
+		max-microvolt = <3000000>;
+	};
+
 	chosen {
 		stdout-path = "serial0:921600n8";
 		/* Single CPU until the r1's PSCI/firmware behavior is measured. */
