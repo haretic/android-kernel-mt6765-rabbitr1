@@ -866,6 +866,15 @@
 			status = "disabled";
 		};
 
+		/* CSI0A at 0x11c10000, CSI0B at 0x11c11000 */
+		mipi_csi0: mipi-csi0@11c10000 {
+			compatible = "mediatek,mt6765-csi-rx";
+			reg = <0 0x11c10000 0 0x2000>;
+			num-lanes = <4>;
+			#phy-cells = <1>;
+			status = "disabled";
+		};
+
 		efuse: efuse@11c50000 {
 			compatible = "mediatek,efuse";
 			reg = <0 0x11c50000 0 0x10000>;
@@ -1132,6 +1141,103 @@
 			power-domains = <&spm MT6765_POWER_DOMAIN_CAM>;
 			mediatek,smi = <&smi_common>;
 			mediatek,larb-id = <3>;
+		};
+
+		/*
+		 * SENINF1-4 register blocks. SENINF MUX N feeds CAM MUX N + 2,
+		 * which is wired to CAMSV N + 1.
+		 */
+		seninf: seninf@1a040000 {
+			compatible = "mediatek,mt6765-seninf";
+			reg = <0 0x1a040000 0 0x4000>;
+			clocks = <&camsys CLK_CAM_SENINF>,
+				 <&topckgen CLK_TOP_SENINF_SEL>;
+			clock-names = "camsys", "top_mux";
+			assigned-clocks = <&topckgen CLK_TOP_SENINF_SEL>;
+			assigned-clock-parents = <&topckgen CLK_TOP_UNIVPLL1_D2>;
+			power-domains = <&spm MT6765_POWER_DOMAIN_CAM>;
+			phys = <&mipi_csi0 PHY_TYPE_DPHY>;
+			phy-names = "csi0";
+			status = "disabled";
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+				};
+
+				port@1 {
+					reg = <1>;
+				};
+
+				port@2 {
+					reg = <2>;
+				};
+
+				port@3 {
+					reg = <3>;
+				};
+
+				port@4 {
+					reg = <4>;
+
+					seninf_camsv1_endpoint: endpoint {
+						remote-endpoint = <&camsv1_endpoint>;
+					};
+				};
+
+				/* CAMSV2-4, not described yet */
+				port@5 {
+					reg = <5>;
+				};
+
+				port@6 {
+					reg = <6>;
+				};
+
+				port@7 {
+					reg = <7>;
+				};
+
+				/* Unused, required by the binding */
+				port@8 {
+					reg = <8>;
+				};
+
+				port@9 {
+					reg = <9>;
+				};
+			};
+		};
+
+		camsv1: camsv@1a050000 {
+			compatible = "mediatek,mt6765-camsv";
+			reg = <0 0x1a050000 0 0x1000>;
+			interrupts = <GIC_SPI 243 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&camsys CLK_CAM>,
+				 <&camsys CLK_CAMTG>,
+				 <&camsys CLK_CAMSV0>,
+				 <&camsys CLK_CAMSV1>,
+				 <&camsys CLK_CAMSV2>;
+			clock-names = "cam", "camtg", "camsv0", "camsv1", "camsv2";
+			mediatek,larb = <&smi_larb3>;
+			power-domains = <&spm MT6765_POWER_DOMAIN_CAM>;
+			status = "disabled";
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+
+					camsv1_endpoint: endpoint {
+						remote-endpoint = <&seninf_camsv1_endpoint>;
+					};
+				};
+			};
 		};
 	};
 };
