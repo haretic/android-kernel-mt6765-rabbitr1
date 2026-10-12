@@ -7,5 +7,6 @@
 version: 1
 configuration:
   software_isp:
-    # The kernel runs with maxcpus=1, extra debayer threads only add overhead.
-    threads: 1
+    # All eight Cortex-A53s are online after boot. One thread debayers
+    # 1632x1224 at ~11 fps (8 with the CCM); four reach the sensor's 30 fps.
+    threads: 4

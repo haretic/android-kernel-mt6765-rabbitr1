@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: CC0-1.0
+#
+# libcamera software ISP tuning for the Hi-846, installed to
+# /vendor/etc/libcamera/ipa/simple/hi846.yaml (the IPA looks it up by sensor
+# model before uncalibrated.yaml). The black level comes from the libcamera
+# sensor helper (64 at 10 bits).
+#
+# The colour correction matrices are the five of the stock MediaTek tuning,
+# lib64/hi846_mipi_raw_tuning.so at 0xbc358 (13-bit signed, 512 = 1.0, rows
+# sum to 1). The blob doesn't name their illuminants; they are ordered from
+# the strongest blue correction to the weakest, i.e. warm to daylight, and
+# assigned typical colour temperatures.
+%YAML 1.1
+---
+version: 1
+algorithms:
+  - BlackLevel:
+  - Awb:
+  - Ccm:
+      ccms:
+        - ct: 2300
+          ccm: [ 1.3184, -0.3203, 0.0020,
+                 -0.4785, 1.3105, 0.1680,
+                 -0.4316, -1.9238, 3.3555 ]
+        - ct: 2850
+          ccm: [ 1.4824, -0.3711, -0.1113,
+                 -0.3301, 1.3906, -0.0605,
+                 -0.1055, -1.2988, 2.4043 ]
+        - ct: 4000
+          ccm: [ 1.5605, -0.5332, -0.0273,
+                 -0.3086, 1.4355, -0.1270,
+                 -0.0391, -0.6973, 1.7363 ]
+        - ct: 5000
+          ccm: [ 1.8906, -0.9258, 0.0352,
+                 -0.3789, 1.4551, -0.0762,
+                 -0.0332, -0.6074, 1.6406 ]
+        - ct: 6500
+          ccm: [ 1.6992, -0.7324, 0.0332,
+                 -0.1895, 1.4902, -0.3008,
+                 -0.0020, -0.5801, 1.5820 ]
+  - Adjust:
+  - Agc:
+...
