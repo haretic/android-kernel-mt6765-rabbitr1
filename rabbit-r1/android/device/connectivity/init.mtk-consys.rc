@@ -14,3 +14,6 @@ on post-fs
     # Registers hci0; the core powers it on once (BT patch download) and
     # off again until the Bluetooth HAL opens it.
     insmod /vendor/lib/modules/btmtk_wmt.ko
+
+    # ueventd creates the node asynchronously; post-fs-data writes to it.
+    wait /dev/wmtWifi 5
