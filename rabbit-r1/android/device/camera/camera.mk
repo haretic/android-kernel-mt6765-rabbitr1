@@ -6,9 +6,10 @@
 #
 # Capture path: hi846 -> mtk-seninf -> CAMSV1 video node (MTISP packed
 # 10-bit Bayer), matched by the libcamera simple pipeline handler with the
-# CPU software ISP. CAMSV has no IOMMU and can't address above 4 GiB, so
-# the raw buffers are MMAP buffers from the camsv1 CMA pool; the software
-# ISP writes its output to gralloc or DMA heap buffers with the CPU.
+# CPU software ISP. The raw buffers are V4L2 MMAP buffers, mapped through
+# the M4U (larb3 port CAM_SOC0); the software ISP unpacks and debayers them
+# with the CPU into gralloc buffers, or DMA heap buffers for the HAL's
+# internal JPEG source streams.
 #
 # Don't set TARGET_CAMERA_PROVIDER_HAL=libcamera from mainline common
 # together with this file, it points to a libcamera APEX that doesn't exist.

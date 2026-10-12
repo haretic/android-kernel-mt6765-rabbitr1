@@ -114,3 +114,6 @@ $(call inherit-product, $(LOCAL_PATH)/connectivity/connectivity.mk)
 
 # MT6765 modem (MD1) on mtk-ccci.ko and the stock MediaTek RIL.
 $(call inherit-product, $(LOCAL_PATH)/modem/modem.mk)
+
+# Hi-846 rear camera: libcamera simple pipeline + software ISP on CAMSV.
+$(call inherit-product, $(LOCAL_PATH)/camera/camera.mk)

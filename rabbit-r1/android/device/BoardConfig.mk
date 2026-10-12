@@ -15,6 +15,7 @@ include $(MAINLINE_COMMON_PATH)/BoardConfigMainlineCommon.mk
 include $(DEVICE_PATH)/charging/board.mk
 BOARD_VENDOR_SEPOLICY_DIRS += $(DEVICE_PATH)/sepolicy
 include $(DEVICE_PATH)/connectivity/BoardConfigConnectivity.mk
+include $(DEVICE_PATH)/camera/BoardConfigCamera.mk
 ifeq ($(TARGET_PRODUCT),lineage_r1_soc)
 BOARD_VENDOR_SEPOLICY_DIRS += $(DEVICE_PATH)/health/sepolicy
 endif
