@@ -327,6 +327,11 @@ struct mtk_thermal_data {
 	u32 apmixed_buffer_ctl_set;
 };
 
+struct mtk_thermal_sensor {
+	struct mtk_thermal *mt;
+	int id;
+};
+
 struct mtk_thermal {
 	struct device *dev;
 	void __iomem *thermal_base;
@@ -346,6 +351,7 @@ struct mtk_thermal {
 
 	const struct mtk_thermal_data *conf;
 	struct mtk_thermal_bank banks[MAX_NUM_ZONES];
+	struct mtk_thermal_sensor sensors[MAX_NUM_VTS];
 
 	int (*raw_to_mcelsius)(struct mtk_thermal *mt, int sensno, s32 raw);
 };
@@ -845,6 +851,55 @@ static int mtk_thermal_bank_temperature(struct mtk_thermal_bank *bank)
 	return max;
 }
 
+/**
+ * mtk_thermal_sensor_temperature - get the temperature of one sensor
+ * @sensor:	The sensor
+ *
+ * The sensor is read through the first bank it is assigned to.
+ */
+static int mtk_thermal_sensor_temperature(struct mtk_thermal_sensor *sensor)
+{
+	struct mtk_thermal *mt = sensor->mt;
+	const struct mtk_thermal_data *conf = mt->conf;
+	int temp = THERMAL_TEMP_INVALID;
+	int i, j;
+	u32 raw;
+
+	for (i = 0; i < conf->num_banks; i++) {
+		const struct thermal_bank_cfg *cfg = &conf->bank_data[i];
+
+		for (j = 0; j < cfg->num_sensors; j++) {
+			if (cfg->sensors[j] != sensor->id)
+				continue;
+
+			mtk_thermal_get_bank(&mt->banks[i]);
+			raw = readl(mt->thermal_base + conf->msr[j]);
+			mtk_thermal_put_bank(&mt->banks[i]);
+
+			temp = mt->raw_to_mcelsius(mt, sensor->id, raw);
+			if (!mtk_thermal_temp_is_valid(temp))
+				temp = THERMAL_TEMP_INVALID;
+
+			return temp;
+		}
+	}
+
+	return temp;
+}
+
+static int mtk_read_sensor_temp(struct thermal_zone_device *tz, int *temperature)
+{
+	struct mtk_thermal_sensor *sensor = thermal_zone_device_priv(tz);
+
+	*temperature = mtk_thermal_sensor_temperature(sensor);
+
+	return 0;
+}
+
+static const struct thermal_zone_device_ops mtk_thermal_sensor_ops = {
+	.get_temp = mtk_read_sensor_temp,
+};
+
 static int mtk_read_temp(struct thermal_zone_device *tz, int *temperature)
 {
 	struct mtk_thermal *mt = thermal_zone_device_priv(tz);
@@ -1293,6 +1348,31 @@ static int mtk_thermal_probe(struct platform_device *pdev)
 	ret = devm_thermal_add_hwmon_sysfs(&pdev->dev, tzdev);
 	if (ret)
 		dev_warn(&pdev->dev, "error in thermal_add_hwmon_sysfs");
+
+	/*
+	 * Sensor ID 0 is the hottest sensor of all banks, sensor ID n is the
+	 * n-th sensor of the SoC on its own.
+	 */
+	for (i = 0; i < mt->conf->num_sensors; i++) {
+		struct mtk_thermal_sensor *sensor = &mt->sensors[i];
+
+		sensor->mt = mt;
+		sensor->id = i;
+
+		tzdev = devm_thermal_of_zone_register(&pdev->dev, i + 1, sensor,
+						      &mtk_thermal_sensor_ops);
+		if (IS_ERR(tzdev)) {
+			/* This sensor has no thermal zone in the device tree */
+			if (PTR_ERR(tzdev) == -ENODEV)
+				continue;
+
+			return PTR_ERR(tzdev);
+		}
+
+		ret = devm_thermal_add_hwmon_sysfs(&pdev->dev, tzdev);
+		if (ret)
+			dev_warn(&pdev->dev, "error in thermal_add_hwmon_sysfs");
+	}
 
 	return 0;
 }
