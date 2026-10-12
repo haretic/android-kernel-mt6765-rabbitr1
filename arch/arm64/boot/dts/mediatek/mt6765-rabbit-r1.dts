@@ -623,6 +623,8 @@
 		vddio-supply = <&mt6357_vcamio_reg>;
 		reset-gpios = <&pio 101 GPIO_ACTIVE_LOW>;
 		shutdown-gpios = <&pio 97 GPIO_ACTIVE_LOW>;
+		/* Mounted a quarter turn counter-clockwise to the display. */
+		rotation = <90>;
 
 		port {
 			r1_camera_out: endpoint {
