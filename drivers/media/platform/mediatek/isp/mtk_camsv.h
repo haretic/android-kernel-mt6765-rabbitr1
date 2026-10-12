@@ -94,6 +94,10 @@ struct seq_file;
  * struct mtk_camsv_hw_ops - CAMSV hardware generation specific operations
  * @fbc_init: Optional, program the frame buffer controller depth when buffers
  *	      are allocated
+ * @prepare: Optional, allocate streaming resources for a bytesperline x height
+ *	     frame. Called before @setup when streaming starts
+ * @unprepare: Optional, release what @prepare allocated. Called after
+ *	       @stream_off when streaming stops
  * @setup: Program the hardware for streaming. Called powered, before
  *	   @stream_on, with the vb2 buffers queued so far on buf_list
  * @buf_queue: Add a buffer to buf_list and hand it to the hardware if needed
@@ -105,6 +109,8 @@ struct seq_file;
  */
 struct mtk_camsv_hw_ops {
 	void (*fbc_init)(struct mtk_cam_dev *cam_dev, unsigned int num_buffers);
+	int (*prepare)(struct mtk_cam_dev *cam_dev, u32 bpl, u32 height);
+	void (*unprepare)(struct mtk_cam_dev *cam_dev);
 	void (*setup)(struct mtk_cam_dev *cam_dev, unsigned int count,
 		      u32 width, u32 height, u32 bpl,
 		      const struct mtk_cam_format_info *fmtinfo);
@@ -151,10 +157,16 @@ struct mtk_cam_stats {
  * @vdev: The video device node.
  * @seninf: Pointer to the seninf pad.
  * @sequence: Buffer sequence number.
- * @buf_list_lock: Protects the buffer list, @hw_buf and @hw_active.
+ * @buf_list_lock: Protects the buffer list, @hw_slots, @hw_num_slots and
+ *		   @hw_active.
  * @buf_list: List head for the buffer list.
- * @hw_buf: Buffer currently owned by the hardware (MT6765).
+ * @hw_slots: Buffers queued to the hardware, oldest first, NULL for the
+ *	      scratch buffer (MT6765).
+ * @hw_num_slots: Number of valid entries in @hw_slots (MT6765).
  * @hw_active: The hardware is streaming and may consume buffers (MT6765).
+ * @scratch: CPU cookie of the buffer frames are dropped into (MT6765).
+ * @scratch_daddr: DMA address of @scratch.
+ * @scratch_size: Size of @scratch.
  * @stats: Interrupt statistics.
  * @debugfs: debugfs directory.
  */
@@ -178,8 +190,12 @@ struct mtk_cam_dev {
 
 	spinlock_t buf_list_lock;
 	struct list_head buf_list;
-	struct mtk_cam_dev_buffer *hw_buf;
+	struct mtk_cam_dev_buffer *hw_slots[2];
+	unsigned int hw_num_slots;
 	bool hw_active;
+	void *scratch;
+	dma_addr_t scratch_daddr;
+	size_t scratch_size;
 
 	struct mtk_cam_stats stats;
 	struct dentry *debugfs;

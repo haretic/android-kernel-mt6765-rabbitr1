@@ -410,10 +410,20 @@ static int mtk_cam_vb2_start_streaming(struct vb2_queue *vq,
 	const struct v4l2_pix_format_mplane *fmt = &vdev->format;
 	int ret;
 
+	if (cam->conf->ops->prepare) {
+		ret = cam->conf->ops->prepare(cam,
+					      fmt->plane_fmt[0].bytesperline,
+					      fmt->height);
+		if (ret) {
+			mtk_cam_vb2_return_all_buffers(cam, VB2_BUF_STATE_QUEUED);
+			return ret;
+		}
+	}
+
 	ret = pm_runtime_resume_and_get(dev);
 	if (ret) {
 		dev_err(dev, "failed to get pm_runtime\n");
-		return ret;
+		goto fail_unprepare;
 	}
 
 	cam->conf->ops->setup(cam, count, fmt->width, fmt->height,
@@ -442,9 +452,12 @@ fail_no_stream:
 	video_device_pipeline_stop(&vdev->vdev);
 fail_pm_put:
 	cam->conf->ops->stream_off(cam);
-	mtk_cam_vb2_return_all_buffers(cam, VB2_BUF_STATE_QUEUED);
 	pm_runtime_mark_last_busy(cam->dev);
 	pm_runtime_put_autosuspend(cam->dev);
+fail_unprepare:
+	if (cam->conf->ops->unprepare)
+		cam->conf->ops->unprepare(cam);
+	mtk_cam_vb2_return_all_buffers(cam, VB2_BUF_STATE_QUEUED);
 
 	return ret;
 }
@@ -465,6 +478,9 @@ static void mtk_cam_vb2_stop_streaming(struct vb2_queue *vq)
 	mtk_cam_vb2_return_all_buffers(cam, VB2_BUF_STATE_ERROR);
 
 	video_device_pipeline_stop(&vdev->vdev);
+
+	if (cam->conf->ops->unprepare)
+		cam->conf->ops->unprepare(cam);
 
 	pm_runtime_mark_last_busy(cam->dev);
 	pm_runtime_put_autosuspend(cam->dev);
@@ -950,8 +966,8 @@ int mtk_cam_video_register(struct mtk_cam_dev *cam)
 	vbq->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC
 			     | V4L2_BUF_FLAG_TSTAMP_SRC_EOF;
 
-	/* The IMGO DMA needs an address before the first frame. */
-	vbq->min_queued_buffers = 1;
+	/* No minimum buffers limitation */
+	vbq->min_queued_buffers = 0;
 	vbq->drv_priv = cam;
 
 	vbq->lock = &cam_vdev->vdev_lock;

@@ -8,12 +8,15 @@
  * layout below comes from the MT6765 vendor kernel (camera_isp.c), the
  * programming sequence from the MT8183 CAMSV driver of the MediaTek BSP.
  *
- * Only one buffer is handed to the hardware at a time. The FBC does not stop
- * the DMA when it runs out of buffers, so the last buffer stays with the
- * hardware, rewritten frame after frame, until userspace queues another one.
+ * The FBC takes the address for a frame when the previous frame starts, so
+ * two addresses are always queued: the frame being written and the next one.
+ * It does not stop the DMA when it runs out of addresses (the frame goes to
+ * address 0), so a scratch buffer fills a slot when userspace has no buffer
+ * queued, and that frame is dropped.
  */
 
 #include <linux/bits.h>
+#include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
 #include <linux/iopoll.h>
 #include <linux/ktime.h>
@@ -131,18 +134,52 @@ static void mt6765_camsv_clr(struct mtk_cam_dev *cam_dev, u32 reg, u32 bits)
 	mt6765_camsv_write(cam_dev, reg, mt6765_camsv_read(cam_dev, reg) & ~bits);
 }
 
-/* Must be called with buf_list_lock held. */
-static void mt6765_camsv_enqueue(struct mtk_cam_dev *cam_dev,
-				 struct mtk_cam_dev_buffer *buf)
+/*
+ * Queue the oldest buffer not yet given to the hardware, or the scratch
+ * buffer. The slots take buf_list entries in order, so that buffer is the
+ * entry after the ones in the slots. Must be called with buf_list_lock held.
+ */
+static void mt6765_camsv_enqueue(struct mtk_cam_dev *cam_dev)
 {
-	cam_dev->hw_buf = buf;
-	if (!buf)
-		return;
+	struct mtk_cam_dev_buffer *buf, *next = NULL;
+	unsigned int queued = 0, i;
+	dma_addr_t daddr;
+
+	for (i = 0; i < cam_dev->hw_num_slots; i++)
+		if (cam_dev->hw_slots[i])
+			queued++;
+
+	list_for_each_entry(buf, &cam_dev->buf_list, list) {
+		if (!queued--) {
+			next = buf;
+			break;
+		}
+	}
+
+	daddr = next ? next->daddr : cam_dev->scratch_daddr;
+	cam_dev->hw_slots[cam_dev->hw_num_slots++] = next;
 
 	mt6765_camsv_write(cam_dev, MT6765_CAMSV_FBC_IMGO_ENQ_ADDR,
-			   lower_32_bits(buf->daddr));
+			   lower_32_bits(daddr));
 	mt6765_camsv_write(cam_dev, MT6765_CAMSV_IMGO_FBC,
 			   MT6765_CAMSV_IMGO_FBC_RCNT_INC);
+}
+
+static int mt6765_camsv_prepare(struct mtk_cam_dev *cam_dev, u32 bpl,
+				u32 height)
+{
+	cam_dev->scratch_size = PAGE_ALIGN((size_t)bpl * height);
+	cam_dev->scratch = dma_alloc_attrs(cam_dev->dev, cam_dev->scratch_size,
+					   &cam_dev->scratch_daddr, GFP_KERNEL,
+					   DMA_ATTR_NO_KERNEL_MAPPING);
+	return cam_dev->scratch ? 0 : -ENOMEM;
+}
+
+static void mt6765_camsv_unprepare(struct mtk_cam_dev *cam_dev)
+{
+	dma_free_attrs(cam_dev->dev, cam_dev->scratch_size, cam_dev->scratch,
+		       cam_dev->scratch_daddr, DMA_ATTR_NO_KERNEL_MAPPING);
+	cam_dev->scratch = NULL;
 }
 
 static void mt6765_camsv_setup(struct mtk_cam_dev *cam_dev,
@@ -237,13 +274,12 @@ static void mt6765_camsv_setup(struct mtk_cam_dev *cam_dev,
 	mt6765_camsv_set(cam_dev, MT6765_CAMSV_MODULE_EN,
 			 MT6765_CAMSV_MODULE_EN_IMGO_EN);
 
-	/* Hand the first queued buffer to the hardware. */
+	/* Queue the first frame and the one after it. */
 	spin_lock_irqsave(&cam_dev->buf_list_lock, flags);
 	cam_dev->hw_active = true;
-	mt6765_camsv_enqueue(cam_dev,
-			     list_first_entry_or_null(&cam_dev->buf_list,
-						      struct mtk_cam_dev_buffer,
-						      list));
+	cam_dev->hw_num_slots = 0;
+	mt6765_camsv_enqueue(cam_dev);
+	mt6765_camsv_enqueue(cam_dev);
 	spin_unlock_irqrestore(&cam_dev->buf_list_lock, flags);
 }
 
@@ -253,10 +289,9 @@ static void mt6765_camsv_buf_queue(struct mtk_cam_dev *cam_dev,
 {
 	unsigned long flags;
 
+	/* The hardware takes it when a slot frees up, in the frame-done IRQ. */
 	spin_lock_irqsave(&cam_dev->buf_list_lock, flags);
 	list_add_tail(&buf->list, &cam_dev->buf_list);
-	if (cam_dev->hw_active && !cam_dev->hw_buf)
-		mt6765_camsv_enqueue(cam_dev, buf);
 	spin_unlock_irqrestore(&cam_dev->buf_list_lock, flags);
 }
 
@@ -289,7 +324,7 @@ static void mt6765_camsv_stream_off(struct mtk_cam_dev *cam_dev)
 
 	spin_lock_irqsave(&cam_dev->buf_list_lock, flags);
 	cam_dev->hw_active = false;
-	cam_dev->hw_buf = NULL;
+	cam_dev->hw_num_slots = 0;
 	spin_unlock_irqrestore(&cam_dev->buf_list_lock, flags);
 
 	synchronize_irq(cam_dev->irq);
@@ -334,19 +369,14 @@ static irqreturn_t mt6765_camsv_isr(int irq, void *data)
 	/* A frame was written to the buffer owned by the hardware. */
 	if (status & MT6765_CAMSV_IRQ_SW_PASS1_DON) {
 		spin_lock(&cam_dev->buf_list_lock);
-		if (cam_dev->hw_active && cam_dev->hw_buf) {
-			buf = cam_dev->hw_buf;
-			if (list_is_last(&buf->list, &cam_dev->buf_list)) {
-				/* No replacement: drop the frame, keep the buffer. */
-				mt6765_camsv_enqueue(cam_dev, buf);
-				buf = NULL;
-			} else {
+		if (cam_dev->hw_active && cam_dev->hw_num_slots) {
+			/* NULL: the frame went to the scratch buffer. */
+			buf = cam_dev->hw_slots[0];
+			cam_dev->hw_slots[0] = cam_dev->hw_slots[1];
+			cam_dev->hw_num_slots--;
+			if (buf)
 				list_del(&buf->list);
-				mt6765_camsv_enqueue(cam_dev,
-						     list_first_entry(&cam_dev->buf_list,
-								      struct mtk_cam_dev_buffer,
-								      list));
-			}
+			mt6765_camsv_enqueue(cam_dev);
 		}
 		spin_unlock(&cam_dev->buf_list_lock);
 
@@ -416,6 +446,8 @@ static void mt6765_camsv_dbg_show(struct seq_file *m,
 }
 
 static const struct mtk_camsv_hw_ops mt6765_camsv_ops = {
+	.prepare = mt6765_camsv_prepare,
+	.unprepare = mt6765_camsv_unprepare,
 	.setup = mt6765_camsv_setup,
 	.buf_queue = mt6765_camsv_buf_queue,
 	.stream_on = mt6765_camsv_stream_on,
