@@ -1,0 +1,22 @@
+# Stock RabbitOS (Android 12) MediaTek GNSS userspace, from out/stock-vendor/tree.
+# Copied verbatim into vendor/rabbit/r1-gnss/proprietary/<same path>.
+# Dependency closure of mnld, the GNSS HAL service, its AIDL and HIDL
+# implementation libraries and the gps.default.so legacy HAL they load.
+# Not listed, because they come from elsewhere:
+#   android.hardware.gnss@1.0-2.1, android.hardware.gnss.measurement_corrections@1.0-1.1,
+#   android.hardware.gnss.visibility_control@1.0, android.hardware.sensors@1.0,
+#   android.frameworks.sensorservice@1.0, libcurl, libssl: built .vendor variants (gnss.mk)
+#   android.hardware.gnss-V1-ndk_platform.so: prebuilts/vndk/v31 (gnss.mk)
+#   libnvram.so, libnvram_sec.so, libhidltransport: modem/modem.mk
+#   libladder.so: vendor/rabbit/r1-pvr
+# The stock copies of the HIDL interface libraries are not shipped so that
+# they match our libhidlbase.
+bin/mnld
+bin/hw/android.hardware.gnss-service.mediatek
+etc/MNL_Config.xml
+lib64/hw/android.hardware.gnss-impl-mediatek.so
+lib64/hw/android.hardware.gnss@2.1-impl-mediatek.so
+lib64/hw/gps.default.so
+lib64/libDR.so
+lib64/libmnl.so
+lib64/libsensorndkbridge.so

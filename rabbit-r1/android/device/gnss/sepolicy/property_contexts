@@ -1,0 +1,7 @@
+# Set by mnld (stock vendor_property_contexts)
+vendor.gps.                     u:object_r:vendor_mtk_mnld_prop:s0
+vendor.gpsdbglog.               u:object_r:vendor_mtk_mnld_prop:s0
+vendor.debug.gps.               u:object_r:vendor_mtk_mnld_prop:s0
+# CONSYS state: set by init (init.mtk-consys.rc) and gnss.mk, read by mnld
+vendor.connsys.                 u:object_r:vendor_mtk_connsys_prop:s0
+persist.vendor.connsys.         u:object_r:vendor_mtk_connsys_prop:s0

@@ -1,0 +1,57 @@
+# mnld, the stock MediaTek GNSS daemon. It owns /dev/stpgps, downloads EPO
+# assistance data over HTTP (libcurl), reads the GPS NV record through
+# libnvram and serves the GNSS HAL over abstract datagram sockets
+# (mtk_hal2mnl / mtk_mnl2hal). Rules ported from the stock
+# vendor_sepolicy.cil, minus the MediaTek factory/meta/logger peers and
+# the platform files this kernel does not have.
+
+type mnld, domain;
+type mnld_exec, exec_type, vendor_file_type, file_type;
+init_daemon_domain(mnld)
+net_domain(mnld)
+
+type stpgps_device, dev_type;
+type gps_emi_device, dev_type;
+type mnld_socket, file_type;
+type gps_data_file, file_type, data_file_type;
+
+vendor_internal_prop(vendor_mtk_mnld_prop)
+vendor_internal_prop(vendor_mtk_connsys_prop)
+
+# The receiver (gps_drv.ko)
+allow mnld stpgps_device:chr_file rw_file_perms;
+
+# /data/vendor/gps, /data/vendor/log/gps
+allow mnld vendor_data_file:dir search;
+allow mnld gps_data_file:dir create_dir_perms;
+allow mnld gps_data_file:{ file fifo_file sock_file } create_file_perms;
+
+# HAL <-> mnld
+allow mnld self:unix_dgram_socket create_socket_perms_no_ioctl;
+allow mnld hal_gnss_default:unix_dgram_socket sendto;
+
+# Properties
+set_prop(mnld, vendor_mtk_mnld_prop)
+get_prop(mnld, vendor_mtk_connsys_prop)
+# vendor.service.nvram_init, persist.vendor.radio.mnl.prop,
+# ro.vendor.mtk_log_hide_gps (types from modem/sepolicy)
+get_prop(mnld, vendor_mtk_nvram_prop)
+get_prop(mnld, vendor_mtk_ril_prop)
+get_prop(mnld, vendor_mtk_radio_config_prop)
+
+# GPS NV record (libnvram) and almanac (/mnt/vendor/nvcfg/almanac.dat)
+allow mnld mnt_vendor_file:dir search;
+allow mnld nvdata_file:dir create_dir_perms;
+allow mnld nvdata_file:file create_file_perms;
+allow mnld nvdata_file:lnk_file r_file_perms;
+allow mnld nvcfg_file:dir rw_dir_perms;
+allow mnld nvcfg_file:file create_file_perms;
+
+# Dead reckoning (libDR) reads sensors through the HIDL sensor service
+hwbinder_use(mnld)
+get_prop(mnld, hwservicemanager_prop)
+allow mnld fwk_sensor_hwservice:hwservice_manager find;
+binder_call(mnld, system_server)
+
+wakelock_use(mnld)
+allow mnld self:global_capability2_class_set wake_alarm;

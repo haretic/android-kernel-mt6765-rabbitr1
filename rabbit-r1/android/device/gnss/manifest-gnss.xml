@@ -1,0 +1,22 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!--
+    android.hardware.gnss-service.mediatek registers the AIDL IGnss V1 and
+    the passthrough HIDL IGnss 2.1, as on stock. The framework takes the
+    location path from HIDL 2.1 when AIDL IGnss is older than V2.
+    hwservicemanager refuses a HIDL instance whose parents are not
+    declared too, hence 1.1 (2.0 extends @1.1::IGnss).
+    compatibility_matrix.7.xml lists HIDL IGnss 2.0-1 and AIDL IGnss 1-2.
+-->
+<manifest version="1.0" type="device">
+    <hal format="aidl">
+        <name>android.hardware.gnss</name>
+        <version>1</version>
+        <fqname>IGnss/default</fqname>
+    </hal>
+    <hal format="hidl">
+        <name>android.hardware.gnss</name>
+        <transport>hwbinder</transport>
+        <fqname>@2.1::IGnss/default</fqname>
+        <fqname>@1.1::IGnss/default</fqname>
+    </hal>
+</manifest>
