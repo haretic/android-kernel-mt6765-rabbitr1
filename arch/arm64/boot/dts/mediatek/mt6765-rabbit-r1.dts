@@ -358,6 +358,17 @@
 			     <GIC_SPI 270 IRQ_TYPE_EDGE_RISING>;
 		power-domains = <&spm MT6765_POWER_DOMAIN_CONN>;
 		memory-region = <&consys_mem>;
+		/*
+		 * WMT drives the external GPS LNA enable through these states
+		 * while the GPS function is on. The driver takes the LNA pin
+		 * number from the first state after "default".
+		 */
+		pinctrl-names = "default", "gps_lna_state_init",
+				"gps_lna_state_oh", "gps_lna_state_ol";
+		pinctrl-0 = <&r1_gps_lna_init_pins>;
+		pinctrl-1 = <&r1_gps_lna_init_pins>;
+		pinctrl-2 = <&r1_gps_lna_high_pins>;
+		pinctrl-3 = <&r1_gps_lna_low_pins>;
 		pmic = <&mt6357_pmic>;
 		vcn18-supply = <&mt6357_vcn18_reg>;
 		vcn28-supply = <&mt6357_vcn28_reg>;
@@ -984,6 +995,29 @@
 				 <PINMUX_GPIO168__FUNC_GPIO168>,
 				 <PINMUX_GPIO170__FUNC_GPIO170>,
 				 <PINMUX_GPIO171__FUNC_GPIO171>;
+		};
+	};
+
+	/* Stock consys gpslna@0..2: GPIO177, released (input) when GPS is off. */
+	r1_gps_lna_init_pins: gps-lna-init-pins {
+		pins-lna {
+			pinmux = <PINMUX_GPIO177__FUNC_GPIO177>;
+			input-enable;
+			bias-disable;
+		};
+	};
+
+	r1_gps_lna_high_pins: gps-lna-high-pins {
+		pins-lna {
+			pinmux = <PINMUX_GPIO177__FUNC_GPIO177>;
+			output-high;
+		};
+	};
+
+	r1_gps_lna_low_pins: gps-lna-low-pins {
+		pins-lna {
+			pinmux = <PINMUX_GPIO177__FUNC_GPIO177>;
+			output-low;
 		};
 	};
 
