@@ -111,3 +111,6 @@ $(call inherit-product, $(LOCAL_PATH)/audio/audio.mk)
 
 # CONSYS Wi-Fi/BT: stock firmware, module loading, Wi-Fi powered at boot.
 $(call inherit-product, $(LOCAL_PATH)/connectivity/connectivity.mk)
+
+# MT6765 modem (MD1) on mtk-ccci.ko and the stock MediaTek RIL.
+$(call inherit-product, $(LOCAL_PATH)/modem/modem.mk)

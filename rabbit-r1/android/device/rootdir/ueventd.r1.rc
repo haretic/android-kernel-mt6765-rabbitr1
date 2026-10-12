@@ -3,3 +3,6 @@
 
 # CONSYS Wi-Fi power switch (wmt_chrdev_wifi): written by the Wi-Fi HAL.
 /dev/wmtWifi              0660   wifi       wifi
+
+# Modem device nodes (modem/ueventd.r1-modem.rc).
+import /vendor/etc/ueventd.r1-modem.rc

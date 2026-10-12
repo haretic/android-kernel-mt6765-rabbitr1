@@ -82,3 +82,9 @@ ifeq ($(R1_GPU),pvr)
 include vendor/rabbit/r1-pvr/BoardConfigPvr.mk
 BOARD_VENDOR_SEPOLICY_DIRS += $(DEVICE_PATH)/sepolicy/pvr
 endif
+
+# Modem: sepolicy and framework matrix for modem/modem.mk.
+include $(DEVICE_PATH)/modem/BoardConfigModem.mk
+# r1-md-probe.ko is a bring-up diagnostic that binds the same DT node as
+# mtk-ccci.ko; the prebuilt_kernel glob must not install it into vendor.
+BOARD_VENDOR_KERNEL_MODULES := $(filter-out %/r1-md-probe.ko,$(BOARD_VENDOR_KERNEL_MODULES))
