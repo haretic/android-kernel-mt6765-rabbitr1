@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: Apache-2.0
+# Lines to append to rootdir/fstab.r1 (not installed on its own).
+#
+# NV filesystems, mounted read-write by "mount_all /vendor/etc/fstab.r1 --early".
+# Stock (etc/fstab.mt6765) marks them formattable. Here they never are: they
+# hold this unit's IMEI and RF calibration, and a format loses them for good.
+# nofail: a broken NV filesystem must not stop the boot; r1-modem-nvcheck.sh
+# then keeps the modem userspace off.
+/dev/block/by-name/protect1 /mnt/vendor/protect_f ext4 noatime,nosuid,nodev,noauto_da_alloc,commit=1,nodelalloc wait,check,nofail
+/dev/block/by-name/protect2 /mnt/vendor/protect_s ext4 noatime,nosuid,nodev,noauto_da_alloc,commit=1,nodelalloc wait,check,nofail
+/dev/block/by-name/nvdata   /mnt/vendor/nvdata    ext4 noatime,nosuid,nodev,noauto_da_alloc,commit=1,nodelalloc wait,check,nofail
+/dev/block/by-name/nvcfg    /mnt/vendor/nvcfg     ext4 noatime,nosuid,nodev,noauto_da_alloc,commit=1,nodelalloc wait,check,nofail
+# Raw NV partitions. Not mounted; libnvram.so and libsysenv.so look them up in
+# the default fstab (GetEntryForMountPoint) to find the block devices.
+/dev/block/by-name/nvram   /nvram   emmc defaults defaults
+/dev/block/by-name/proinfo /proinfo emmc defaults defaults

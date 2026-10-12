@@ -1,0 +1,35 @@
+# Daemons (stock vendor_file_contexts labels)
+/vendor/bin/ccci_mdinit                                     u:object_r:ccci_mdinit_exec:s0
+/vendor/bin/ccci_rpcd                                       u:object_r:ccci_rpcd_exec:s0
+/vendor/bin/nvram_daemon                                    u:object_r:nvram_daemon_exec:s0
+/vendor/bin/hw/vendor\.mediatek\.hardware\.nvram@1\.1-service u:object_r:mtk_hal_nvramagent_exec:s0
+/vendor/bin/hw/mtkfusionrild                                u:object_r:rild_exec:s0
+/vendor/bin/netdagent                                       u:object_r:netdagent_exec:s0
+/vendor/bin/r1-modem-nvcheck\.sh                            u:object_r:r1_modem_nvcheck_exec:s0
+
+# CCCI character devices; stock splits these further (ttyC0 gsm0710muxd_device, ...)
+/dev/ccci.*                                                 u:object_r:ccci_device:s0
+/dev/ttyC[0-9]+                                             u:object_r:ccci_device:s0
+/dev/ccci_monitor                                           u:object_r:ccci_monitor_device:s0
+/dev/ccci_aud                                               u:object_r:ccci_aud_device:s0
+/dev/ccci_raw_audio                                         u:object_r:ccci_aud_device:s0
+
+# NV partitions
+/dev/block/by-name/nvram                                    u:object_r:nvram_device:s0
+/dev/block/by-name/proinfo                                  u:object_r:nvram_device:s0
+/dev/block/by-name/nvdata                                   u:object_r:nvdata_device:s0
+/dev/block/by-name/nvcfg                                    u:object_r:nvcfg_block_device:s0
+/dev/block/by-name/protect1                                 u:object_r:protect1_block_device:s0
+/dev/block/by-name/protect2                                 u:object_r:protect2_block_device:s0
+/dev/block/by-name/md1img(_[ab])?                           u:object_r:md_block_device:s0
+
+# NV filesystems
+/mnt/vendor/nvdata(/.*)?                                    u:object_r:nvdata_file:s0
+/mnt/vendor/nvcfg(/.*)?                                     u:object_r:nvcfg_file:s0
+/mnt/vendor/protect_f(/.*)?                                 u:object_r:protect_f_data_file:s0
+/mnt/vendor/protect_s(/.*)?                                 u:object_r:protect_s_data_file:s0
+
+# /data
+/data/vendor/mdlpm(/.*)?                                    u:object_r:ccci_data_md1_file:s0
+/data/vendor_de/md(/.*)?                                    u:object_r:data_vendor_de_md_file:s0
+/data/vendor/radio(/.*)?                                    u:object_r:mtk_radio_data_file:s0

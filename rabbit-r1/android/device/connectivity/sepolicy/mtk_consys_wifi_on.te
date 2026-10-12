@@ -1,0 +1,8 @@
+type mtk_consys_wifi_on, domain;
+type mtk_consys_wifi_on_exec, exec_type, vendor_file_type, file_type;
+
+init_daemon_domain(mtk_consys_wifi_on)
+
+allow mtk_consys_wifi_on mtk_consys_wifi_on_exec:file rx_file_perms;
+allow mtk_consys_wifi_on vendor_shell_exec:file rx_file_perms;
+allow mtk_consys_wifi_on wmtwifi_device:chr_file w_file_perms;

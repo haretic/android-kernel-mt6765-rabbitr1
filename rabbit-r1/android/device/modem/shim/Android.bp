@@ -1,0 +1,10 @@
+// SPDX-License-Identifier: Apache-2.0
+// Old libbase symbols for the stock MediaTek NVRAM libraries.
+
+cc_library_shared {
+    name: "libr1_base_shim",
+    vendor: true,
+    srcs: ["r1_base_shim.cpp"],
+    shared_libs: ["libbase"],
+    cflags: ["-Wall", "-Werror"],
+}

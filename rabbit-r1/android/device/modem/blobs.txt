@@ -1,0 +1,55 @@
+# Stock RabbitOS (Android 12) MediaTek modem userspace, from out/stock-vendor/tree.
+# Dependency closure of ccci_mdinit, ccci_rpcd, nvram_daemon, the nvram HAL,
+# mtkfusionrild (+ its -l libmtk-ril.so and the libmtkmipc-ril.so,
+# libcapctrl.so and libcarrierconfig.so it dlopens) and netdagent.
+# Not listed, because they come from elsewhere:
+#   android.hardware.radio@1.0-1.6, android.hardware.radio.config@1.0-1.3,
+#   libhidltransport, android.hidl.safe_union@1.0: built .vendor variants (modem.mk)
+#   libladder.so: already shipped by vendor/rabbit/r1-pvr
+# Needs patchelf at import: lib64/libnvram.so and lib64/libsysenv.so get
+#   --add-needed libr1_base_shim.so (see shim/).
+bin/ccci_mdinit
+bin/ccci_rpcd
+bin/hw/mtkfusionrild
+bin/hw/vendor.mediatek.hardware.nvram@1.1-service
+bin/netdagent
+bin/nvram_daemon
+etc/ecc_list.xml
+etc/ecc_list_preference.xml
+lib64/libcapctrl.so
+lib64/libcares_naptr.so
+lib64/libcarrierconfig.so
+lib64/libccci_util.so
+lib64/libconnfem.so
+lib64/libfile_op.so
+lib64/libforkexecwrap.so
+lib64/libhwm.so
+lib64/libifcutils_mtk.so
+lib64/libmipc.so
+lib64/libmtk-ril.so
+lib64/libmtkares.so
+lib64/libmtkconfig.so
+lib64/libmtkconfigutils.so
+lib64/libmtkcutils.so
+lib64/libmtkhardware_legacy.so
+lib64/libmtkmipc-ril.so
+lib64/libmtknetcap.so
+lib64/libmtknetutils.so
+lib64/libmtkproperty.so
+lib64/libmtkrillog.so
+lib64/libmtkrilutils.so
+lib64/libmtksysutils.so
+lib64/libmtktinyxml.so
+lib64/libmtkutils.so
+lib64/libnvram.so
+lib64/libnvram_sec.so
+lib64/libratconfig.so
+lib64/librilfusion.so
+lib64/libstorage_otp.so
+lib64/libsysenv.so
+lib64/libtrm.so
+lib64/libwpfa.so
+lib64/vendor.mediatek.hardware.mtkradioex@3.0.so
+lib64/vendor.mediatek.hardware.netdagent@1.0.so
+lib64/vendor.mediatek.hardware.nvram@1.0.so
+lib64/vendor.mediatek.hardware.nvram@1.1.so
