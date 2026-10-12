@@ -25,7 +25,7 @@ config MTK_CONN_BTIF
 config MTK_CONN_WMT
 	tristate "MediaTek WMT/STP CONSYS core"
 	depends on MTK_CONN_BTIF
-	depends on MFD_MT6397 && REGULATOR && PM
+	depends on MFD_MT6397 && REGULATOR && PM_SLEEP
 	depends on THERMAL_OF || !THERMAL_OF
 	select FW_LOADER
 	help
@@ -34,7 +34,8 @@ config MTK_CONN_WMT
 	  into the consys-reserve-memory carveout and runs the WMT handshake
 	  over BTIF/STP. Firmware (soc1_0_*.bin, WMT_SOC.cfg) is requested
 	  at runtime, so build this as a module and load it after /vendor
-	  is mounted.
+	  is mounted. The stack holds wakeup sources while CONSYS is busy,
+	  so it needs system sleep support.
 
 	  The module is called wmt_drv.
 
