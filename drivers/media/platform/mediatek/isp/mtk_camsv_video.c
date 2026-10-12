@@ -950,8 +950,8 @@ int mtk_cam_video_register(struct mtk_cam_dev *cam)
 	vbq->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC
 			     | V4L2_BUF_FLAG_TSTAMP_SRC_EOF;
 
-	/* No minimum buffers limitation */
-	vbq->min_queued_buffers = 0;
+	/* The IMGO DMA needs an address before the first frame. */
+	vbq->min_queued_buffers = 1;
 	vbq->drv_priv = cam;
 
 	vbq->lock = &cam_vdev->vdev_lock;
