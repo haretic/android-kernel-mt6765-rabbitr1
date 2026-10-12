@@ -4,12 +4,14 @@
  */
 #include <linux/bitfield.h>
 #include <linux/clk.h>
+#include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/property.h>
+#include <linux/seq_file.h>
 #include <linux/videodev2.h>
 #include <media/media-device.h>
 #include <media/media-entity.h>
@@ -46,6 +48,8 @@
 #define SENINF_IRQ_CLR_SEL		0x80000000
 
 #define SENINF_MIPI_SENSOR		0x8
+
+#define SENINF_INSTANCE_SIZE		0x1000
 
 #define MTK_CSI_MAX_LANES 4
 
@@ -90,12 +94,17 @@ enum mtk_seninf_format_flag {
  * @nb_inputs: Number of SENINF inputs
  * @nb_muxes: Number of SENINF MUX (FIFO) instances
  * @nb_outputs: Number of outputs (to CAM and CAMSV instances)
+ * @camsv_cam_mux: Index of the CAM MUX that feeds the first CAMSV. When set,
+ *		   output N is routed from MUX N through CAM MUX
+ *		   (camsv_cam_mux + N). When zero, the fixed MT8365 routing is
+ *		   used.
  */
 struct mtk_seninf_conf {
 	const char *model;
 	u8 nb_inputs;
 	u8 nb_muxes;
 	u8 nb_outputs;
+	u8 camsv_cam_mux;
 };
 
 /**
@@ -159,6 +168,8 @@ struct mtk_seninf_mux {
  * @num_clks: Number of clocks in the clks array
  * @clks: Clocks
  * @base: Memory mapped I/O base address
+ * @base_size: Size of the memory mapped I/O region
+ * @debugfs: debugfs directory
  * @media_dev: Media controller device
  * @v4l2_dev: V4L2 device
  * @subdev: V4L2 subdevice
@@ -175,6 +186,8 @@ struct mtk_seninf {
 	unsigned int num_clks;
 	struct clk_bulk_data *clks;
 	void __iomem *base;
+	resource_size_t base_size;
+	struct dentry *debugfs;
 
 	struct media_device media_dev;
 	struct v4l2_device v4l2_dev;
@@ -514,21 +527,28 @@ static s64 mtk_seninf_get_clk_divider(struct mtk_seninf_input *input,
 {
 	struct media_entity *entity = &input->seninf->subdev.entity;
 	struct media_pad *pad;
-	struct v4l2_subdev *sd;
-	s64 link_frequency, pixel_clock;
+	s64 link_frequency, pixel_clock, div;
 
 	pad = media_pad_remote_pad_first(&entity->pads[pad_num]);
+	if (!pad)
+		return 0;
 
-	sd = media_entity_to_v4l2_subdev(pad->entity);
-	link_frequency = v4l2_get_link_freq(sd->ctrl_handler, bpp,
-					    num_data_lanes * 2);
+	link_frequency = v4l2_get_link_freq(pad, bpp, num_data_lanes * 2);
+	if (link_frequency <= 0)
+		return 0;
+
 	pixel_clock = div_u64(link_frequency * 2 * num_data_lanes, bpp);
+	if (!pixel_clock)
+		return 0;
+
 	/*
 	 * According to datasheet: Sensor master clock = ISP_clock/(CLKCNT +1)
 	 * we also have the following constraint:
 	 * pixel_clock >= Sensor master clock
 	 */
-	return div_u64(clk_get_rate(input->seninf->clks[0].clk), pixel_clock) - 1;
+	div = div_u64(clk_get_rate(input->seninf->clks[0].clk), pixel_clock);
+
+	return div > 0 ? div - 1 : 0;
 }
 
 static void mtk_seninf_input_setup_csi2(struct mtk_seninf_input *input,
@@ -690,6 +710,7 @@ static void mtk_seninf_top_mux_setup(struct mtk_seninf *priv,
 				     enum mtk_seninf_id seninf_id,
 				     const struct mtk_seninf_mux *mux)
 {
+	unsigned int cam_mux;
 	unsigned int val;
 
 	/*
@@ -700,6 +721,16 @@ static void mtk_seninf_top_mux_setup(struct mtk_seninf *priv,
 		    & ~(0xf << (mux->mux_id * 4));
 	val |= (seninf_id & 0xf) << (mux->mux_id * 4);
 	mtk_seninf_write(priv, SENINF_TOP_MUX_CTRL, val);
+
+	if (priv->conf->camsv_cam_mux) {
+		/* Route MUX N to the CAM MUX of the CAMSV on output N. */
+		cam_mux = priv->conf->camsv_cam_mux + mux->mux_id;
+		val = mtk_seninf_read(priv, SENINF_TOP_CAM_MUX_CTRL)
+		    & ~(0xf << (cam_mux * 4));
+		val |= (mux->mux_id & 0xf) << (cam_mux * 4);
+		mtk_seninf_write(priv, SENINF_TOP_CAM_MUX_CTRL, val);
+		return;
+	}
 
 	/*
 	 * We currently support only seninf version 3.0
@@ -1128,7 +1159,13 @@ static int mtk_seninf_fwnode_parse(struct device *dev, unsigned int id)
 
 	input->pad = port;
 	input->seninf_id = port_to_seninf_id[port];
-	input->base = priv->base + 0x1000 * input->seninf_id;
+	if ((input->seninf_id + 1) * SENINF_INSTANCE_SIZE > priv->base_size) {
+		dev_err(dev, "port %u needs SENINF%u, outside of the register space\n",
+			port, input->seninf_id + 1);
+		ret = -EINVAL;
+		goto out;
+	}
+	input->base = priv->base + SENINF_INSTANCE_SIZE * input->seninf_id;
 	input->seninf = priv;
 
 	input->bus = vep.bus.mipi_csi2;
@@ -1363,11 +1400,114 @@ static const struct dev_pm_ops runtime_pm_ops = {
 				pm_runtime_force_resume)
 };
 
+/* -----------------------------------------------------------------------------
+ * debugfs
+ */
+
+struct mtk_seninf_dbg_reg {
+	const char *name;
+	u32 offset;
+};
+
+#define SENINF_DBG_REG(_name, _offset) { .name = _name, .offset = _offset }
+
+static const struct mtk_seninf_dbg_reg mtk_seninf_dbg_top_regs[] = {
+	SENINF_DBG_REG("TOP_CTRL", SENINF_TOP_CTRL),
+	SENINF_DBG_REG("TOP_MUX_CTRL", SENINF_TOP_MUX_CTRL),
+	SENINF_DBG_REG("TOP_CAM_MUX_CTRL", SENINF_TOP_CAM_MUX_CTRL),
+	SENINF_DBG_REG("TOP_PHY_SENINF_CTL_CSI0",
+		       SENINF_TOP_PHY_SENINF_CTL_CSI0),
+	SENINF_DBG_REG("TOP_PHY_SENINF_CTL_CSI1",
+		       SENINF_TOP_PHY_SENINF_CTL_CSI1),
+};
+
+static const struct mtk_seninf_dbg_reg mtk_seninf_dbg_input_regs[] = {
+	SENINF_DBG_REG("CTRL", SENINF_CTRL),
+	SENINF_DBG_REG("CTRL_EXT", SENINF_CTRL_EXT),
+	SENINF_DBG_REG("MIPI_RX_CON24_CSI0", MIPI_RX_CON24_CSI0),
+	SENINF_DBG_REG("CSI2_CTL", SENINF_CSI2_CTL),
+	SENINF_DBG_REG("CSI2_LNRD_TIMING", SENINF_CSI2_LNRD_TIMING),
+	SENINF_DBG_REG("CSI2_INT_STATUS", 0x0a14),
+	SENINF_DBG_REG("CSI2_DBG_PORT", 0x0a1c),
+	SENINF_DBG_REG("CSI2_LNRC_FSM", SENINF_CSI2_LNRC_FSM),
+	SENINF_DBG_REG("CSI2_LNRD_FSM", 0x0a2c),
+	SENINF_DBG_REG("CSI2_FRAME_LINE_NUM", 0x0a30),
+	SENINF_DBG_REG("CSI2_HSRX_DBG", 0x0a38),
+	SENINF_DBG_REG("CSI2_RESYNC_MERGE_CTL", SENINF_CSI2_RESYNC_MERGE_CTL),
+	SENINF_DBG_REG("CSI2_INT_STATUS_EXT", 0x0b14),
+};
+
+static const struct mtk_seninf_dbg_reg mtk_seninf_dbg_mux_regs[] = {
+	SENINF_DBG_REG("MUX_CTRL", SENINF_MUX_CTRL),
+	SENINF_DBG_REG("MUX_INTEN", SENINF_MUX_INTEN),
+	SENINF_DBG_REG("MUX_INTSTA", 0x0d08),
+	SENINF_DBG_REG("MUX_SIZE", 0x0d0c),
+	SENINF_DBG_REG("MUX_DEBUG_1", 0x0d10),
+	SENINF_DBG_REG("MUX_DEBUG_2", 0x0d14),
+	SENINF_DBG_REG("MUX_SPARE", SENINF_MUX_SPARE),
+	SENINF_DBG_REG("MUX_CTRL_EXT", SENINF_MUX_CTRL_EXT),
+};
+
+static void mtk_seninf_dbg_dump(struct seq_file *m, const char *prefix,
+				void __iomem *base,
+				const struct mtk_seninf_dbg_reg *regs,
+				unsigned int num_regs)
+{
+	unsigned int i;
+
+	for (i = 0; i < num_regs; i++)
+		seq_printf(m, "%s%-24s [0x%04x] 0x%08x\n", prefix,
+			   regs[i].name, regs[i].offset,
+			   readl(base + regs[i].offset));
+}
+
+static int mtk_seninf_regs_show(struct seq_file *m, void *unused)
+{
+	struct mtk_seninf *priv = m->private;
+	char prefix[16];
+	unsigned int i;
+
+	/* Never power the block up just to read it. */
+	if (pm_runtime_get_if_in_use(priv->dev) <= 0) {
+		seq_puts(m, "powered off\n");
+		return 0;
+	}
+
+	mtk_seninf_dbg_dump(m, "", priv->base, mtk_seninf_dbg_top_regs,
+			    ARRAY_SIZE(mtk_seninf_dbg_top_regs));
+
+	for (i = 0; i < priv->conf->nb_inputs; i++) {
+		const struct mtk_seninf_input *input = &priv->inputs[i];
+
+		if (!input->base)
+			continue;
+
+		snprintf(prefix, sizeof(prefix), "seninf%u.",
+			 input->seninf_id + 1);
+		mtk_seninf_dbg_dump(m, prefix, input->base,
+				    mtk_seninf_dbg_input_regs,
+				    ARRAY_SIZE(mtk_seninf_dbg_input_regs));
+	}
+
+	for (i = 0; i < priv->conf->nb_muxes; i++) {
+		snprintf(prefix, sizeof(prefix), "mux%u.", i);
+		mtk_seninf_dbg_dump(m, prefix, priv->muxes[i].base,
+				    mtk_seninf_dbg_mux_regs,
+				    ARRAY_SIZE(mtk_seninf_dbg_mux_regs));
+	}
+
+	pm_runtime_put(priv->dev);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(mtk_seninf_regs);
+
 static int seninf_probe(struct platform_device *pdev)
 {
 	static const char * const clk_names[] = { "camsys", "top_mux" };
 	struct device *dev = &pdev->dev;
 	struct mtk_seninf *priv;
+	struct resource *res;
 	unsigned int i;
 	int ret;
 
@@ -1380,9 +1520,15 @@ static int seninf_probe(struct platform_device *pdev)
 	dev_set_drvdata(dev, priv);
 	priv->dev = dev;
 
-	priv->base = devm_platform_ioremap_resource(pdev, 0);
+	priv->base = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
 	if (IS_ERR(priv->base))
 		return PTR_ERR(priv->base);
+	priv->base_size = resource_size(res);
+
+	if (priv->conf->nb_muxes * SENINF_INSTANCE_SIZE > priv->base_size)
+		return dev_err_probe(dev, -EINVAL,
+				     "register space too small for %u MUXes\n",
+				     priv->conf->nb_muxes);
 
 	priv->num_clks = ARRAY_SIZE(clk_names);
 	priv->clks = devm_kcalloc(dev, priv->num_clks,
@@ -1402,19 +1548,28 @@ static int seninf_probe(struct platform_device *pdev)
 
 		mux->pad = priv->conf->nb_inputs + i;
 		mux->mux_id = i;
-		mux->base = priv->base + 0x1000 * i;
+		mux->base = priv->base + SENINF_INSTANCE_SIZE * i;
 		mux->seninf = priv;
 	}
 
 	devm_pm_runtime_enable(dev);
 
-	return mtk_seninf_v4l2_register(priv);
+	ret = mtk_seninf_v4l2_register(priv);
+	if (ret)
+		return ret;
+
+	priv->debugfs = debugfs_create_dir(dev_name(dev), NULL);
+	debugfs_create_file("regs", 0400, priv->debugfs, priv,
+			    &mtk_seninf_regs_fops);
+
+	return 0;
 }
 
 static void seninf_remove(struct platform_device *pdev)
 {
 	struct mtk_seninf *priv = dev_get_drvdata(&pdev->dev);
 
+	debugfs_remove_recursive(priv->debugfs);
 	media_device_unregister(&priv->media_dev);
 	media_device_cleanup(&priv->media_dev);
 	v4l2_async_nf_unregister(&priv->notifier);
@@ -1431,7 +1586,16 @@ static const struct mtk_seninf_conf seninf_8365_conf = {
 	.nb_outputs = 4,
 };
 
+static const struct mtk_seninf_conf seninf_6765_conf = {
+	.model = "mtk-camsys-3.0",
+	.nb_inputs = 4,
+	.nb_muxes = 4,
+	.nb_outputs = 4,
+	.camsv_cam_mux = 2,
+};
+
 static const struct of_device_id mtk_seninf_of_match[] = {
+	{ .compatible = "mediatek,mt6765-seninf", .data = &seninf_6765_conf },
 	{ .compatible = "mediatek,mt8365-seninf", .data = &seninf_8365_conf },
 	{ /* sentinel */ },
 };

@@ -22,7 +22,9 @@ description:
 
 properties:
   compatible:
-    const: mediatek,mt8365-seninf
+    enum:
+      - mediatek,mt6765-seninf
+      - mediatek,mt8365-seninf
 
   reg:
     maxItems: 1
@@ -44,7 +46,7 @@ properties:
       - const: top_mux
 
   phys:
-    minItems: 2
+    minItems: 1
     maxItems: 2
     description:
       phandle to the PHYs connected to CSI0/A, CSI1, CSI0B
@@ -52,7 +54,7 @@ properties:
   phy-names:
     description:
       list of PHYs names
-    minItems: 2
+    minItems: 1
     maxItems: 2
     items:
       enum: [ csi0, csi1, csi0b]
@@ -167,11 +169,19 @@ properties:
 
 required:
   - compatible
-  - interrupts
   - clocks
   - clock-names
   - power-domains
   - ports
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          const: mediatek,mt8365-seninf
+    then:
+      required:
+        - interrupts
 
 additionalProperties: false
 
