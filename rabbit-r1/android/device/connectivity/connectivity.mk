@@ -41,6 +41,11 @@ PRODUCT_COPY_FILES += \
 PRODUCT_COPY_FILES += \
     $(MTK_CONSYS_PATH)/init.mtk-consys.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/init.mtk-consys.rc
 
+# wpa_supplicant overlays: STA on wlan0, P2P on gen4m's p2p0.
+PRODUCT_COPY_FILES += \
+    $(MTK_CONSYS_PATH)/wifi/wpa_supplicant_overlay.conf:$(TARGET_COPY_OUT_VENDOR)/etc/wifi/wpa_supplicant_overlay.conf \
+    $(MTK_CONSYS_PATH)/wifi/p2p_supplicant_overlay.conf:$(TARGET_COPY_OUT_VENDOR)/etc/wifi/p2p_supplicant_overlay.conf
+
 # Wi-Fi power. "boot": power the Wi-Fi function on once at boot, wlan0 stays
 # up and the framework runs without a Wi-Fi HAL (STA through wpa_supplicant).
 # "hal": the AOSP Wi-Fi HAL writes 1/0 to /dev/wmtWifi when Wi-Fi is
