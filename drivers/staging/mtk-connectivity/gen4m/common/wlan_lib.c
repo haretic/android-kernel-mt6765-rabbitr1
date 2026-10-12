@@ -1569,7 +1569,7 @@ void wlanIST(IN struct ADAPTER *prAdapter, bool fgEnInt)
 				       "Fail: nicProcessIST! status [%x]\n",
 				       u4Status);
 		}
-#if defined(CONFIG_ANDROID) && (CFG_ENABLE_WAKE_LOCK)
+#if KAL_WAKE_LOCK_ENABLED
 		if (KAL_WAKE_LOCK_ACTIVE(prAdapter,
 					 prAdapter->prGlueInfo->rIntrWakeLock))
 			KAL_WAKE_UNLOCK(prAdapter,
