@@ -8,8 +8,9 @@
  * layout below comes from the MT6765 vendor kernel (camera_isp.c), the
  * programming sequence from the MT8183 CAMSV driver of the MediaTek BSP.
  *
- * Only one buffer is handed to the hardware at a time. When no buffer is
- * queued the FBC drops frames until one is.
+ * Only one buffer is handed to the hardware at a time. The FBC does not stop
+ * the DMA when it runs out of buffers, so the last buffer stays with the
+ * hardware, rewritten frame after frame, until userspace queues another one.
  */
 
 #include <linux/bits.h>
@@ -335,11 +336,17 @@ static irqreturn_t mt6765_camsv_isr(int irq, void *data)
 		spin_lock(&cam_dev->buf_list_lock);
 		if (cam_dev->hw_active && cam_dev->hw_buf) {
 			buf = cam_dev->hw_buf;
-			list_del(&buf->list);
-			mt6765_camsv_enqueue(cam_dev,
-					     list_first_entry_or_null(&cam_dev->buf_list,
+			if (list_is_last(&buf->list, &cam_dev->buf_list)) {
+				/* No replacement: drop the frame, keep the buffer. */
+				mt6765_camsv_enqueue(cam_dev, buf);
+				buf = NULL;
+			} else {
+				list_del(&buf->list);
+				mt6765_camsv_enqueue(cam_dev,
+						     list_first_entry(&cam_dev->buf_list,
 								      struct mtk_cam_dev_buffer,
 								      list));
+			}
 		}
 		spin_unlock(&cam_dev->buf_list_lock);
 
@@ -434,7 +441,7 @@ const struct mtk_cam_conf mtk_camsv_mt6765_conf = {
 	.ops = &mt6765_camsv_ops,
 	.fmts = mt6765_camsv_fmts,
 	.num_fmts = ARRAY_SIZE(mt6765_camsv_fmts),
-	/* No IOMMU on the IMGO port: the DMA uses 32-bit physical addresses. */
+	/* IMGO address width, used when the port is not behind the M4U. */
 	.dma_bits = 32,
 	.tg_sen_mode = MT6765_CAMSV_TG_SEN_MODE_TIME_STP_EN |
 		       MT6765_CAMSV_TG_SEN_MODE_DBL_DATA_BUS,
