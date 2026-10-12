@@ -2,5 +2,7 @@
 # AW87390 speaker amplifier: a module so its ACF firmware comes from
 # /vendor/firmware. Binding it completes the deferred rabbit-r1 sound card.
 on post-fs
+    # CRC8 has no prompt in 7.1, so it stays a module selected by the AW library.
+    insmod /vendor/lib/modules/crc8.ko
     insmod /vendor/lib/modules/snd-soc-aw88395-lib.ko
     insmod /vendor/lib/modules/snd-soc-aw87390.ko
