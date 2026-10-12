@@ -11,5 +11,6 @@ service vendor.mtk-consys-wifi-on /vendor/bin/mtk-consys-wifi-on.sh
     oneshot
     disabled
 
-on boot
+# Bring-up: gated until power on is known not to crash the kernel.
+on property:sys.boot_completed=1 && property:persist.vendor.r1.wifi_autoon=1
     start vendor.mtk-consys-wifi-on
