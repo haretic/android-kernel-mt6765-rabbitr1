@@ -194,6 +194,25 @@ struct regmap *g_regmap_mt6357;
 #endif
 #endif
 
+/*
+ * Mainline port: the WMT core does not always balance power on and off
+ * (a failed power on is never followed by a power off), so remember what
+ * this file actually turned on and only undo that.
+ */
+static bool consys_pm_held;
+static bool consys_vcn18_on;
+static bool consys_vcn33_bt_on;
+static bool consys_vcn28_on;
+
+/* INFRA_TOPAXI_PROTECTEN(_1) bits that isolate CONSYS (clk-mt6765-pg.c) */
+#define CONSYS_BUS_PROT_EN_MASK		((0x1 << 13) | (0x1 << 14) | (0x1 << 16))
+#define CONSYS_BUS_PROT_EN1_MASK	(0x1 << 18)
+#define CONSYS_SPM_CONN_PWR_STA		(0x1 << 1)
+
+/* PMIC wrapper DCXO_ENABLE, bit 1 lets CONSYS request XO_WCN (mt6761 clkbuf) */
+#define CONSYS_PWRAP_DCXO_ENABLE	0x1000d188
+#define CONSYS_PWRAP_DCXO_CONN_ENABLE	(0x1 << 1)
+
 extern int g_mapped_reg_table_sz_mt6765;
 extern REG_MAP_ADDR g_mapped_reg_table_mt6765[];
 
@@ -549,18 +568,32 @@ static int consys_pmic_mt6357_probe(struct platform_device *pdev)
 static INT32 consys_pmic_get_from_dts(struct platform_device *pdev)
 {
 #if CONSYS_PMIC_CTRL_ENABLE
+	/*
+	 * regulator_get() returns an ERR_PTR, never NULL; the stock code
+	 * tested for NULL and would have called into an error pointer.
+	 * A missing supply leaves the pointer NULL, and power on refuses
+	 * to start without VCN18.
+	 */
 	reg_VCN18 = regulator_get(&pdev->dev, "vcn18");
-	if (!reg_VCN18)
-		WMT_PLAT_PR_ERR("Regulator_get VCN_1V8 fail\n");
+	if (IS_ERR(reg_VCN18)) {
+		WMT_PLAT_PR_ERR("Regulator_get VCN_1V8 fail (%ld)\n", PTR_ERR(reg_VCN18));
+		reg_VCN18 = NULL;
+	}
 	reg_VCN28 = regulator_get(&pdev->dev, "vcn28");
-	if (!reg_VCN28)
-		WMT_PLAT_PR_ERR("Regulator_get VCN_2V8 fail\n");
+	if (IS_ERR(reg_VCN28)) {
+		WMT_PLAT_PR_ERR("Regulator_get VCN_2V8 fail (%ld)\n", PTR_ERR(reg_VCN28));
+		reg_VCN28 = NULL;
+	}
 	reg_VCN33_BT = regulator_get(&pdev->dev, "vcn33_bt");
-	if (!reg_VCN33_BT)
-		WMT_PLAT_PR_ERR("Regulator_get VCN33_BT fail\n");
+	if (IS_ERR(reg_VCN33_BT)) {
+		WMT_PLAT_PR_ERR("Regulator_get VCN33_BT fail (%ld)\n", PTR_ERR(reg_VCN33_BT));
+		reg_VCN33_BT = NULL;
+	}
 	reg_VCN33_WIFI = regulator_get(&pdev->dev, "vcn33_wifi");
-	if (!reg_VCN33_WIFI)
-		WMT_PLAT_PR_ERR("Regulator_get VCN33_WIFI fail\n");
+	if (IS_ERR(reg_VCN33_WIFI)) {
+		WMT_PLAT_PR_ERR("Regulator_get VCN33_WIFI fail (%ld)\n", PTR_ERR(reg_VCN33_WIFI));
+		reg_VCN33_WIFI = NULL;
+	}
 #endif
 	return 0;
 }
@@ -659,11 +692,85 @@ static VOID consys_hw_reset_bit_set(MTK_WCN_BOOL enable)
 			msleep(20);
 			cnt++;
 		}
+		if (consys_ver_id != 0x1D1E)
+			WMT_PLAT_PR_ERR("CONSYS MCU did not reach ROM idle (0x18002600=0x%x, want 0x1D1E)\n",
+					consys_ver_id);
 	}
 }
 
 static VOID consys_hw_spm_clk_gating_enable(VOID)
 {
+}
+
+/*
+ * Read-only look at how XO_WCN is set up. On the GKI kernel the clock
+ * buffer is left to the preloader (HW mode, requested by CONSYS through
+ * the PMIC wrapper); upstream nothing touches it, so if CONSYS does not
+ * come up this is the first thing to check.
+ */
+static VOID consys_xo_wcn_diag(VOID)
+{
+	struct regmap *map = g_regmap_mt6357 ? g_regmap_mt6357 : g_regmap;
+	void __iomem *dcxo_en;
+	UINT32 cw00 = 0, cw11 = 0;
+
+	dcxo_en = ioremap(CONSYS_PWRAP_DCXO_ENABLE, 4);
+	if (dcxo_en) {
+		UINT32 val = readl(dcxo_en);
+
+		iounmap(dcxo_en);
+		if (val & CONSYS_PWRAP_DCXO_CONN_ENABLE)
+			WMT_PLAT_PR_INFO("PWRAP DCXO_ENABLE=0x%x (CONN request enabled)\n", val);
+		else
+			WMT_PLAT_PR_ERR("PWRAP DCXO_ENABLE=0x%x: CONSYS cannot request XO_WCN, expect no clock\n",
+					val);
+	}
+
+	if (map) {
+		regmap_read(map, MT6357_DCXO_CW00, &cw00);
+		regmap_read(map, MT6357_DCXO_CW11, &cw11);
+		WMT_PLAT_PR_INFO("MT6357 DCXO_CW00=0x%04x DCXO_CW11=0x%04x\n", cw00, cw11);
+	}
+}
+
+/*
+ * The CONN power domain must be on and the infra bus protection towards
+ * CONSYS released before anything at 0x18xxxxxx is touched, or the AP
+ * bus hangs. Check both and refuse instead of finding out the hard way.
+ */
+static INT32 consys_check_bus_ready(VOID)
+{
+	UINT32 pwr_sta, pwr_sta_s, prot_en, prot_en1, prot_sta, prot_sta1;
+
+	if (!conn_reg.spm_base || !conn_reg.topckgen_base) {
+		WMT_PLAT_PR_ERR("SPM/INFRACFG not mapped, refusing to access CONSYS\n");
+		return -ENODEV;
+	}
+
+	pwr_sta = CONSYS_REG_READ(conn_reg.spm_base + CONSYS_PWR_CONN_ACK_OFFSET);
+	pwr_sta_s = CONSYS_REG_READ(conn_reg.spm_base + CONSYS_PWR_CONN_ACK_S_OFFSET);
+	prot_en = CONSYS_REG_READ(conn_reg.topckgen_base + CONSYS_AHBAXI_PROT_EN_OFFSET);
+	prot_en1 = CONSYS_REG_READ(conn_reg.topckgen_base + CONSYS_AXI_TX_PROT_EN_OFFSET);
+	prot_sta = CONSYS_REG_READ(conn_reg.topckgen_base + CONSYS_AHBAXI_PROT_STA1_OFFSET);
+	prot_sta1 = CONSYS_REG_READ(conn_reg.topckgen_base + CONSYS_AXI_TX_PROT_STA_OFFSET);
+
+	WMT_PLAT_PR_INFO("PWR_STATUS=0x%08x/0x%08x PROTECTEN=0x%08x/0x%08x PROTECT_STA=0x%08x/0x%08x\n",
+			 pwr_sta, pwr_sta_s, prot_en, prot_en1, prot_sta, prot_sta1);
+
+	if (!(pwr_sta & CONSYS_SPM_CONN_PWR_STA) || !(pwr_sta_s & CONSYS_SPM_CONN_PWR_STA)) {
+		WMT_PLAT_PR_ERR("CONN MTCMOS is not powered, refusing to access CONSYS\n");
+		return -EIO;
+	}
+
+	if ((prot_en & CONSYS_BUS_PROT_EN_MASK) || (prot_en1 & CONSYS_BUS_PROT_EN1_MASK)) {
+		WMT_PLAT_PR_ERR("infra bus protection to CONSYS still enabled, refusing to access CONSYS\n");
+		return -EIO;
+	}
+
+	if ((prot_sta & CONSYS_BUS_PROT_EN_MASK) || (prot_sta1 & CONSYS_BUS_PROT_EN1_MASK))
+		WMT_PLAT_PR_WARN("bus protection released but still acknowledged, continuing\n");
+
+	return 0;
 }
 
 static INT32 consys_hw_power_ctrl(MTK_WCN_BOOL enable)
@@ -678,11 +785,21 @@ static INT32 consys_hw_power_ctrl(MTK_WCN_BOOL enable)
 	if (enable) {
 #if CONSYS_PWR_ON_OFF_API_AVAILABLE
 #if (COMMON_KERNEL_CLK_SUPPORT)
-		iRet = pm_runtime_get_sync(&connsys_pdev->dev);
-		if (iRet)
-			WMT_PLAT_PR_INFO("pm_runtime_get_sync() fail(%d)\n", iRet);
-		else
+		if (!consys_pm_held) {
+			consys_xo_wcn_diag();
+			iRet = pm_runtime_resume_and_get(&connsys_pdev->dev);
+			if (iRet < 0) {
+				WMT_PLAT_PR_ERR("CONN power domain on failed (%d), not touching CONSYS\n",
+						iRet);
+				return iRet;
+			}
+			consys_pm_held = true;
 			WMT_PLAT_PR_INFO("pm_runtime_get_sync() CONSYS ok\n");
+		}
+
+		iRet = consys_check_bus_ready();
+		if (iRet)
+			return iRet;
 
 		iRet = device_init_wakeup(&connsys_pdev->dev, true);
 		if (iRet)
@@ -799,11 +916,15 @@ static INT32 consys_hw_power_ctrl(MTK_WCN_BOOL enable)
 		else
 			WMT_PLAT_PR_INFO("device_init_wakeup(false) CONSYS ok\n");
 
-		iRet = pm_runtime_put_sync(&connsys_pdev->dev);
-		if (iRet)
-			WMT_PLAT_PR_INFO("pm_runtime_put_sync() fail.\n");
-		else
-			WMT_PLAT_PR_INFO("pm_runtime_put_sync() CONSYS ok\n");
+		if (consys_pm_held) {
+			iRet = pm_runtime_put_sync(&connsys_pdev->dev);
+			consys_pm_held = false;
+			if (iRet < 0)
+				WMT_PLAT_PR_INFO("pm_runtime_put_sync() fail(%d).\n", iRet);
+			else
+				WMT_PLAT_PR_INFO("pm_runtime_put_sync() CONSYS ok\n");
+			iRet = 0;
+		}
 #else
 		clk_disable_unprepare(clk_scp_conn_main);
 		WMT_PLAT_PR_DBG("clk_disable_unprepare(clk_scp_conn_main) calling\n");
@@ -982,34 +1103,43 @@ static INT32 consys_hw_vcn18_ctrl(MTK_WCN_BOOL enable)
 		/*need PMIC driver provide new API protocol */
 		/*1.AP power on VCN_1V8 LDO (with PMIC_WRAP API) VCN_1V8  */
 		/*set vcn18 SW mode*/
-		if (reg_VCN18) {
+		if (!reg_VCN18) {
+			WMT_PLAT_PR_ERR("no VCN18 supply, refusing to power CONSYS on\n");
+			return -ENODEV;
+		}
+		if (!consys_vcn18_on) {
 			regulator_set_voltage(reg_VCN18, 1800000, 1800000);
-			if (regulator_enable(reg_VCN18))
-				WMT_PLAT_PR_ERR("enable VCN18 fail\n");
-			else
-				WMT_PLAT_PR_DBG("enable VCN18 ok\n");
+			if (regulator_enable(reg_VCN18)) {
+				WMT_PLAT_PR_ERR("enable VCN18 fail, refusing to power CONSYS on\n");
+				return -EIO;
+			}
+			consys_vcn18_on = true;
+			WMT_PLAT_PR_DBG("enable VCN18 ok\n");
 		}
 
 		if (!(wmt_lib_get_ext_ldo())) {
-			if (reg_VCN33_BT) {
+			if (reg_VCN33_BT && !consys_vcn33_bt_on) {
 				regulator_set_voltage(reg_VCN33_BT, 3300000, 3300000);
 				if (regulator_enable(reg_VCN33_BT))
 					WMT_PLAT_PR_ERR("WMT do BT PMIC on fail!\n");
+				else
+					consys_vcn33_bt_on = true;
 			}
 		} else
 			WMT_PLAT_PR_INFO("VCN33 uses external LDO!\n");
 	} else {
-		if (!(wmt_lib_get_ext_ldo())) {
-			if (reg_VCN33_BT)
-				regulator_disable(reg_VCN33_BT);
+		if (consys_vcn33_bt_on) {
+			regulator_disable(reg_VCN33_BT);
+			consys_vcn33_bt_on = false;
 		}
 
 		/*AP power off MT6351L VCN_1V8 LDO */
-		if (reg_VCN18) {
+		if (consys_vcn18_on) {
 			if (regulator_disable(reg_VCN18))
 				WMT_PLAT_PR_ERR("disable VCN_1V8 fail!\n");
 			else
 				WMT_PLAT_PR_DBG("disable VCN_1V8 ok\n");
+			consys_vcn18_on = false;
 		}
 	}
 #endif
@@ -1020,15 +1150,24 @@ static VOID consys_vcn28_hw_mode_ctrl(UINT32 enable)
 {
 #if CONSYS_PMIC_CTRL_ENABLE
 #if COMMON_KERNEL_PMIC_SUPPORT
-	if (!g_regmap_mt6357)
+	/*
+	 * Upstream mt6397-core does not instantiate the "mediatek,mt6357-consys"
+	 * child that used to hand us the regmap; use the one found through the
+	 * consys node's "pmic" phandle instead.
+	 */
+	struct regmap *map = g_regmap_mt6357 ? g_regmap_mt6357 : g_regmap;
+
+	if (!map) {
+		WMT_PLAT_PR_ERR("no MT6357 regmap, VCN28 HW mode left unchanged\n");
 		return;
+	}
 
 	if (enable) {
-		regmap_write(g_regmap_mt6357, MT6357_LDO_VCN28_OP_EN_SET, 2);
-		regmap_write(g_regmap_mt6357, MT6357_LDO_VCN28_OP_CFG_CLR, 2);
+		regmap_write(map, MT6357_LDO_VCN28_OP_EN_SET, 2);
+		regmap_write(map, MT6357_LDO_VCN28_OP_CFG_CLR, 2);
 	} else {
-		regmap_write(g_regmap_mt6357, MT6357_LDO_VCN28_OP_EN_CLR, 2);
-		regmap_write(g_regmap_mt6357, MT6357_LDO_VCN28_OP_CFG_CLR, 2);
+		regmap_write(map, MT6357_LDO_VCN28_OP_EN_CLR, 2);
+		regmap_write(map, MT6357_LDO_VCN28_OP_CFG_CLR, 2);
 	}
 #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0))
 	if (!g_regmap)
@@ -1058,16 +1197,20 @@ static INT32 consys_hw_vcn28_ctrl(UINT32 enable)
 #if CONSYS_PMIC_CTRL_ENABLE
 	if (enable) {
 		/*in co-clock mode,need to turn on vcn28 when fm on */
-		if (reg_VCN28) {
+		if (reg_VCN28 && !consys_vcn28_on) {
 			regulator_set_voltage(reg_VCN28, 2800000, 2800000);
 			if (regulator_enable(reg_VCN28))
 				WMT_PLAT_PR_ERR("WMT do VCN28 PMIC on fail!\n");
+			else
+				consys_vcn28_on = true;
 		}
 		WMT_PLAT_PR_INFO("turn on vcn28 for fm/gps usage in co-clock mode\n");
 	} else {
 		/*in co-clock mode,need to turn off vcn28 when fm off */
-		if (reg_VCN28)
+		if (consys_vcn28_on) {
 			regulator_disable(reg_VCN28);
+			consys_vcn28_on = false;
+		}
 		WMT_PLAT_PR_INFO("turn off vcn28 for fm/gps usage in co-clock mode\n");
 	}
 #endif
@@ -1202,6 +1345,14 @@ static INT32 consys_emi_mpu_set_region_protection(VOID)
 	mtk_emimpu_free_region(&region);
 
 	WMT_PLAT_PR_INFO("setting MPU for EMI share memory\n");
+#else
+	/*
+	 * Upstream has no EMI MPU driver; the CONSYS region is whatever the
+	 * preloader/ATF left. If CONSYS cannot reach the carveout the ROM
+	 * patch download fails: chip id reads fine but 0x1D1E never shows.
+	 */
+	WMT_PLAT_PR_WARN("EMI MPU not programmed by the kernel, relying on the boot firmware for 0x%pa+0x%llx\n",
+			 &gConEmiPhyBase, gConEmiSize);
 #endif
 #else
 #if IS_ENABLED(CONFIG_MTK_EMI)

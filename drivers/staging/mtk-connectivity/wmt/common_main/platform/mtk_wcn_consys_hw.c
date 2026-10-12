@@ -694,8 +694,13 @@ INT32 mtk_wcn_consys_hw_reg_ctrl(UINT32 on, UINT32 co_clock_type)
 		if (wmt_consys_ic_ops->consys_ic_reset_emi_coredump)
 			wmt_consys_ic_ops->consys_ic_reset_emi_coredump(pEmibaseaddr);
 
-		if (wmt_consys_ic_ops->consys_ic_hw_vcn18_ctrl)
-			wmt_consys_ic_ops->consys_ic_hw_vcn18_ctrl(ENABLE);
+		if (wmt_consys_ic_ops->consys_ic_hw_vcn18_ctrl) {
+			iRet = wmt_consys_ic_ops->consys_ic_hw_vcn18_ctrl(ENABLE);
+			if (iRet) {
+				WMT_PLAT_PR_ERR("CONSYS-HW-REG-CTRL: VCN18 on failed (%d)\n", iRet);
+				return iRet;
+			}
+		}
 
 		if (wmt_consys_ic_ops->consys_ic_set_if_pinmux)
 			wmt_consys_ic_ops->consys_ic_set_if_pinmux(ENABLE);
@@ -730,8 +735,18 @@ INT32 mtk_wcn_consys_hw_reg_ctrl(UINT32 on, UINT32 co_clock_type)
 			wmt_consys_ic_ops->consys_ic_hw_reset_bit_set(ENABLE);
 		if (wmt_consys_ic_ops->consys_ic_hw_spm_clk_gating_enable)
 			wmt_consys_ic_ops->consys_ic_hw_spm_clk_gating_enable();
-		if (wmt_consys_ic_ops->consys_ic_hw_power_ctrl)
-			wmt_consys_ic_ops->consys_ic_hw_power_ctrl(ENABLE);
+		if (wmt_consys_ic_ops->consys_ic_hw_power_ctrl) {
+			/*
+			 * Stop here if the CONN domain did not come up: every
+			 * step below accesses CONSYS registers.
+			 */
+			iRet = wmt_consys_ic_ops->consys_ic_hw_power_ctrl(ENABLE);
+			if (iRet) {
+				WMT_PLAT_PR_ERR("CONSYS-HW-REG-CTRL: power on failed (%d), bailing out\n",
+						iRet);
+				return iRet;
+			}
+		}
 
 		udelay(10);
 
@@ -966,7 +981,14 @@ INT32 mtk_wcn_consys_hw_pwr_on(UINT32 co_clock_type)
 	}
 	iRet = mtk_wcn_consys_hw_reg_ctrl(1, co_clock_type);
 	if (iRet) {
-		WMT_PLAT_PR_ERR("CONSYS-HW-PWR-ON, failed!(%d)\n", iRet);
+		WMT_PLAT_PR_ERR("CONSYS-HW-PWR-ON, failed!(%d), powering back off\n", iRet);
+		/*
+		 * The WMT core does not power off after a failed power on;
+		 * undo the supplies and the CONN domain here so a retry starts
+		 * from a clean state.
+		 */
+		mtk_wcn_consys_hw_reg_ctrl(0, co_clock_type);
+		mtk_wcn_consys_hw_efuse_paldo_ctrl(0, co_clock_type);
 		return iRet;
 	}
 	iRet = mtk_wcn_consys_hw_gpio_ctrl(1);
@@ -1066,6 +1088,14 @@ INT32 mtk_wcn_consys_hw_init(VOID)
 			retry++;
 			WMT_PLAT_PR_INFO("g_probe_called = 0, retry = %d\n", retry);
 		}
+	}
+
+	/* the stock code dereferenced the NULL ops below when probe never ran */
+	if (iRet || atomic_read(&g_probe_called) == 0 || !wmt_consys_ic_ops) {
+		WMT_PLAT_PR_ERR("no mediatek,mt6765-consys device probed, CONSYS unusable\n");
+		if (!iRet)
+			platform_driver_unregister(&mtk_wmt_dev_drv);
+		return -ENODEV;
 	}
 
 	if (wmt_consys_ic_ops->consys_ic_pmic_register_device) {
