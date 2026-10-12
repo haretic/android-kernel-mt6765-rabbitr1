@@ -801,6 +801,17 @@ static INT32 consys_hw_power_ctrl(MTK_WCN_BOOL enable)
 		if (iRet)
 			return iRet;
 
+		/*
+		 * First access inside CONSYS. If the bus hangs here, CONSYS
+		 * has power but no clock (XO_WCN, see the DCXO lines above).
+		 * The clock/sleep check is stock debug code and has not been
+		 * proven to be meaningful before the MCU leaves reset, so it
+		 * only warns.
+		 */
+		WMT_PLAT_PR_INFO("CONN powered and unprotected, accessing CONSYS (0x18007000)\n");
+		if (!consys_check_reg_readable())
+			WMT_PLAT_PR_WARN("CONSYS clock check failed after power on, XO_WCN may be off\n");
+
 		iRet = device_init_wakeup(&connsys_pdev->dev, true);
 		if (iRet)
 			WMT_PLAT_PR_INFO("device_init_wakeup(true) fail.\n");
@@ -1012,8 +1023,12 @@ static INT32 polling_consys_chipid(VOID)
 		msleep(20);
 	}
 
-	if (retry <= 0)
+	/* retry is -1 when all attempts failed; 0 if the last one worked */
+	if (retry < 0) {
+		WMT_PLAT_PR_ERR("CONSYS chip id never read 0x10020300 (last 0x%08x), giving up\n",
+				consys_ver_id);
 		return -1;
+	}
 
 	consys_ver_id = CONSYS_REG_READ(conn_reg.mcu_top_misc_off_base + CONSYS_CONF_ID_OFFSET);
 	WMT_PLAT_PR_INFO("consys configuration id(0x%x)\n", consys_ver_id & 0xF);
