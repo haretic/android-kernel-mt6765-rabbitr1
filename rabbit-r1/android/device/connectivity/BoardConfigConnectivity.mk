@@ -14,7 +14,7 @@ MTK_CONSYS_WIFI_POWER ?= hal
 ifeq ($(MTK_CONSYS_WIFI_POWER),hal)
 # libwifi_hal (legacy HAL fallback) powers the CONSYS Wi-Fi function
 # through wmt_chrdev_wifi; wlan0 appears once the write returns.
-WIFI_DRIVER_STATE_CTRL_PARAM := /dev/wmtWifi
-WIFI_DRIVER_STATE_ON := 1
-WIFI_DRIVER_STATE_OFF := 0
+WIFI_DRIVER_STATE_CTRL_PARAM := "/dev/wmtWifi"
+WIFI_DRIVER_STATE_ON := "1"
+WIFI_DRIVER_STATE_OFF := "0"
 endif
