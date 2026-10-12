@@ -278,6 +278,19 @@
 			alignment = <0 0x1000000>;
 			alloc-ranges = <0 0x40000000 0 0x80000000>;
 		};
+
+		/*
+		 * CAMSV writes physical addresses (no IOMMU on the port), so
+		 * capture buffers come from this CMA pool below 4 GiB. Reusable:
+		 * the pages serve movable allocations while the camera is idle.
+		 */
+		r1_camera_cma: camera-cma {
+			compatible = "shared-dma-pool";
+			reusable;
+			size = <0 0x2000000>;
+			alignment = <0 0x400000>;
+			alloc-ranges = <0 0x40000000 0 0xc0000000>;
+		};
 	};
 };
 
@@ -536,9 +549,38 @@
 			r1_camera_out: endpoint {
 				data-lanes = <1 2 3 4>;
 				link-frequencies = /bits/ 64 <80000000 200000000>;
+				remote-endpoint = <&r1_seninf_csi0_in>;
 			};
 		};
 	};
+};
+
+&mipi_csi0 {
+	status = "okay";
+};
+
+&seninf {
+	status = "okay";
+
+	ports {
+		port@0 {
+			/*
+			 * 4D1C: clock on CSI0A_L2, data lanes 0-3 on CSI0A_L1,
+			 * CSI0B_L0, CSI0A_L0 and CSI0B_L1 (MediaTek default
+			 * ball-out, as hardcoded in the CSI PHY driver).
+			 */
+			r1_seninf_csi0_in: endpoint {
+				clock-lanes = <2>;
+				data-lanes = <1 3 0 4>;
+				remote-endpoint = <&r1_camera_out>;
+			};
+		};
+	};
+};
+
+&camsv1 {
+	memory-region = <&r1_camera_cma>;
+	status = "okay";
 };
 
 &i2c4 {
