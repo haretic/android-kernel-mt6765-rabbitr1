@@ -471,8 +471,9 @@ static int __init btmtk_wmt_init(void)
 		goto err_free;
 	}
 
+	/* Without CONFIG_PM_SLEEP this is a stub returning NULL; that's fine. */
 	bdev->ws = wakeup_source_register(NULL, "btmtk_wmt");
-	if (!bdev->ws) {
+	if (!bdev->ws && IS_ENABLED(CONFIG_PM_SLEEP)) {
 		err = -ENOMEM;
 		goto err_wq;
 	}
