@@ -1,2 +1,5 @@
 # MTK_CONSYS_WIFI_POWER=hal: libwifi_hal writes 1/0 to /dev/wmtWifi.
 allow hal_wifi_default wmtwifi_device:chr_file rw_file_perms;
+
+# wifi_chip.cpp stores the versions libwifi-hal-r1 returns.
+set_prop(hal_wifi_default, vendor_wlan_versions_prop)
