@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# gps_drv: /dev/stpgps and /dev/gps_emi, the GPS function of the MT6765
+# CONSYS for the stock mnld daemon. This is the stock MT6765 build (the
+# "legacy" STP path of the out-of-tree gps Makefile): stp_chrdev_gps and
+# gps_emi. fw_log_gps needs the dedicated connsys log path, which wmt_drv
+# is built without.
+
+CONN_DIR := $(src)/..
+WMT_DIR := $(CONN_DIR)/wmt
+
+ccflags-y += -include $(CONN_DIR)/adapter/mtk_conn_compat.h
+ccflags-y += -I$(CONN_DIR)/adapter
+ccflags-y += -I$(WMT_DIR)/common_main/include
+ccflags-y += -I$(WMT_DIR)/common_main/core/include
+ccflags-y += -I$(WMT_DIR)/common_main/linux/include
+ccflags-y += -I$(WMT_DIR)/common_main/linux/pri/include
+ccflags-y += -I$(WMT_DIR)/common_main/platform/include
+
+ccflags-y += -DCONFIG_MTK_WCN_ARM64
+ccflags-y += -DWMT_IDC_SUPPORT=0
+ccflags-y += -DMTK_WCN_WMT_STP_EXP_SYMBOL_ABSTRACT
+ccflags-y += -DSOC_CO_CLOCK_FLAG=1
+ccflags-y += -DWMT_CREATE_NODE_DYNAMIC=1
+ccflags-y += -DREMOVE_MK_NODE=0
+
+ccflags-y += -Wno-missing-prototypes -Wno-missing-declarations
+
+obj-$(CONFIG_MTK_CONN_GPS) += gps_drv.o
+gps_drv-y := stp_chrdev_gps.o gps_emi.o

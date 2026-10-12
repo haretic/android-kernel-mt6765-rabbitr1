@@ -31,21 +31,9 @@
 #include <mtk_freqhopping.h>
 #include <mtk_freqhopping_drv.h>
 #endif
-#if defined(CONFIG_MACH_MT6765) || defined(CONFIG_MACH_MT6761)
-
-#include <helio-dvfsrc.h>
-
-#endif
 #include <linux/version.h>
 
-#ifdef MTK_GENERIC_HAL
-#include "gps_lna_drv.h"
-#else
-#ifdef CONFIG_GPS_CTRL_LNA_SUPPORT
-#include "gps_lna_drv.h"
-#endif
-#endif
-
+MODULE_DESCRIPTION("MediaTek CONSYS GPS character devices over WMT/STP");
 MODULE_LICENSE("GPL");
 
 #define GPS_DRIVER_NAME "mtk_stp_GPS_chrdev"
@@ -114,18 +102,8 @@ bool fgGps_fwctl_ready;
 
 static int GPS_devs = 1;	/* device count */
 static int GPS_major = GPS_DEV_MAJOR;	/* dynamic allocation */
-module_param(GPS_major, uint, 0);
+module_param(GPS_major, int, 0);
 static struct cdev GPS_cdev;
-
-#ifdef MTK_GENERIC_HAL
-static int GPS2_devs = 2;	/* device count */
-static struct cdev GPS2_cdev;
-#else
-#ifdef CONFIG_GPSL5_SUPPORT
-static int GPS2_devs = 2;	/* device count */
-static struct cdev GPS2_cdev;
-#endif
-#endif
 
 static struct wakeup_source *gps_wake_lock_ptr;
 const char gps_wake_lock_name[] = "gpswakelock";
@@ -511,9 +489,11 @@ void GPS_fwlog_ctrl_inner(bool on)
 	INT32 status;
 	UINT32 fw_tick = 0;
 	UINT32 local_ms0, local_ms1;
-	struct timeval tv;
+	struct timespec64 ts;
+	UINT32 utc_usec;
 
-	do_gettimeofday(&tv);
+	ktime_get_real_ts64(&ts);
+	utc_usec = (UINT32)(ts.tv_nsec / NSEC_PER_USEC);
 
 	/* 32bit ms overflow almost 4.9 days, it's enough here */
 	local_ms0 = (UINT32)GPS_get_local_clock_ms();
@@ -527,14 +507,14 @@ void GPS_fwlog_ctrl_inner(bool on)
 	tx_buf[6]  = (UINT8)((local_ms0  >>  8) & 0xFF);
 	tx_buf[7]  = (UINT8)((local_ms0  >> 16) & 0xFF);
 	tx_buf[8]  = (UINT8)((local_ms0  >> 24) & 0xFF); /* local time msecs */
-	tx_buf[9]  = (UINT8)((tv.tv_usec >>  0) & 0xFF);
-	tx_buf[10] = (UINT8)((tv.tv_usec >>  8) & 0xFF);
-	tx_buf[11] = (UINT8)((tv.tv_usec >> 16) & 0xFF);
-	tx_buf[12] = (UINT8)((tv.tv_usec >> 24) & 0xFF); /* utc usec */
-	tx_buf[13] = (UINT8)((tv.tv_sec  >>  0) & 0xFF);
-	tx_buf[14] = (UINT8)((tv.tv_sec  >>  8) & 0xFF);
-	tx_buf[15] = (UINT8)((tv.tv_sec  >> 16) & 0xFF);
-	tx_buf[16] = (UINT8)((tv.tv_sec  >> 24) & 0xFF); /* utc sec */
+	tx_buf[9]  = (UINT8)((utc_usec >>  0) & 0xFF);
+	tx_buf[10] = (UINT8)((utc_usec >>  8) & 0xFF);
+	tx_buf[11] = (UINT8)((utc_usec >> 16) & 0xFF);
+	tx_buf[12] = (UINT8)((utc_usec >> 24) & 0xFF); /* utc usec */
+	tx_buf[13] = (UINT8)((ts.tv_sec >>  0) & 0xFF);
+	tx_buf[14] = (UINT8)((ts.tv_sec >>  8) & 0xFF);
+	tx_buf[15] = (UINT8)((ts.tv_sec >> 16) & 0xFF);
+	tx_buf[16] = (UINT8)((ts.tv_sec >> 24) & 0xFF); /* utc sec */
 	tx_len = 17;
 
 	status = mtk_wmt_gps_mcu_ctrl(&tx_buf[0], tx_len, &rx_buf[0], GPS_FWLOG_CTRL_BUF_MAX, &rx_len);
@@ -575,9 +555,6 @@ static int GPS_hw_suspend_ctrl(bool to_suspend, UINT8 mode)
 	UINT32 rx_len = 0;
 	INT32 wmt_status;
 	UINT32 local_ms0, local_ms1;
-	struct timeval tv;
-
-	do_gettimeofday(&tv);
 
 	/* 32bit ms overflow almost 4.9 days, it's enough here */
 	local_ms0 = (UINT32)GPS_get_local_clock_ms();
@@ -632,15 +609,7 @@ static int GPS_hw_suspend(UINT8 mode)
 		if (GPS_hw_suspend_ctrl(true, mode) != 0)
 			return -EINVAL; /* Stands for not support */
 
-#ifdef MTK_GENERIC_HAL
-		wmt_okay = mtk_wmt_gps_l1_suspend_ctrl(MTK_WCN_BOOL_TRUE);
-#else
-#ifdef CONFIG_GPSL5_SUPPORT
-		wmt_okay = mtk_wmt_gps_l1_suspend_ctrl(MTK_WCN_BOOL_TRUE);
-#else
 		wmt_okay = mtk_wmt_gps_suspend_ctrl(MTK_WCN_BOOL_TRUE);
-#endif
-#endif
 
 		if (!wmt_okay)
 			GPS_WARN_FUNC("mtk_wmt_gps_l1_suspend_ctrl(1), is_ok = %d", wmt_okay);
@@ -678,15 +647,7 @@ static int GPS_hw_resume(UINT8 mode)
 		gps_hold_wake_lock(1);
 		GPS_WARN_FUNC("gps_hold_wake_lock(1)\n");
 
-#ifdef MTK_GENERIC_HAL
-		wmt_okay = mtk_wmt_gps_l1_suspend_ctrl(MTK_WCN_BOOL_FALSE);
-#else
-#ifdef CONFIG_GPSL5_SUPPORT
-		wmt_okay = mtk_wmt_gps_l1_suspend_ctrl(MTK_WCN_BOOL_FALSE);
-#else
 		wmt_okay = mtk_wmt_gps_suspend_ctrl(MTK_WCN_BOOL_FALSE);
-#endif
-#endif
 
 		if (!wmt_okay)
 			GPS_WARN_FUNC("mtk_wmt_gps_l1_suspend_ctrl(0), is_ok = %d", wmt_okay);
@@ -927,21 +888,8 @@ long GPS_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		}
 		break;
 	case COMBO_IOC_GPS_CTRL_L5_LNA:
-#ifdef MTK_GENERIC_HAL
-		if (!IS_ERR(g_gps_lna_pinctrl_ptr)) {
-			if (arg == 1)
-				gps_lna_pin_ctrl(GPS_DATA_LINK_ID1, true, false);
-			else
-				gps_lna_pin_ctrl(GPS_DATA_LINK_ID1, false, false);
-			retval = 0;
-		} else {
-			retval = -EFAULT;
-			GPS_DBG_FUNC("g_gps_lna_pinctrl_ptr not ready\n");
-		}
-#else
 		GPS_DBG_FUNC("LD1.0 project dont support\n");
 		retval = -EFAULT;
-#endif
 		break;
 	default:
 		retval = -EFAULT;
@@ -1046,20 +994,17 @@ static void GPS_handle_desense(bool on)
 		GPS_WARN_FUNC("export_clk_buf: %x\n", CLK_BUF_AUDIO);
 		KERNEL_clk_buf_ctrl(CLK_BUF_AUDIO, 1);
 #endif
-#if defined(CONFIG_MACH_MT6765) || defined(CONFIG_MACH_MT6761)
-		dvfsrc_enable_dvfs_freq_hopping(1);
-		GPS_WARN_FUNC("mt6765/61 GPS desense solution on\n");
-#endif
+		/*
+		 * MT6765 stock asked helio-dvfsrc to keep DRAM off the OPP
+		 * whose clock desenses GPS L1 (dvfsrc_enable_dvfs_freq_hopping).
+		 * This kernel has no DVFSRC driver to ask.
+		 */
 	} else {
 #if defined(CONFIG_MACH_MT6739)
 		if (freqhopping_config(FH_MEM_PLLID, 0, 0) == 0)
 			GPS_WARN_FUNC("disable MEMPLL successfully\n");
 		else
 			GPS_WARN_FUNC("Error to disable MEMPLL\n");
-#endif
-#if defined(CONFIG_MACH_MT6765) || defined(CONFIG_MACH_MT6761)
-		dvfsrc_enable_dvfs_freq_hopping(0);
-		GPS_WARN_FUNC("mt6765/61 GPS desense solution off\n");
 #endif
 #if defined(CONFIG_MACH_MT6580)
 		GPS_WARN_FUNC("export_clk_buf: %x\n", CLK_BUF_AUDIO);
@@ -1079,15 +1024,7 @@ static int GPS_open(struct inode *inode, struct file *file)
 	}
 
 #if 1				/* GeorgeKuo: turn on function before check stp ready */
-	/* turn on BT */
-#ifdef MTK_GENERIC_HAL
-	if (!IS_ERR(g_gps_lna_pinctrl_ptr))
-		gps_lna_pin_ctrl(GPS_DATA_LINK_ID0, true, false);
-#else
-#ifdef CONFIG_GPS_CTRL_LNA_SUPPORT
-	gps_lna_pin_ctrl(GPS_DATA_LINK_ID0, true, false);
-#endif
-#endif
+	/* turn on GPS; WMT also drives the external LNA pin */
 	if (mtk_wcn_wmt_func_on(WMTDRV_TYPE_GPS) == MTK_WCN_BOOL_FALSE) {
 		GPS_WARN_FUNC("WMT turn on GPS fail!\n");
 		return -ENODEV;
@@ -1159,14 +1096,6 @@ static int GPS_close(struct inode *inode, struct file *file)
 #endif
 	up(&fwctl_mtx);
 #endif
-#ifdef MTK_GENERIC_HAL
-	if (!IS_ERR(g_gps_lna_pinctrl_ptr))
-		gps_lna_pin_ctrl(GPS_DATA_LINK_ID0, false, false);
-#else
-#ifdef CONFIG_GPS_CTRL_LNA_SUPPORT
-	gps_lna_pin_ctrl(GPS_DATA_LINK_ID0, false, false);
-#endif
-#endif
 	if (mtk_wcn_wmt_func_off(WMTDRV_TYPE_GPS) == MTK_WCN_BOOL_FALSE) {
 		GPS_WARN_FUNC("WMT turn off GPS fail!\n");
 		ret = -EIO;	/* mostly, native programer does not care this return vlaue, */
@@ -1228,293 +1157,87 @@ void GPS_event_cb(void)
 	wake_up(&GPS_wq);
 }
 
-#if WMT_CREATE_NODE_DYNAMIC || REMOVE_MK_NODE
-struct class *stpgps_class;
-#ifdef MTK_GENERIC_HAL
-struct class *stpgps2_class;
-#else
-#ifdef CONFIG_GPSL5_SUPPORT
-struct class *stpgps2_class;
-#endif
-#endif
-#endif
+/*
+ * MT6765 path of the stock driver: one /dev/stpgps for the L1 data link.
+ * The L5 node (/dev/stpgps2), MTK_GENERIC_HAL and the LNA platform driver
+ * belong to other SoCs and are not built.
+ */
+static struct class *stpgps_class;
 
 static int GPS_init(void)
 {
 	dev_t dev = MKDEV(GPS_major, 0);
-	int cdev_ret = 0;
-#if WMT_CREATE_NODE_DYNAMIC || REMOVE_MK_NODE
-	struct device *stpgps_dev = NULL;
-#endif
-#ifdef MTK_GENERIC_HAL
-	dev_t dev2 = MKDEV(GPS_major, 1);
-	int cdev2_ret = 0;
-#if WMT_CREATE_NODE_DYNAMIC || REMOVE_MK_NODE
-	struct device *stpgps2_dev = NULL;
-#endif
-#else
-#ifdef CONFIG_GPSL5_SUPPORT
-	dev_t dev2 = MKDEV(GPS_major, 1);
-	int cdev2_ret = 0;
-#if WMT_CREATE_NODE_DYNAMIC || REMOVE_MK_NODE
-	struct device *stpgps2_dev = NULL;
-#endif
-#endif
-#endif
-	int alloc_ret = 0;
-#ifdef MTK_GENERIC_HAL
-	gps_lna_linux_plat_drv_register();
-#else
-#ifdef CONFIG_GPS_CTRL_LNA_SUPPORT
-	gps_lna_linux_plat_drv_register();
-#endif
-#endif
+	struct device *stpgps_dev;
+	int ret;
+
+	sema_init(&status_mtx, 1);
+	sema_init(&fwctl_mtx, 1);
+	sema_init(&wr_mtx, 1);
+	sema_init(&rd_mtx, 1);
+	md_status_addr = 0;
+
+	/* Without CONFIG_PM_SLEEP this is a stub returning NULL; that's fine. */
+	gps_wake_lock_ptr = wakeup_source_register(NULL, gps_wake_lock_name);
+	if (!gps_wake_lock_ptr && IS_ENABLED(CONFIG_PM_SLEEP)) {
+		pr_info("%s %d: init gps wakeup source fail!", __func__, __LINE__);
+		return -ENOMEM;
+	}
+
 	/*static allocate chrdev */
-	alloc_ret = register_chrdev_region(dev, 1, GPS_DRIVER_NAME);
-	if (alloc_ret) {
+	ret = register_chrdev_region(dev, 1, GPS_DRIVER_NAME);
+	if (ret) {
 		pr_info("fail to register chrdev\n");
-		return alloc_ret;
+		goto err_ws;
 	}
 
 	cdev_init(&GPS_cdev, &GPS_fops);
 	GPS_cdev.owner = THIS_MODULE;
 
-	cdev_ret = cdev_add(&GPS_cdev, dev, GPS_devs);
-	if (cdev_ret)
-		goto error;
-#if WMT_CREATE_NODE_DYNAMIC || REMOVE_MK_NODE
+	ret = cdev_add(&GPS_cdev, dev, GPS_devs);
+	if (ret)
+		goto err_region;
 
-	stpgps_class = class_create(THIS_MODULE, "stpgps");
-	if (IS_ERR(stpgps_class))
-		goto error;
+	stpgps_class = class_create("stpgps");
+	if (IS_ERR(stpgps_class)) {
+		ret = PTR_ERR(stpgps_class);
+		goto err_cdev;
+	}
 	stpgps_dev = device_create(stpgps_class, NULL, dev, NULL, "stpgps");
-	if (IS_ERR(stpgps_dev))
-		goto error;
-#endif
-#ifdef MTK_GENERIC_HAL
-	/*static allocate chrdev */
-	alloc_ret = register_chrdev_region(dev2, 1, GPS2_DRIVER_NAME);
-	if (alloc_ret) {
-		pr_info("fail to register chrdev\n");
-		return alloc_ret;
+	if (IS_ERR(stpgps_dev)) {
+		ret = PTR_ERR(stpgps_dev);
+		goto err_class;
 	}
 
-	cdev_init(&GPS2_cdev, &GPS2_fops);
-	GPS2_cdev.owner = THIS_MODULE;
-
-	cdev2_ret = cdev_add(&GPS2_cdev, dev2, GPS2_devs);
-	if (cdev2_ret)
-		goto error;
-#if WMT_CREATE_NODE_DYNAMIC || REMOVE_MK_NODE
-
-	stpgps2_class = class_create(THIS_MODULE, "stpgps2");
-	if (IS_ERR(stpgps2_class))
-		goto error;
-	stpgps2_dev = device_create(stpgps2_class, NULL, dev2, NULL, "stpgps2");
-	if (IS_ERR(stpgps2_dev))
-		goto error;
-#endif
-#else
-#ifdef CONFIG_GPSL5_SUPPORT
-	/*static allocate chrdev */
-	alloc_ret = register_chrdev_region(dev2, 1, GPS2_DRIVER_NAME);
-	if (alloc_ret) {
-		pr_info("fail to register chrdev\n");
-		return alloc_ret;
-	}
-
-	cdev_init(&GPS2_cdev, &GPS2_fops);
-	GPS2_cdev.owner = THIS_MODULE;
-
-	cdev2_ret = cdev_add(&GPS2_cdev, dev2, GPS2_devs);
-	if (cdev2_ret)
-		goto error;
-#if WMT_CREATE_NODE_DYNAMIC || REMOVE_MK_NODE
-
-	stpgps2_class = class_create(THIS_MODULE, "stpgps2");
-	if (IS_ERR(stpgps2_class))
-		goto error;
-	stpgps2_dev = device_create(stpgps2_class, NULL, dev2, NULL, "stpgps2");
-	if (IS_ERR(stpgps2_dev))
-		goto error;
-#endif
-#endif
-#endif
 	pr_info("%s driver(major %d) installed.\n", GPS_DRIVER_NAME, GPS_major);
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 149)
-	gps_wake_lock_ptr = wakeup_source_register(NULL, gps_wake_lock_name);
-#else
-	gps_wake_lock_ptr = wakeup_source_register(gps_wake_lock_name);
-#endif
-	if (!gps_wake_lock_ptr) {
-		pr_info("%s %d: init gps wakeup source fail!", __func__, __LINE__);
-		goto error;
-	}
-
-	md_status_addr = 0;
-
-	sema_init(&status_mtx, 1);
-	sema_init(&fwctl_mtx, 1);
-	/* init_MUTEX(&wr_mtx); */
-	sema_init(&wr_mtx, 1);
-	/* init_MUTEX(&rd_mtx); */
-	sema_init(&rd_mtx, 1);
-
-#ifdef MTK_GENERIC_HAL
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 149)
-	gps2_wake_lock_ptr = wakeup_source_register(NULL, gps2_wake_lock_name);
-#else
-	gps2_wake_lock_ptr = wakeup_source_register(gps2_wake_lock_name);
-#endif
-
-	sema_init(&status_mtx2, 1);
-	/* init_MUTEX(&wr_mtx); */
-	sema_init(&wr_mtx2, 1);
-	/* init_MUTEX(&rd_mtx); */
-	sema_init(&rd_mtx2, 1);
-	/* init_MUTEX(&lna_mtx); */
-	sema_init(&lna_mtx, 1);
-	if (!gps2_wake_lock_ptr) {
-		pr_info("%s %d: init gps2 wakeup source fail!", __func__, __LINE__);
-		goto error;
-	}
-#else
-#ifdef CONFIG_GPSL5_SUPPORT
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 149)
-	gps2_wake_lock_ptr = wakeup_source_register(NULL, gps2_wake_lock_name);
-#else
-	gps2_wake_lock_ptr = wakeup_source_register(gps2_wake_lock_name);
-#endif
-
-	sema_init(&status_mtx2, 1);
-	/* init_MUTEX(&wr_mtx); */
-	sema_init(&wr_mtx2, 1);
-	/* init_MUTEX(&rd_mtx); */
-	sema_init(&rd_mtx2, 1);
-	/* init_MUTEX(&lna_mtx); */
-	sema_init(&lna_mtx, 1);
-	if (!gps2_wake_lock_ptr) {
-		pr_info("%s %d: init gps2 wakeup source fail!", __func__, __LINE__);
-		goto error;
-	}
-#endif
-
-
-#endif
-
 	return 0;
 
-error:
-
-#if WMT_CREATE_NODE_DYNAMIC || REMOVE_MK_NODE
-	if (!IS_ERR(stpgps_dev))
-		device_destroy(stpgps_class, dev);
-	if (!IS_ERR(stpgps_class)) {
-		class_destroy(stpgps_class);
-		stpgps_class = NULL;
-	}
-
-#ifdef MTK_GENERIC_HAL
-	if (!IS_ERR(stpgps2_dev))
-		device_destroy(stpgps2_class, dev2);
-	if (!IS_ERR(stpgps2_class)) {
-		class_destroy(stpgps2_class);
-		stpgps2_class = NULL;
-	}
-#else
-#ifdef CONFIG_GPSL5_SUPPORT
-	if (!IS_ERR(stpgps2_dev))
-		device_destroy(stpgps2_class, dev2);
-	if (!IS_ERR(stpgps2_class)) {
-		class_destroy(stpgps2_class);
-		stpgps2_class = NULL;
-	}
-#endif
-#endif
-
-#endif
-	if (cdev_ret == 0)
-		cdev_del(&GPS_cdev);
-#ifdef MTK_GENERIC_HAL
-	if (cdev2_ret == 0)
-		cdev_del(&GPS2_cdev);
-#else
-#ifdef CONFIG_GPSL5_SUPPORT
-	if (cdev2_ret == 0)
-		cdev_del(&GPS2_cdev);
-#endif
-#endif
-	if (alloc_ret == 0) {
-		unregister_chrdev_region(dev, GPS_devs);
-#ifdef MTK_GENERIC_HAL
-		unregister_chrdev_region(dev2, GPS2_devs);
-#else
-#ifdef CONFIG_GPSL5_SUPPORT
-		unregister_chrdev_region(dev2, GPS2_devs);
-#endif
-#endif
-	}
-
-	return -1;
+err_class:
+	class_destroy(stpgps_class);
+	stpgps_class = NULL;
+err_cdev:
+	cdev_del(&GPS_cdev);
+err_region:
+	unregister_chrdev_region(dev, GPS_devs);
+err_ws:
+	wakeup_source_unregister(gps_wake_lock_ptr);
+	gps_wake_lock_ptr = NULL;
+	return ret;
 }
 
 static void GPS_exit(void)
 {
 	dev_t dev = MKDEV(GPS_major, 0);
-#ifdef MTK_GENERIC_HAL
-	dev_t dev2 = MKDEV(GPS_major, 1);
-#else
-#ifdef CONFIG_GPSL5_SUPPORT
-	dev_t dev2 = MKDEV(GPS_major, 1);
-#endif
-#endif
-#if WMT_CREATE_NODE_DYNAMIC || REMOVE_MK_NODE
+
 	device_destroy(stpgps_class, dev);
 	class_destroy(stpgps_class);
 	stpgps_class = NULL;
-#ifdef MTK_GENERIC_HAL
-	device_destroy(stpgps2_class, dev2);
-	class_destroy(stpgps2_class);
-	stpgps2_class = NULL;
-#else
-#ifdef CONFIG_GPSL5_SUPPORT
-	device_destroy(stpgps2_class, dev2);
-	class_destroy(stpgps2_class);
-	stpgps2_class = NULL;
-#endif
-#endif
-#endif
 
 	cdev_del(&GPS_cdev);
 	unregister_chrdev_region(dev, GPS_devs);
 	pr_info("%s driver removed.\n", GPS_DRIVER_NAME);
-#ifdef MTK_GENERIC_HAL
-	cdev_del(&GPS2_cdev);
-	unregister_chrdev_region(dev2, GPS2_devs);
-	pr_info("%s driver removed.\n", GPS2_DRIVER_NAME);
-#else
-#ifdef CONFIG_GPSL5_SUPPORT
-	cdev_del(&GPS2_cdev);
-	unregister_chrdev_region(dev2, GPS2_devs);
-	pr_info("%s driver removed.\n", GPS2_DRIVER_NAME);
-#endif
-#endif
-#ifdef MTK_GENERIC_HAL
-	gps_lna_linux_plat_drv_unregister();
-#else
-#ifdef CONFIG_GPS_CTRL_LNA_SUPPORT
-	gps_lna_linux_plat_drv_unregister();
-#endif
-#endif
+
 	wakeup_source_unregister(gps_wake_lock_ptr);
-#ifdef MTK_GENERIC_HAL
-	wakeup_source_unregister(gps2_wake_lock_ptr);
-#else
-#ifdef CONFIG_GPSL5_SUPPORT
-	wakeup_source_unregister(gps2_wake_lock_ptr);
-#endif
-#endif
+	gps_wake_lock_ptr = NULL;
 }
 
 int mtk_wcn_stpgps_drv_init(void)
@@ -1532,28 +1255,27 @@ EXPORT_SYMBOL(mtk_wcn_stpgps_drv_exit);
 /*****************************************************************************/
 static int __init gps_mod_init(void)
 {
-	int ret = 0;
+	int ret;
 
-	mtk_wcn_stpgps_drv_init();
-	#ifdef CONFIG_MTK_GPS_EMI
-	mtk_gps_emi_init();
-	#endif
-	#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
-	mtk_gps_fw_log_init();
-	#endif
-	return ret;
+	ret = mtk_wcn_stpgps_drv_init();
+	if (ret)
+		return ret;
+
+	/* /dev/gps_emi, part of the stock MT6765 gps_drv.ko */
+	ret = mtk_gps_emi_init();
+	if (ret) {
+		mtk_wcn_stpgps_drv_exit();
+		return ret;
+	}
+
+	return 0;
 }
 
 /*****************************************************************************/
 static void __exit gps_mod_exit(void)
 {
-	mtk_wcn_stpgps_drv_exit();
-	#ifdef CONFIG_MTK_GPS_EMI
 	mtk_gps_emi_exit();
-	#endif
-	#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
-	mtk_gps_fw_log_exit();
-	#endif
+	mtk_wcn_stpgps_drv_exit();
 }
 
 module_init(gps_mod_init);
