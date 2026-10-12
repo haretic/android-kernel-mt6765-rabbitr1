@@ -64,7 +64,7 @@ static void wmt_alarm_dmp_info_handler(struct work_struct *work)
 	}
 }
 
-static enum alarmtimer_restart alarm_timer_handler(struct alarm *alarm,
+static void alarm_timer_handler(struct alarm *alarm,
 	ktime_t now)
 {
 	ktime_t kt;
@@ -73,11 +73,10 @@ static enum alarmtimer_restart alarm_timer_handler(struct alarm *alarm,
 
 	schedule_work(&g_wmt_alarm.dmp_info_worker);
 	kt = ktime_set(g_wmt_alarm.alarm_sec, 0);
-	alarm_start_relative(&g_wmt_alarm.alarm_timer, kt);
+	alarm_start_timer(&g_wmt_alarm.alarm_timer, kt, true);
 
 	spin_unlock_irqrestore(&g_wmt_alarm.alarm_lock, g_wmt_alarm.flags);
 
-	return ALARMTIMER_NORESTART;
 }
 
 static int _wmt_alarm_start_timer_nolock(unsigned int sec)
@@ -86,7 +85,7 @@ static int _wmt_alarm_start_timer_nolock(unsigned int sec)
 
 	g_wmt_alarm.alarm_sec = sec;
 	kt = ktime_set(g_wmt_alarm.alarm_sec, 0);
-	alarm_start_relative(&g_wmt_alarm.alarm_timer, kt);
+	alarm_start_timer(&g_wmt_alarm.alarm_timer, kt, true);
 	g_wmt_alarm.alarm_state = WMT_ALARM_STATE_ENABLE;
 
 	pr_info("[wmt_alarm] alarm timer enabled timeout=[%d]", g_wmt_alarm.alarm_sec);

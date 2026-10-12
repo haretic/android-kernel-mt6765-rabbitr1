@@ -390,8 +390,7 @@ int fw_log_ics_init(void)
 	if (result < 0)
 		return result;
 
-	gIcsDev->driver_class = class_create(THIS_MODULE,
-		FW_LOG_ICS_DRIVER_NAME);
+	gIcsDev->driver_class = class_create(FW_LOG_ICS_DRIVER_NAME);
 
 	if (IS_ERR(gIcsDev->driver_class)) {
 		result = -ENOMEM;

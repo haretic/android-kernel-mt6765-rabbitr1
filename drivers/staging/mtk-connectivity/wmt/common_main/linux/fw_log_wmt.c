@@ -134,7 +134,7 @@ int fw_log_wmt_init(void)
 		goto error;
 	}
 
-	fw_log_wmt_class = class_create(THIS_MODULE, DRIVER_NAME);
+	fw_log_wmt_class = class_create(DRIVER_NAME);
 	if (IS_ERR(fw_log_wmt_class)) {
 		pr_err("class_create fail\n");
 		goto error;
