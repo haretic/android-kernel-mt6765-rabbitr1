@@ -14,7 +14,3 @@ on post-fs
     # Registers hci0; the core powers it on once (BT patch download) and
     # off again until the Bluetooth HAL opens it.
     insmod /vendor/lib/modules/btmtk_wmt.ko
-
-    wait /dev/wmtWifi 5
-    chown wifi wifi /dev/wmtWifi
-    chmod 0660 /dev/wmtWifi
