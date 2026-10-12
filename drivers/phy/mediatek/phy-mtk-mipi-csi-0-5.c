@@ -8,6 +8,7 @@
 
 #include <dt-bindings/phy/phy.h>
 #include <linux/bitfield.h>
+#include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/io.h>
 #include <linux/module.h>
@@ -37,6 +38,8 @@ struct mtk_mipi_cdphy_port {
 	void __iomem *base;
 	struct phy *phy;
 	const struct mtk_mipi_cdphy_data *data;
+	struct clk_bulk_data *clks;
+	int num_clks;
 	u32 type;
 	u32 mode;
 	u32 num_lanes;
@@ -86,9 +89,18 @@ static int mtk_mipi_phy_power_on(struct phy *phy)
 {
 	struct mtk_mipi_cdphy_port *port = phy_get_drvdata(phy);
 	void __iomem *base = port->base;
+	int ret;
 
-	if (port->data && port->data->csi_en_gate)
+	/* The MIPI RX 26 MHz references (MT6765: APMIXED MIPIC0/C1_26M). */
+	ret = clk_bulk_prepare_enable(port->num_clks, port->clks);
+	if (ret)
+		return ret;
+
+	/* Each half has its own gate: the vendor clock tree has mipiNa and mipiNb. */
+	if (port->data && port->data->csi_en_gate) {
 		mtk_phy_set_bits(base + MIPI_RX_WRAPPER80_CSIXA, CSR_CSI_EN);
+		mtk_phy_set_bits(base + CSIXB_OFFSET + MIPI_RX_WRAPPER80_CSIXA, CSR_CSI_EN);
+	}
 
 	/*
 	 * The driver currently supports DPHY and CD-PHY phys,
@@ -147,8 +159,9 @@ static int mtk_mipi_phy_power_on(struct phy *phy)
 	else
 		mtk_phy_csi_dphy_ana_eq_tune(base);
 
-	/* End ANA EQ tuning */
-	mtk_phy_set_bits(base + MIPI_RX_ANA40_CSIXA, 0x90);
+	/* End ANA EQ tuning; ANA40 only exists on the CD-PHY, a hole elsewhere. */
+	if (port->type == CDPHY)
+		mtk_phy_set_bits(base + MIPI_RX_ANA40_CSIXA, 0x90);
 
 	mtk_phy_update_field(base + MIPI_RX_ANA24_CSIXA, RG_CSIXA_RESERVE, 0x40);
 	mtk_phy_update_field(base + CSIXB_OFFSET + MIPI_RX_ANA24_CSIXA, RG_CSIXA_RESERVE, 0x40);
@@ -160,6 +173,12 @@ static int mtk_mipi_phy_power_on(struct phy *phy)
 	usleep_range(20, 40);
 	mtk_phy_update_field(base + MIPI_RX_ANA00_CSIXA, RG_CSIXA_BG_LPF_EN, 1);
 	mtk_phy_update_field(base + CSIXB_OFFSET + MIPI_RX_ANA00_CSIXA, RG_CSIXA_BG_LPF_EN, 1);
+
+	if ((readl(base + CSIXB_OFFSET + MIPI_RX_ANA00_CSIXA) &
+	     (RG_CSIXA_BG_CORE_EN | RG_CSIXA_BG_LPF_EN)) !=
+	    (RG_CSIXA_BG_CORE_EN | RG_CSIXA_BG_LPF_EN))
+		dev_warn(port->dev, "CSIxB bandgap did not enable: 0x%08x\n",
+			 readl(base + CSIXB_OFFSET + MIPI_RX_ANA00_CSIXA));
 
 	return 0;
 }
@@ -176,8 +195,12 @@ static int mtk_mipi_phy_power_off(struct phy *phy)
 	mtk_phy_update_field(base + CSIXB_OFFSET + MIPI_RX_ANA00_CSIXA, RG_CSIXA_BG_CORE_EN, 0);
 	mtk_phy_update_field(base + CSIXB_OFFSET + MIPI_RX_ANA00_CSIXA, RG_CSIXA_BG_LPF_EN, 0);
 
-	if (port->data && port->data->csi_en_gate)
+	if (port->data && port->data->csi_en_gate) {
 		mtk_phy_clear_bits(base + MIPI_RX_WRAPPER80_CSIXA, CSR_CSI_EN);
+		mtk_phy_clear_bits(base + CSIXB_OFFSET + MIPI_RX_WRAPPER80_CSIXA, CSR_CSI_EN);
+	}
+
+	clk_bulk_disable_unprepare(port->num_clks, port->clks);
 
 	return 0;
 }
@@ -246,6 +269,10 @@ static int mtk_mipi_cdphy_probe(struct platform_device *pdev)
 	port->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(port->base))
 		return PTR_ERR(port->base);
+
+	port->num_clks = devm_clk_bulk_get_all(dev, &port->clks);
+	if (port->num_clks < 0)
+		return dev_err_probe(dev, port->num_clks, "Failed to get clocks\n");
 
 	ret = of_property_read_u32(dev->of_node, "num-lanes", &port->num_lanes);
 	if (ret) {
