@@ -1,0 +1,4 @@
+# Stock MediaTek Codec2 HAL in the platform's vendor codec domain.
+/vendor/bin/hw/android\.hardware\.media\.c2@1\.2-mediatek u:object_r:mediacodec_exec:s0
+# Video codec core (drivers/staging/mtk-vcodec-compat).
+/dev/Vcodec u:object_r:r1_vcodec_device:s0

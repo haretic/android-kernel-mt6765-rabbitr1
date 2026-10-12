@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!--
+    Stage 1: the MT6765 hardware H.264 encoder only, served by the stock
+    MediaTek Codec2 HAL (IComponentStore/default). Installed as
+    /vendor/etc/media_codecs_c2.xml; the HAL's other components stay hidden
+    because the framework only lists components named here.
+
+    Entry and measured frame rates as in the stock media_codecs_c2.xml and
+    media_codecs_performance.xml, less the quirks only OMX reads. rank 256
+    sorts it before the c2.android software codecs (rank 512).
+-->
+<MediaCodecs>
+    <Encoders>
+        <MediaCodec name="c2.mtk.avc.encoder" type="video/avc" rank="256">
+            <Alias name="OMX.MTK.VIDEO.ENCODER.AVC" />
+            <Limit name="size" min="176x144" max="1920x1080" />
+            <Limit name="alignment" value="16x16" />
+            <Limit name="block-size" value="16x16" />
+            <Limit name="concurrent-instances" max="16" />
+            <Limit name="performance-point-1920x1080" value="30" />
+            <Limit name="measured-frame-rate-320x240" range="161-561" />
+            <Limit name="measured-frame-rate-720x480" range="67-234" />
+            <Limit name="measured-frame-rate-1280x720" range="29-102" />
+        </MediaCodec>
+    </Encoders>
+</MediaCodecs>

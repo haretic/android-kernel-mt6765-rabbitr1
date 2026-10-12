@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# Stock MediaTek Codec2 HAL (32-bit) driving the codec core through /dev/Vcodec.
+# Stock service, less the network groups. The HAL applies its own seccomp
+# policies from /vendor/etc/seccomp_policy.
+service vendor.media.c2-hal-1-2 /vendor/bin/hw/android.hardware.media.c2@1.2-mediatek
+    class hal
+    user mediacodec
+    group camera drmrpc mediadrm media_rw sdcard_rw media system audio
+    ioprio rt 4
+    task_profiles ProcessCapacityHigh HighPerformance

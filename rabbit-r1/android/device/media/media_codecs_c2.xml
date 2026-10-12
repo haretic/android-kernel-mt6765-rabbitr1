@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!--
+    Stage 2: the MT6765 hardware H.264 encoder and H.264/HEVC decoders,
+    served by the stock MediaTek Codec2 HAL (IComponentStore/default).
+    Installed as /vendor/etc/media_codecs_c2.xml when R1_MEDIA_HW_DECODE is
+    true; the HAL's other components stay hidden because the framework only
+    lists components named here.
+
+    Entries and measured frame rates as in the stock media_codecs_c2.xml and
+    media_codecs_performance.xml, less the quirks only OMX reads. rank 256
+    sorts them before the c2.android software codecs (rank 512).
+-->
+<MediaCodecs>
+    <Decoders>
+        <MediaCodec name="c2.mtk.avc.decoder" type="video/avc" rank="256">
+            <Alias name="OMX.MTK.VIDEO.DECODER.AVC" />
+            <Limit name="size" min="64x64" max="3840x2160" />
+            <Feature name="adaptive-playback" />
+            <Feature name="can-swap-width-height" value="1" />
+            <Limit name="concurrent-instances" max="16" />
+            <Limit name="performance-point-1920x1088" value="30" />
+            <Limit name="measured-frame-rate-320x240" range="186-646" />
+            <Limit name="measured-frame-rate-720x480" range="124-433" />
+            <Limit name="measured-frame-rate-1280x720" range="74-256" />
+            <Limit name="measured-frame-rate-1920x1080" range="50-110" />
+        </MediaCodec>
+        <MediaCodec name="c2.mtk.hevc.decoder" type="video/hevc" rank="256">
+            <Alias name="OMX.MTK.VIDEO.DECODER.HEVC" />
+            <Limit name="size" min="16x16" max="3840x2160" />
+            <Limit name="blocks-per-second" range="1-491520" />
+            <Feature name="adaptive-playback" />
+            <Feature name="can-swap-width-height" value="1" />
+            <Limit name="concurrent-instances" max="16" />
+            <Limit name="performance-point-1920x1088" value="30" />
+            <Limit name="measured-frame-rate-352x288" range="335-737" />
+            <Limit name="measured-frame-rate-640x360" range="105-232" />
+            <Limit name="measured-frame-rate-720x480" range="142-494" />
+            <Limit name="measured-frame-rate-1280x720" range="75-262" />
+            <Limit name="measured-frame-rate-1920x1080" range="74-162" />
+            <Limit name="measured-frame-rate-3840x2160" range="14-48" />
+        </MediaCodec>
+    </Decoders>
+    <Encoders>
+        <MediaCodec name="c2.mtk.avc.encoder" type="video/avc" rank="256">
+            <Alias name="OMX.MTK.VIDEO.ENCODER.AVC" />
+            <Limit name="size" min="176x144" max="1920x1080" />
+            <Limit name="alignment" value="16x16" />
+            <Limit name="block-size" value="16x16" />
+            <Limit name="concurrent-instances" max="16" />
+            <Limit name="performance-point-1920x1080" value="30" />
+            <Limit name="measured-frame-rate-320x240" range="161-561" />
+            <Limit name="measured-frame-rate-720x480" range="67-234" />
+            <Limit name="measured-frame-rate-1280x720" range="29-102" />
+        </MediaCodec>
+    </Encoders>
+</MediaCodecs>

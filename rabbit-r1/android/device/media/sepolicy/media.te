@@ -1,0 +1,13 @@
+# Video codec core: lock, interrupt waits and mmap of its register windows.
+type r1_vcodec_device, dev_type;
+allow mediacodec r1_vcodec_device:chr_file rw_file_perms;
+
+# The codec libraries allocate their working buffers from the legacy ION
+# device, import gralloc buffers into it and ask it for M4U addresses.
+# libion opens it read-only.
+allow mediacodec ion_device:chr_file r_file_perms;
+
+# libgralloc_extra and libdpframework use GED in-process, as the PowerVR
+# clients do (sepolicy/pvr/pvr.te).
+allow mediacodec proc_ged:file r_file_perms;
+allowxperm mediacodec proc_ged:file ioctl { 0x6700-0x67ff };
