@@ -853,6 +853,60 @@ UINT32 WMT_poll(struct file *filp, poll_table *wait)
 }
 
 /* INT32 WMT_ioctl(struct inode *inode, struct file *filp, UINT32 cmd, unsigned long arg) */
+/*
+ * Body of WMT_IOCTL_SET_STP_MODE, split out so the in-kernel launcher
+ * (wmt_autolaunch.c) can configure the HIF without the Android daemon.
+ */
+INT32 wmt_dev_set_stp_mode(ULONG arg)
+{
+	INT32 iRet = 0;
+	P_OSAL_OP pOp;
+	MTK_WCN_BOOL bRet;
+	P_OSAL_SIGNAL pSignal = NULL;
+	P_WMT_HIF_CONF pHif = NULL;
+
+	if (hif_info == 1) {
+		WMT_INFO_FUNC("hif_info had been set!\n");
+		return 0;
+	}
+
+	iRet = wmt_lib_set_hif(arg);
+	if (iRet != 0) {
+		WMT_INFO_FUNC("wmt_lib_set_hif fail (%lu)\n", arg);
+		return iRet;
+	}
+
+	pOp = wmt_lib_get_free_op();
+	if (!pOp) {
+		WMT_INFO_FUNC("get_free_lxop fail\n");
+		return 0;
+	}
+	pSignal = &pOp->signal;
+	pOp->op.opId = WMT_OPID_HIF_CONF;
+
+	pHif = wmt_lib_get_hif();
+
+	osal_memcpy(&pOp->op.au4OpData[0], pHif, sizeof(WMT_HIF_CONF));
+	pOp->op.u4InfoBit = WMT_OP_HIF_BIT;
+	pSignal->timeoutValue = 0;
+
+	bRet = wmt_lib_put_act_op(pOp);
+	WMT_DBG_FUNC("WMT_OPID_HIF_CONF result(%d)\n", bRet);
+	iRet = (bRet == MTK_WCN_BOOL_FALSE) ? -EFAULT : 0;
+	if (iRet == 0) {
+		WMT_INFO_FUNC("luncher set STP mode success!\n");
+		hif_info = 1;
+
+		if (atomic_read(&g_late_pwr_on_for_blank) &&
+			atomic_read(&g_es_lr_flag_for_blank)) {
+			atomic_set(&g_late_pwr_on_for_blank, 0);
+			schedule_work(&gPwrOnOffWork);
+		}
+	}
+
+	return iRet;
+}
+
 LONG WMT_unlocked_ioctl(struct file *filp, UINT32 cmd, ULONG arg)
 {
 	INT32 iRet = 0;
@@ -879,51 +933,7 @@ LONG WMT_unlocked_ioctl(struct file *filp, UINT32 cmd, ULONG arg)
 		break;
 	case WMT_IOCTL_SET_STP_MODE:	/* stp/hif/fm mode */
 		/* set hif conf */
-		do {
-			P_OSAL_OP pOp;
-			MTK_WCN_BOOL bRet;
-			P_OSAL_SIGNAL pSignal = NULL;
-			P_WMT_HIF_CONF pHif = NULL;
-
-			if (hif_info == 1) {
-				WMT_INFO_FUNC("hif_info had been set!\n");
-				break;
-			}
-
-			iRet = wmt_lib_set_hif(arg);
-			if (iRet != 0) {
-				WMT_INFO_FUNC("wmt_lib_set_hif fail (%lu)\n", arg);
-				break;
-			}
-
-			pOp = wmt_lib_get_free_op();
-			if (!pOp) {
-				WMT_INFO_FUNC("get_free_lxop fail\n");
-				break;
-			}
-			pSignal = &pOp->signal;
-			pOp->op.opId = WMT_OPID_HIF_CONF;
-
-			pHif = wmt_lib_get_hif();
-
-			osal_memcpy(&pOp->op.au4OpData[0], pHif, sizeof(WMT_HIF_CONF));
-			pOp->op.u4InfoBit = WMT_OP_HIF_BIT;
-			pSignal->timeoutValue = 0;
-
-			bRet = wmt_lib_put_act_op(pOp);
-			WMT_DBG_FUNC("WMT_OPID_HIF_CONF result(%d)\n", bRet);
-			iRet = (bRet == MTK_WCN_BOOL_FALSE) ? -EFAULT : 0;
-			if (iRet == 0) {
-				WMT_INFO_FUNC("luncher set STP mode success!\n");
-				hif_info = 1;
-
-				if (atomic_read(&g_late_pwr_on_for_blank) &&
-					atomic_read(&g_es_lr_flag_for_blank)) {
-					atomic_set(&g_late_pwr_on_for_blank, 0);
-					schedule_work(&gPwrOnOffWork);
-				}
-			}
-		} while (0);
+		iRet = wmt_dev_set_stp_mode(arg);
 		break;
 	case WMT_IOCTL_FUNC_ONOFF_CTRL:	/* test turn on/off func */
 #if WMT_DBG_SUPPORT
@@ -1602,6 +1612,7 @@ static INT32 WMT_init(VOID)
 	dev_t devID = MKDEV(gWmtMajor, 0);
 	INT32 cdevErr = -1;
 	INT32 ret = -1;
+	INT32 regErr = -1;
 	ENUM_WMT_CHIP_TYPE chip_type;
 
 	WMT_DBG_FUNC("WMT Version= %s DATE=%s\n", MTK_WMT_VERSION, MTK_WMT_DATE);
@@ -1627,6 +1638,7 @@ static INT32 WMT_init(VOID)
 		gWmtInitStatus = WMT_INIT_NOT_START;
 		return ret;
 	}
+	regErr = 0;
 
 	cdev_init(&gWmtCdev, &gWmtFops);
 	gWmtCdev.owner = THIS_MODULE;
@@ -1744,10 +1756,9 @@ error:
 	if (cdevErr == 0)
 		cdev_del(&gWmtCdev);
 
-	if (ret == 0) {
+	/* the stock code tested ret, leaking the region when wmt_lib_init() failed */
+	if (regErr == 0)
 		unregister_chrdev_region(devID, WMT_DEV_NUM);
-		gWmtMajor = -1;
-	}
 
 	gWmtInitStatus = WMT_INIT_NOT_START;
 	WMT_ERR_FUNC("fail\n");

@@ -344,6 +344,9 @@ static int wmt_detect_driver_init(void)
 
 	WMT_DETECT_PR_INFO("driver(major %d) installed success\n", gWmtDetectMajor);
 
+	/* a failure is logged loudly and leaves /dev/wmtdetect usable */
+	wmt_klaunch_start();
+
 	return 0;
 
 err2:
@@ -378,6 +381,8 @@ static void wmt_detect_driver_exit(void)
 	dev_t dev = MKDEV(gWmtDetectMajor, 0);
 
 	mtk_wcn_common_drv_exit();
+	/* no-op if the WMT core already did it; covers a half-done bring-up */
+	mtk_wcn_consys_hw_deinit();
 
 	if (pDetectDev) {
 		device_destroy(pDetectClass, dev);

@@ -1075,9 +1075,20 @@ INT32 mtk_wcn_consys_hw_restore(struct device *device)
 	return 0;
 }
 
+/*
+ * Init may be reached from the in-kernel launcher and from the
+ * wmtdetect ioctl, and deinit from both the WMT core teardown and module
+ * exit; keep both idempotent so the platform driver is registered at
+ * most once and always unregistered before the module goes away.
+ */
+static bool mtk_wcn_consys_drv_registered;
+
 INT32 mtk_wcn_consys_hw_init(VOID)
 {
 	INT32 iRet = -1, retry = 0;
+
+	if (mtk_wcn_consys_drv_registered)
+		return 0;
 
 	iRet = platform_driver_register(&mtk_wmt_dev_drv);
 	if (iRet)
@@ -1097,6 +1108,7 @@ INT32 mtk_wcn_consys_hw_init(VOID)
 			platform_driver_unregister(&mtk_wmt_dev_drv);
 		return -ENODEV;
 	}
+	mtk_wcn_consys_drv_registered = true;
 
 	if (wmt_consys_ic_ops->consys_ic_pmic_register_device) {
 		iRet = wmt_consys_ic_ops->consys_ic_pmic_register_device();
@@ -1125,6 +1137,9 @@ INT32 mtk_wcn_consys_hw_init(VOID)
 
 INT32 mtk_wcn_consys_hw_deinit(VOID)
 {
+	if (!mtk_wcn_consys_drv_registered)
+		return 0;
+	mtk_wcn_consys_drv_registered = false;
 
 	if (pEmibaseaddr) {
 		if (wmt_consys_ic_ops->consys_ic_emi_coredump_remapping)
