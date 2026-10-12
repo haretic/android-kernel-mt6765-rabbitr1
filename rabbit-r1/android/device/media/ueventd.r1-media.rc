@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
+# Video codec device node, owner and mode as stock init.mt6765.rc set them.
+# ueventd only reads /vendor/etc/ueventd.rc and what it imports, so
+# rootdir/ueventd.r1.rc (installed as ueventd.mt6765.rc) needs:
+#   import /vendor/etc/ueventd.r1-media.rc
+
+/dev/Vcodec               0660   media      system
