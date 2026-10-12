@@ -13,7 +13,6 @@
 #include <media/v4l2-mediabus.h>
 
 #include "mtk_camsv.h"
-#include "mtk_camsv_hw.h"
 #include "mtk_camsv_reg.h"
 
 static inline struct mtk_cam_video_device *
@@ -85,7 +84,7 @@ static const struct mtk_cam_format_info mtk_cam_format_info[] = {
 		.imgo_stride = CAMSV_IMGO_SV_STRIDE_BUS_SIZE_EN
 			| CAMSV_IMGO_SV_STRIDE_BUS_SIZE_32,
 	}, {
-		.fourcc = V4L2_PIX_FMT_SBGGR10,
+		.fourcc = V4L2_PIX_FMT_MTISP_SBGGR10,
 		.code = MEDIA_BUS_FMT_SBGGR10_1X10,
 		.bpp = 10,
 		.w_factor = 1,
@@ -96,7 +95,7 @@ static const struct mtk_cam_format_info mtk_cam_format_info[] = {
 		.imgo_stride = CAMSV_IMGO_SV_STRIDE_BUS_SIZE_EN
 			| CAMSV_IMGO_SV_STRIDE_BUS_SIZE_32,
 	}, {
-		.fourcc = V4L2_PIX_FMT_SGBRG10,
+		.fourcc = V4L2_PIX_FMT_MTISP_SGBRG10,
 		.code = MEDIA_BUS_FMT_SGBRG10_1X10,
 		.bpp = 10,
 		.w_factor = 1,
@@ -107,7 +106,7 @@ static const struct mtk_cam_format_info mtk_cam_format_info[] = {
 		.imgo_stride = CAMSV_IMGO_SV_STRIDE_BUS_SIZE_EN
 			| CAMSV_IMGO_SV_STRIDE_BUS_SIZE_32,
 	}, {
-		.fourcc = V4L2_PIX_FMT_SGRBG10,
+		.fourcc = V4L2_PIX_FMT_MTISP_SGRBG10,
 		.code = MEDIA_BUS_FMT_SGRBG10_1X10,
 		.bpp = 10,
 		.w_factor = 1,
@@ -118,7 +117,7 @@ static const struct mtk_cam_format_info mtk_cam_format_info[] = {
 		.imgo_stride = CAMSV_IMGO_SV_STRIDE_BUS_SIZE_EN
 			| CAMSV_IMGO_SV_STRIDE_BUS_SIZE_32,
 	}, {
-		.fourcc = V4L2_PIX_FMT_SRGGB10,
+		.fourcc = V4L2_PIX_FMT_MTISP_SRGGB10,
 		.code = MEDIA_BUS_FMT_SRGGB10_1X10,
 		.bpp = 10,
 		.w_factor = 1,
@@ -251,6 +250,21 @@ mtk_cam_format_info_by_code(u32 code)
 	return NULL;
 }
 
+static const struct mtk_cam_format_info *
+mtk_cam_dev_format_info_by_code(const struct mtk_cam_dev *cam, u32 code)
+{
+	const struct mtk_cam_format_info *info;
+	unsigned int i;
+
+	for (i = 0; i < cam->conf->num_fmts; i++) {
+		info = mtk_cam_format_info_by_fourcc(cam->conf->fmts[i]);
+		if (info && info->code == code)
+			return info;
+	}
+
+	return NULL;
+}
+
 static bool mtk_cam_dev_find_fmt(const struct mtk_cam_vdev_desc *desc,
 				 u32 format)
 {
@@ -324,7 +338,8 @@ static int mtk_cam_vb2_queue_setup(struct vb2_queue *vq,
 		return -EINVAL;
 	}
 
-	mtk_camsv_fbc_init(cam, *num_buffers);
+	if (cam->conf->ops->fbc_init)
+		cam->conf->ops->fbc_init(cam, *num_buffers);
 
 	return 0;
 }
@@ -365,17 +380,9 @@ static void mtk_cam_vb2_buf_queue(struct vb2_buffer *vb)
 {
 	struct mtk_cam_dev *cam = vb2_get_drv_priv(vb->vb2_queue);
 	struct mtk_cam_dev_buffer *buf = to_mtk_cam_dev_buffer(vb);
-	unsigned long flags;
 
-	/* Add the buffer into the tracking list */
-	spin_lock_irqsave(&cam->buf_list_lock, flags);
-	if (vb2_start_streaming_called(vb->vb2_queue) && list_empty(&cam->buf_list))
-		mtk_camsv_update_buffers_add(cam, buf);
-
-	list_add_tail(&buf->list, &cam->buf_list);
-	spin_unlock_irqrestore(&cam->buf_list_lock, flags);
-	if (vb2_start_streaming_called(vb->vb2_queue))
-		mtk_camsv_fbc_inc(cam);
+	cam->conf->ops->buf_queue(cam, buf,
+				  vb2_start_streaming_called(vb->vb2_queue));
 }
 
 void mtk_cam_vb2_return_all_buffers(struct mtk_cam_dev *cam,
@@ -409,11 +416,11 @@ static int mtk_cam_vb2_start_streaming(struct vb2_queue *vq,
 		return ret;
 	}
 
-	mtk_camsv_setup(cam, count, fmt->width, fmt->height,
-			fmt->plane_fmt[0].bytesperline, vdev->fmtinfo->code);
+	cam->conf->ops->setup(cam, count, fmt->width, fmt->height,
+			      fmt->plane_fmt[0].bytesperline, vdev->fmtinfo);
 
 	/* Enable CMOS and VF */
-	mtk_camsv_cmos_vf_hw_enable(cam);
+	cam->conf->ops->stream_on(cam);
 
 	/* Start streaming of the whole pipeline now. */
 	ret = video_device_pipeline_start(&vdev->vdev, &cam->pipeline);
@@ -433,8 +440,9 @@ static int mtk_cam_vb2_start_streaming(struct vb2_queue *vq,
 
 fail_no_stream:
 	video_device_pipeline_stop(&vdev->vdev);
-	mtk_cam_vb2_return_all_buffers(cam, VB2_BUF_STATE_QUEUED);
 fail_pm_put:
+	cam->conf->ops->stream_off(cam);
+	mtk_cam_vb2_return_all_buffers(cam, VB2_BUF_STATE_QUEUED);
 	pm_runtime_mark_last_busy(cam->dev);
 	pm_runtime_put_autosuspend(cam->dev);
 
@@ -448,7 +456,7 @@ static void mtk_cam_vb2_stop_streaming(struct vb2_queue *vq)
 		vb2_queue_to_mtk_cam_video_device(vq);
 
 	/* Disable CMOS and VF */
-	mtk_camsv_cmos_vf_hw_disable(cam);
+	cam->conf->ops->stream_off(cam);
 
 	v4l2_subdev_disable_streams(&cam->subdev,
 				    cam->subdev_pads[MTK_CAM_CIO_PAD_VIDEO].index,
@@ -468,8 +476,6 @@ static const struct vb2_ops mtk_cam_vb2_ops = {
 	.buf_queue = mtk_cam_vb2_buf_queue,
 	.start_streaming = mtk_cam_vb2_start_streaming,
 	.stop_streaming = mtk_cam_vb2_stop_streaming,
-	.wait_prepare = vb2_ops_wait_prepare,
-	.wait_finish = vb2_ops_wait_finish,
 };
 
 /* -----------------------------------------------------------------------------
@@ -510,10 +516,17 @@ static int mtk_cam_enum_mbus_code(struct v4l2_subdev *sd,
 				  struct v4l2_subdev_state *sd_state,
 				  struct v4l2_subdev_mbus_code_enum *code)
 {
-	if (code->index >= ARRAY_SIZE(mtk_cam_format_info))
+	struct mtk_cam_dev *cam = to_mtk_cam_dev(sd);
+	const struct mtk_cam_format_info *info;
+
+	if (code->index >= cam->conf->num_fmts)
 		return -EINVAL;
 
-	code->code = mtk_cam_format_info[code->index].code;
+	info = mtk_cam_format_info_by_fourcc(cam->conf->fmts[code->index]);
+	if (!info)
+		return -EINVAL;
+
+	code->code = info->code;
 
 	return 0;
 }
@@ -522,8 +535,8 @@ static int mtk_cam_set_fmt(struct v4l2_subdev *sd,
 			   struct v4l2_subdev_state *sd_state,
 			   struct v4l2_subdev_format *fmt)
 {
+	struct mtk_cam_dev *cam = to_mtk_cam_dev(sd);
 	struct v4l2_mbus_framefmt *format;
-	unsigned int i;
 
 	/*
 	 * We only support pass-through mode, the format on source pads can't
@@ -532,13 +545,9 @@ static int mtk_cam_set_fmt(struct v4l2_subdev *sd,
 	if (fmt->pad != MTK_CAM_CIO_PAD_SENINF)
 		return -EINVAL;
 
-	for (i = 0; i < ARRAY_SIZE(mtk_cam_format_info); ++i) {
-		if (mtk_cam_format_info[i].code == fmt->format.code)
-			break;
-	}
-
-	if (i == ARRAY_SIZE(mtk_cam_format_info))
-		fmt->format.code = mtk_cam_format_info[0].code;
+	if (!mtk_cam_dev_format_info_by_code(cam, fmt->format.code))
+		fmt->format.code =
+			mtk_cam_format_info_by_fourcc(cam->conf->fmts[0])->code;
 
 	format = v4l2_subdev_state_get_format(sd_state, fmt->pad);
 	format->width = clamp_t(u32, fmt->format.width,
@@ -749,7 +758,8 @@ static int mtk_cam_vidioc_enum_fmt(struct file *file, void *fh,
 	if (f->index)
 		return -EINVAL;
 
-	fmtinfo = mtk_cam_format_info_by_code(f->mbus_code);
+	fmtinfo = mtk_cam_dev_format_info_by_code(video_drvdata(file),
+						  f->mbus_code);
 	if (!fmtinfo)
 		return -EINVAL;
 
@@ -878,21 +888,7 @@ static const struct v4l2_file_operations mtk_cam_v4l2_fops = {
  * Init & Cleanup
  */
 
-static const u32 stream_out_fmts[] = {
-	/* The 1st entry is the default image format */
-	V4L2_PIX_FMT_SBGGR8,
-	V4L2_PIX_FMT_SGBRG8,
-	V4L2_PIX_FMT_SGRBG8,
-	V4L2_PIX_FMT_SRGGB8,
-	V4L2_PIX_FMT_UYVY,
-	V4L2_PIX_FMT_VYUY,
-	V4L2_PIX_FMT_YUYV,
-	V4L2_PIX_FMT_YVYU,
-};
-
 static const struct mtk_cam_vdev_desc video_stream = {
-	.fmts = stream_out_fmts,
-	.num_fmts = ARRAY_SIZE(stream_out_fmts),
 	.frmsizes =
 		&(struct v4l2_frmsizeenum){
 			.index = 0,
@@ -914,11 +910,18 @@ int mtk_cam_video_register(struct mtk_cam_dev *cam)
 	struct mtk_cam_video_device *cam_vdev = &cam->vdev;
 	struct video_device *vdev = &cam_vdev->vdev;
 	struct vb2_queue *vbq = &cam_vdev->vbq;
+	struct mtk_cam_vdev_desc *desc;
 	int ret;
 
 	vb2_dma_contig_set_max_seg_size(cam->dev, DMA_BIT_MASK(32));
 
-	cam_vdev->desc = &video_stream;
+	desc = devm_kmemdup(dev, &video_stream, sizeof(*desc), GFP_KERNEL);
+	if (!desc)
+		return -ENOMEM;
+
+	desc->fmts = cam->conf->fmts;
+	desc->num_fmts = cam->conf->num_fmts;
+	cam_vdev->desc = desc;
 
 	/* Initialize mtk_cam_video_device */
 	mtk_cam_dev_load_default_fmt(cam);

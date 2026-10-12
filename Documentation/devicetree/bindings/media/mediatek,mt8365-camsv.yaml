@@ -18,9 +18,12 @@ description:
 
 properties:
   compatible:
-    const: mediatek,mt8365-camsv
+    enum:
+      - mediatek,mt6765-camsv
+      - mediatek,mt8365-camsv
 
   reg:
+    minItems: 1
     items:
       - description: camsv base
       - description: img0 base
@@ -33,19 +36,26 @@ properties:
     maxItems: 1
 
   clocks:
-    items:
-      - description: cam clock
-      - description: camtg clock
-      - description: camsv clock
+    minItems: 3
+    maxItems: 5
 
   clock-names:
-    items:
-      - const: cam
-      - const: camtg
-      - const: camsv
+    minItems: 3
+    maxItems: 5
 
   iommus:
     maxItems: 1
+
+  mediatek,larb:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      SMI LARB the IMGO DMA port goes through, kept powered while capturing.
+
+  memory-region:
+    maxItems: 1
+    description:
+      Optional shared-dma-pool for the capture buffers. Without an IOMMU the
+      buffers must be physically contiguous and below 4 GiB.
 
   ports:
     $ref: /schemas/graph.yaml#/properties/ports
@@ -64,8 +74,36 @@ required:
   - clocks
   - clock-names
   - power-domains
-  - iommus
   - ports
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          const: mediatek,mt8365-camsv
+    then:
+      properties:
+        reg:
+          minItems: 3
+        clocks:
+          items:
+            - description: cam clock
+            - description: camtg clock
+            - description: camsv clock
+        clock-names:
+          items:
+            - const: cam
+            - const: camtg
+            - const: camsv
+      required:
+        - iommus
+    else:
+      properties:
+        reg:
+          maxItems: 1
+        clock-names:
+          items:
+            enum: [ cam, camtg, camsv0, camsv1, camsv2 ]
 
 additionalProperties: false
 
