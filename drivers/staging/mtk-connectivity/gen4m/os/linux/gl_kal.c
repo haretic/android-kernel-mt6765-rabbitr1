@@ -76,7 +76,11 @@
 #include "gl_kal.h"
 #include "gl_wext.h"
 #include "precomp.h"
+#if KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE
+#include <linux/stdarg.h>
+#else
 #include <stdarg.h>
+#endif
 
 #if CFG_SUPPORT_AGPS_ASSIST
 #include <net/netlink.h>
@@ -92,6 +96,9 @@
 
 /* for rps */
 #include <linux/netdevice.h>
+#if KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE
+#include <net/gro.h>
+#endif
 #include <linux/ip.h>
 #include <linux/tcp.h>
 #include <linux/ipv6.h>
@@ -817,8 +824,7 @@ void kalUpdateMACAddress(IN struct GLUE_INFO *prGlueInfo,
 
 	if (UNEQUAL_MAC_ADDR(prGlueInfo->prDevHandler->dev_addr,
 			     pucMacAddr))
-		memcpy(prGlueInfo->prDevHandler->dev_addr, pucMacAddr,
-		       PARAM_MAC_ADDR_LEN);
+		kalSetNetDevAddr(prGlueInfo->prDevHandler, pucMacAddr);
 }
 
 #if CFG_TCP_IP_CHKSUM_OFFLOAD
@@ -1189,7 +1195,14 @@ uint32_t kal_is_udp_enable_gro(struct ADAPTER *prAdapter, uint8_t ucBssIdx)
 static inline void napi_gro_flush_list(struct napi_struct *napi)
 {
 	napi_gro_flush(napi, false);
-#if KERNEL_VERSION(5, 4, 0) <= CFG80211_VERSION_CODE
+#if KERNEL_VERSION(6, 15, 0) <= LINUX_VERSION_CODE
+	/* GRO state moved into struct gro_node */
+	if (napi->gro.rx_count) {
+		netif_receive_skb_list(&napi->gro.rx_list);
+		INIT_LIST_HEAD(&napi->gro.rx_list);
+		napi->gro.rx_count = 0;
+	}
+#elif KERNEL_VERSION(5, 4, 0) <= CFG80211_VERSION_CODE
 	if (napi->rx_count) {
 		netif_receive_skb_list(&napi->rx_list);
 		INIT_LIST_HEAD(&napi->rx_list);
@@ -1475,10 +1488,15 @@ uint32_t kalRxIndicateOnePkt(IN struct GLUE_INFO
 skip_gro:
 #endif
 #endif
+#if KERNEL_VERSION(5, 18, 0) <= LINUX_VERSION_CODE
+	/* netif_rx() may be called from any context since 5.18 */
+	netif_rx(prSkb);
+#else
 	if (!in_interrupt())
 		netif_rx_ni(prSkb);
 	else
 		netif_rx(prSkb);
+#endif
 
 	return WLAN_STATUS_SUCCESS;
 }
@@ -1810,7 +1828,11 @@ kalIndicateStatusAndComplete(IN struct GLUE_INFO
 				uint8_t ucAuthorized = pvBuf ?
 					*(uint8_t *) pvBuf : FALSE;
 
+#if KERNEL_VERSION(6, 0, 0) <= CFG80211_VERSION_CODE
+				rRoamInfo.links[0].bss = bss;
+#else
 				rRoamInfo.bss = bss;
+#endif
 				rRoamInfo.req_ie = prConnSettings->aucReqIe;
 				rRoamInfo.req_ie_len =
 					prConnSettings->u4ReqIeLength;
@@ -1824,8 +1846,13 @@ kalIndicateStatusAndComplete(IN struct GLUE_INFO
 					&rRoamInfo, GFP_KERNEL);
 #if KERNEL_VERSION(4, 15, 0) <= CFG80211_VERSION_CODE
 				if (ucAuthorized)
+#if KERNEL_VERSION(6, 2, 0) <= CFG80211_VERSION_CODE
+					cfg80211_port_authorized(prDevHandler,
+						arBssid, NULL, 0, GFP_KERNEL);
+#else
 					cfg80211_port_authorized(prDevHandler,
 						arBssid, GFP_KERNEL);
+#endif
 #endif
 #else
 				cfg80211_roamed_bss(
@@ -3418,8 +3445,14 @@ static int32_t kalThreadSchedRetrieve(struct task_struct *pThread,
 
 	pSched->time = sec*1000 + usec/1000;
 	pSched->exec = se.sum_exec_runtime;
+#if KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE
+	/* schedstats moved from sched_entity to task_struct */
+	pSched->runnable = pThread->stats.wait_sum;
+	pSched->iowait = pThread->stats.iowait_sum;
+#else
 	pSched->runnable = se.statistics.wait_sum;
 	pSched->iowait = se.statistics.iowait_sum;
+#endif
 
 	return 0;
 #else
@@ -8286,6 +8319,18 @@ static uint32_t kalPerMonUpdate(IN struct ADAPTER *prAdapter)
 	for (i = 0; i < BSS_DEFAULT_NUM; ++i) {
 		ndev = wlanGetNetDev(glue, i);
 		if (ndev) {
+#if KERNEL_VERSION(5, 19, 0) <= LINUX_VERSION_CODE
+			/* the core drop counters are per-cpu now */
+			struct rtnl_link_stats64 rStats;
+
+			dev_get_stats(ndev, &rStats);
+			pos += kalSnprintf(pos, end - pos,
+				"[%llu:%llu:%llu:%llu]",
+				(unsigned long long) ndev->stats.tx_dropped,
+				(unsigned long long) rStats.tx_dropped,
+				(unsigned long long) ndev->stats.rx_dropped,
+				(unsigned long long) rStats.rx_dropped);
+#else
 			pos += kalSnprintf(pos, end - pos,
 				"[%llu:%llu:%llu:%llu]",
 				(unsigned long long) ndev->stats.tx_dropped,
@@ -8294,6 +8339,7 @@ static uint32_t kalPerMonUpdate(IN struct ADAPTER *prAdapter)
 				(unsigned long long) ndev->stats.rx_dropped,
 				(unsigned long long)
 					atomic_long_read(&ndev->rx_dropped));
+#endif
 		}
 	}
 
@@ -8674,7 +8720,13 @@ int32_t __weak kalCheckVcoreBoost(IN struct ADAPTER *prAdapter,
 /* mimic store_rps_map as net-sysfs.c does */
 int wlan_set_rps_map(struct netdev_rx_queue *queue, unsigned long rps_value)
 {
-#if KERNEL_VERSION(4, 14, 0) <= CFG80211_VERSION_CODE
+#if KERNEL_VERSION(6, 9, 0) <= LINUX_VERSION_CODE
+	/*
+	 * struct rps_map and netdev_rx_queue are private to the core now;
+	 * leave RPS to userspace (/sys/class/net/<if>/queues/rx-N/rps_cpus).
+	 */
+	return 0;
+#elif KERNEL_VERSION(4, 14, 0) <= CFG80211_VERSION_CODE
 	struct rps_map *old_map, *map;
 	cpumask_var_t mask;
 	int cpu, i;
@@ -8733,6 +8785,10 @@ int wlan_set_rps_map(struct netdev_rx_queue *queue, unsigned long rps_value)
 
 void kalSetRpsMap(IN struct GLUE_INFO *glue, IN unsigned long value)
 {
+#if KERNEL_VERSION(6, 9, 0) <= LINUX_VERSION_CODE
+	/* see wlan_set_rps_map() */
+}
+#else
 	int32_t i = 0, j = 0;
 	struct net_device *dev = NULL;
 
@@ -8744,6 +8800,7 @@ void kalSetRpsMap(IN struct GLUE_INFO *glue, IN unsigned long value)
 		}
 	}
 }
+#endif
 
 int32_t kalPerMonSetForceEnableFlag(uint8_t uFlag)
 {
@@ -8917,7 +8974,15 @@ void kalIndicateChannelSwitch(IN struct GLUE_INFO *prGlueInfo,
 	DBGLOG(REQ, STATE, "DFS channel switch to %d\n", ucChannelNum);
 
 	cfg80211_chandef_create(&chandef, prChannel, rChannelType);
+#if KERNEL_VERSION(6, 9, 0) <= CFG80211_VERSION_CODE
+	cfg80211_ch_switch_notify(prGlueInfo->prDevHandler, &chandef, 0);
+#elif KERNEL_VERSION(6, 5, 0) <= CFG80211_VERSION_CODE
+	cfg80211_ch_switch_notify(prGlueInfo->prDevHandler, &chandef, 0, 0);
+#elif KERNEL_VERSION(6, 3, 0) <= CFG80211_VERSION_CODE
+	cfg80211_ch_switch_notify(prGlueInfo->prDevHandler, &chandef, 0);
+#else
 	cfg80211_ch_switch_notify(prGlueInfo->prDevHandler, &chandef);
+#endif
 }
 #endif
 
@@ -10536,6 +10601,8 @@ void kalBatNotifierUnReg(void)
 
 #endif
 
-#if KERNEL_VERSION(5, 4, 0) <= CFG80211_VERSION_CODE
+#if KERNEL_VERSION(6, 13, 0) <= LINUX_VERSION_CODE
+MODULE_IMPORT_NS("VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver");
+#elif KERNEL_VERSION(5, 4, 0) <= CFG80211_VERSION_CODE
 MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
 #endif

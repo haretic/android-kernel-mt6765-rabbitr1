@@ -588,7 +588,9 @@
 
 /* debug which packet wake up host */
 #define CFG_SUPPORT_WAKEUP_REASON_DEBUG         1
+#ifndef CFG_MODIFY_TX_POWER_BY_BAT_VOLT
 #define CFG_MODIFY_TX_POWER_BY_BAT_VOLT         1
+#endif
 
 #define CFG_INIT_POWER_SAVE_PROF		ENUM_PSP_FAST_SWITCH
 

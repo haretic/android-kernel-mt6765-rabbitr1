@@ -203,6 +203,14 @@
 
 #if WIRELESS_EXT > 12
 #include <net/iw_handler.h>
+#if !IS_ENABLED(CONFIG_WEXT_CORE)
+/*
+ * Mainline port: no wireless extensions core (Android only talks nl80211);
+ * the legacy WEXT events have no listener, drop them.
+ */
+#define wireless_send_event(_dev, _cmd, _wrqu, _extra)	\
+	do { (void)(_dev); (void)(_wrqu); (void)(_extra); } while (0)
+#endif
 #endif
 
 #ifdef CFG_CFG80211_VERSION
@@ -1512,7 +1520,7 @@ int set_nan_handler(struct net_device *netdev, uint32_t ucEnable);
 const struct net_device_ops *wlanGetNdevOps(void);
 #endif
 
-#if CFG_MTK_ANDROID_WMT
+#if CFG_MTK_ANDROID_WMT && (KERNEL_VERSION(6, 0, 0) > LINUX_VERSION_CODE)
 extern void connectivity_export_show_stack(struct task_struct *tsk,
 	unsigned long *sp);
 #endif

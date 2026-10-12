@@ -411,7 +411,7 @@ struct wireless_dev *mtk_p2p_cfg80211_add_iface(struct wiphy *wiphy,
 					prGlueInfo->prAdapter
 						->prP2pInfo->u4DeviceNum << 2;
 		}
-		kalMemCopy(prNewNetDevice->dev_addr, rMacAddr, ETH_ALEN);
+		kalSetNetDevAddr(prNewNetDevice, rMacAddr);
 		kalMemCopy(prNewNetDevice->perm_addr, rMacAddr, ETH_ALEN);
 
 		DBGLOG(P2P, INFO,

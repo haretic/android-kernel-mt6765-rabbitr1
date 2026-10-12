@@ -75,6 +75,9 @@
 #endif
 #if (CONFIG_WLAN_SERVICE == 1)
 #include "agent.h"
+#else
+/* from wlan_service/glue/osal/include/sys_adaption.h, not imported */
+#define SERV_STATUS_AGENT_INVALID_LEN	0x0103
 #endif
 
 /*******************************************************************************
@@ -83,7 +86,9 @@
  */
 
 struct PARAM_RX_STAT g_HqaRxStat;
+#if (CONFIG_WLAN_SERVICE == 1)
 struct list_mode_event g_HqaListModeStatus;
+#endif
 uint32_t u4RxStatSeqNum;
 u_int8_t g_DBDCEnable = FALSE;
 /* For SA Buffer Mode Temp Solution */

@@ -14,6 +14,8 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/timer.h>
+/* sched_clock() used to come in through <linux/sched.h> */
+#include <linux/sched/clock.h>
 
 /* strlcpy() was removed in 6.8; nothing here uses its return value. */
 #ifndef strlcpy

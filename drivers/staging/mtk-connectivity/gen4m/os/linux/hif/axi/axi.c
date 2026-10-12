@@ -927,7 +927,11 @@ exit:
 	return ret;
 }
 
+#if KERNEL_VERSION(6, 11, 0) <= LINUX_VERSION_CODE
+static void mtk_axi_remove(IN struct platform_device *pdev)
+#else
 static int mtk_axi_remove(IN struct platform_device *pdev)
+#endif
 {
 #if (CFG_SUPPORT_POWER_THROTTLING == 1)
 	conn_pwr_register_event_cb(CONN_PWR_DRV_WIFI, NULL);
@@ -949,7 +953,9 @@ static int mtk_axi_remove(IN struct platform_device *pdev)
 	hifAxiRemove();
 #endif
 	platform_set_drvdata(pdev, NULL);
+#if KERNEL_VERSION(6, 11, 0) > LINUX_VERSION_CODE
 	return 0;
+#endif
 }
 
 static int mtk_axi_suspend(IN struct platform_device *pdev,

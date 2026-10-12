@@ -399,6 +399,7 @@ struct HQA_CMD_TABLE {
 	uint32_t CmdOffset;
 };
 
+#if (CONFIG_WLAN_SERVICE == 1)
 struct PARAM_LIST_MODE_STATUS {
 	uint16_t    u2Status;
 	uint32_t    u4ExtId;
@@ -409,6 +410,7 @@ struct PARAM_LIST_MODE_STATUS {
 };
 
 extern struct list_mode_event g_HqaListModeStatus;
+#endif
 
 /*******************************************************************************
  *                   F U N C T I O N   D E C L A R A T I O N S
