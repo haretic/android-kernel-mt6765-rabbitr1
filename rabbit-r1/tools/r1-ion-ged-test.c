@@ -224,7 +224,8 @@ static void test_ion(int *shared_fd_out)
 	memset(&mm, 0, sizeof(mm));
 	mm.mm_cmd = ION_MM_GET_IOVA;
 	mm.get_phys_param.handle = h;
-	CHECK(ion_custom(ion, ION_CMD_MULTIMEDIA, &mm) < 0, "ION_MM_GET_IOVA fails cleanly (no M4U)");
+	CHECK(ion_custom(ion, ION_CMD_MULTIMEDIA, &mm) < 0,
+	      "ION_MM_GET_IOVA fails cleanly for a port no driver serves");
 
 	/* libion_mtk ion_alloc_camera_pool(ION_MM_QRY_CACHE_POOL) */
 	memset(&mm, 0, sizeof(mm));
