@@ -1,0 +1,2 @@
+# The camera module motor position, /sys/devices/platform/stepper-motor/orientation
+type sysfs_r1_camera_motor, sysfs_type, fs_type;

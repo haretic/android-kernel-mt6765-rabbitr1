@@ -10,3 +10,6 @@
 # libcamera: enumerate the media devices and read their device tree nodes
 # (/sys/bus/media/devices, /sys/dev/char/*, /sys/firmware/devicetree).
 r_dir_file(hal_camera_default, sysfs)
+
+# Turn the camera module to the front or back on open, park it on close.
+allow hal_camera_default sysfs_r1_camera_motor:file rw_file_perms;
