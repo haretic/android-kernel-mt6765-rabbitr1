@@ -1273,6 +1273,8 @@
 				 <&camsys CLK_CAMSV2>;
 			clock-names = "cam", "camtg", "camsv0", "camsv1", "camsv2";
 			mediatek,larb = <&smi_larb3>;
+			/* IMGO writes on larb3 port 12, which runs translated. */
+			iommus = <&iommu M4U_PORT_CAM_SOC0>;
 			power-domains = <&spm MT6765_POWER_DOMAIN_CAM>;
 			status = "disabled";
 

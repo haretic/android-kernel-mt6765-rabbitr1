@@ -307,19 +307,6 @@
 			alignment = <0 0x1000000>;
 			alloc-ranges = <0 0x40000000 0 0x80000000>;
 		};
-
-		/*
-		 * CAMSV writes physical addresses (no IOMMU on the port), so
-		 * capture buffers come from this CMA pool below 4 GiB. Reusable:
-		 * the pages serve movable allocations while the camera is idle.
-		 */
-		r1_camera_cma: camera-cma {
-			compatible = "shared-dma-pool";
-			reusable;
-			size = <0 0x2000000>;
-			alignment = <0 0x400000>;
-			alloc-ranges = <0 0x40000000 0 0xc0000000>;
-		};
 	};
 };
 
@@ -676,7 +663,6 @@
 };
 
 &camsv1 {
-	memory-region = <&r1_camera_cma>;
 	status = "okay";
 };
 
