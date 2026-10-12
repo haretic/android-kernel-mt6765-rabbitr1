@@ -47,6 +47,8 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */ /**************************************************************************/
 
+#include <linux/dma-mapping.h>
+
 #include "interrupt_support.h"
 #include "pvrsrv_device.h"
 #include "syscommon.h"
@@ -233,6 +235,13 @@ PVRSRV_ERROR SysDevInit(void *pvOSDevice, PVRSRV_DEVICE_CONFIG **ppsDevConfig)
 
 #if defined(CONFIG_MACH_MT6761)
 	dma_set_mask(pvOSDevice, DMA_BIT_MASK(32));
+#else
+	/*
+	 * The core has a 36-bit physical bus. With the 32-bit OF default, every
+	 * buffer above 4 GiB bounces through swiotlb, which fills up and fails
+	 * the gralloc imports SurfaceFlinger needs.
+	 */
+	dma_set_mask_and_coherent(pvOSDevice, DMA_BIT_MASK(36));
 #endif
 
 	/* Setup RGX specific data */
