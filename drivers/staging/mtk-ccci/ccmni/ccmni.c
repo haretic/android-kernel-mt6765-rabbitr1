@@ -1356,7 +1356,7 @@ static int ccmni_init(int md_id, struct ccmni_ccci_ops *ccci_info)
 		goto alloc_netdev_fail;
 	}
 	ctlb->ccmni_wakelock = wakeup_source_register(NULL, ctlb->wakelock_name);
-	if (!ctlb->ccmni_wakelock) {
+	if (ccci_ws_register_failed(ctlb->ccmni_wakelock)) {
 		CCMNI_PR_DBG(md_id, "%s %d: init wakeup source fail!",
 			__func__, __LINE__);
 		return -1;
