@@ -669,6 +669,18 @@
 	vmodem-supply = <&mt6357_vmodem_reg>;
 	vcore-supply = <&mt6357_vcore_reg>;
 	status = "okay";
+
+	/* stock gpio_usage_mapping; the modem asks for these by name over RPC */
+	gpio-usage-mapping {
+		GPIO_SIM1_HOT_PLUG = <&pio 47 0>;
+		GPIO_SIM2_HOT_PLUG = <&pio 46 0>;
+		GPIO_SIM1_SIO = <&pio 40 0>;
+		GPIO_SIM1_SRST = <&pio 39 0>;
+		GPIO_SIM1_SCLK = <&pio 38 0>;
+		GPIO_SIM2_SCLK = <&pio 37 0>;
+		GPIO_SIM2_SRST = <&pio 36 0>;
+		GPIO_SIM2_SIO = <&pio 35 0>;
+	};
 };
 
 &usb2 {
