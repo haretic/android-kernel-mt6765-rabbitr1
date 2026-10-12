@@ -536,8 +536,12 @@ static int mtk_camsv_probe(struct platform_device *pdev)
 
 	spin_lock_init(&cam_dev->buf_list_lock);
 
-	ret = devm_request_irq(dev, cam_dev->irq, conf->ops->isr, 0,
-			       dev_name(dev), cam_dev);
+	/*
+	 * The interrupt is only enabled while the CAM power domain is on:
+	 * the status register can't be read with the block powered off.
+	 */
+	ret = devm_request_irq(dev, cam_dev->irq, conf->ops->isr,
+			       IRQF_NO_AUTOEN, dev_name(dev), cam_dev);
 	if (ret)
 		return dev_err_probe(dev, ret, "failed to request irq=%d\n",
 				     cam_dev->irq);
@@ -584,6 +588,7 @@ static int mtk_camsv_runtime_suspend(struct device *dev)
 					    BIT(0));
 	}
 
+	disable_irq(cam_dev->irq);
 	clk_bulk_disable_unprepare(cam_dev->num_clks, cam_dev->clks);
 
 	return 0;
@@ -600,6 +605,8 @@ static int mtk_camsv_runtime_resume(struct device *dev)
 		dev_err(dev, "failed to enable clock:%d\n", ret);
 		return ret;
 	}
+
+	enable_irq(cam_dev->irq);
 
 	if (vb2_is_streaming(vbq)) {
 		cam_dev->conf->ops->resume(cam_dev);
