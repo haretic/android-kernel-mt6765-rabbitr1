@@ -66,6 +66,8 @@
 /* IMGO DMA */
 #define MT6765_CAMSV_DMA_SOFT_RSTSTAT		0x0200
 #define MT6765_CAMSV_IMGO_BASE_ADDR		0x0220
+/* Per-frame header DMA on the IMGO port, enabled out of reset */
+#define MT6765_CAMSV_DMA_FRAME_HEADER_EN	0x0e00
 #define MT6765_CAMSV_IMGO_OFST_ADDR		0x0228
 #define MT6765_CAMSV_IMGO_XSIZE			0x0230
 #define MT6765_CAMSV_IMGO_YSIZE			0x0234
@@ -252,6 +254,8 @@ static void mt6765_camsv_setup(struct mtk_cam_dev *cam_dev,
 	mt6765_camsv_write(cam_dev, MT6765_CAMSV_FBC_IMGO_CTL1,
 			   MT6765_CAMSV_FBC_IMGO_CTL1_FBC_MODE);
 
+	/* No frame headers: their address would be 0. */
+	mt6765_camsv_write(cam_dev, MT6765_CAMSV_DMA_FRAME_HEADER_EN, 0);
 	mt6765_camsv_write(cam_dev, MT6765_CAMSV_IMGO_OFST_ADDR, 0);
 	mt6765_camsv_write(cam_dev, MT6765_CAMSV_IMGO_CROP, 0);
 	mt6765_camsv_write(cam_dev, MT6765_CAMSV_IMGO_XSIZE, bpl - 1U);
