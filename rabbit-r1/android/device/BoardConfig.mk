@@ -14,6 +14,11 @@ TARGET_2ND_ARCH_VARIANT := armv8-a
 TARGET_2ND_CPU_VARIANT := cortex-a53
 TARGET_2ND_CPU_ABI := armeabi-v7a
 TARGET_2ND_CPU_ABI2 := armeabi
+# With a 2nd arch mediaserver and drmserver prefer 32-bit, and there's no
+# 32-bit gralloc mapper to map buffers with. Build both and start the one
+# matching the 64-bit zygote.
+TARGET_DYNAMIC_64_32_MEDIASERVER := true
+TARGET_DYNAMIC_64_32_DRMSERVER := true
 TARGET_BOARD_PLATFORM := mt6765
 TARGET_NO_BOOTLOADER := true
 
