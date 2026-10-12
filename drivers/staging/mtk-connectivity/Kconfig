@@ -1,13 +1,14 @@
 # SPDX-License-Identifier: GPL-2.0
 menuconfig MTK_CONNECTIVITY
-	bool "MediaTek MT6765 CONSYS connectivity (WMT/STP, gen4m, BT)"
+	bool "MediaTek MT6765 CONSYS connectivity (WMT/STP, gen4m, BT, GPS)"
 	depends on ARCH_MEDIATEK && ARM64 && OF
 	help
 	  Port of the MediaTek out-of-tree connectivity stack shipped with
 	  the stock Rabbit R1 (MT6765, CONNAC 1.x "soc1_0" CONSYS): the
 	  BTIF UART-like link, the WMT/STP/PSM core that powers CONSYS and
 	  downloads its ROM patches, the gen4m WLAN driver over the AXI
-	  WFDMA, and a Bluetooth HCI driver on top of the STP BT channel.
+	  WFDMA, a Bluetooth HCI driver on top of the STP BT channel and
+	  the GPS character devices used by the stock mnld.
 
 	  If unsure, say N.
 
@@ -78,5 +79,16 @@ config MTK_CONN_BT
 	  Bluetooth HAL) can drive the controller.
 
 	  The module is called btmtk_wmt.
+
+config MTK_CONN_GPS
+	tristate "MediaTek GPS character devices over the WMT STP GPS channel"
+	depends on MTK_CONN_WMT
+	help
+	  Provides /dev/stpgps, which powers the GPS function of the MT6765
+	  CONSYS through WMT and carries its data over the STP GPS channel,
+	  and /dev/gps_emi. The proprietary mnld daemon of the stock
+	  Android build drives the receiver through them.
+
+	  The module is called gps_drv.
 
 endif

@@ -7,7 +7,6 @@
 /*******************************************************************************
 * Dependency
 *******************************************************************************/
-#ifdef CONFIG_MTK_GPS_EMI
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/init.h>
@@ -44,42 +43,17 @@
 #define IOCTL_MNL_NVRAM_MEM_TO_FILE  3
 #define IOCTL_ADC_CAPTURE_ADDR_GET   4
 
-#if defined(CONFIG_MACH_MT6765) || defined(CONFIG_MACH_MT6761) || defined(CONFIG_MACH_MT6768)\
-|| (defined(CONFIG_MACH_MT6779) && (LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0)))\
-|| defined(CONFIG_MACH_MT6771) || defined(CONFIG_MACH_MT6775) || defined(CONFIG_MACH_MT6758)
+/*
+ * MT6765. Stock set up an EMI MPU region for the GPS part of the CONSYS
+ * carveout in IOCTL_EMI_MEMORY_INIT, but only once gps_lna_drv had marked
+ * the region parameters ready, and the MT6765 module does not include
+ * gps_lna_drv: the ioctl fails there and mnld carries on without it. This
+ * kernel has no EMI MPU API either, so the region is never set up.
+ */
 int gps_emi_mpu_region = -1;
 int gps_emi_base_addr_offset = -1;
 int gps_emi_mpu_size = -1;
-#define EMI_MPU_PROTECTION_IS_READY  1
-#if EMI_MPU_PROTECTION_IS_READY
-#include <mt_emi_api.h>
-#endif
-#endif
-
-#if defined(CONFIG_MACH_MT6873) || defined(CONFIG_MACH_MT6853) || defined(CONFIG_MACH_MT6893)\
-|| defined(CONFIG_MACH_MT6833) || defined(CONFIG_MACH_MT6781)\
-|| (defined(CONFIG_MACH_MT6779) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)))
-#define GPS_EMI_NEW_API
-int gps_emi_mpu_region = -1;
-int gps_emi_base_addr_offset = -1;
-int gps_emi_mpu_size = -1;
-int gps_emi_mpu_domain_ap = -1;
-int gps_emi_mpu_domain_conn = -1;
-#define EMI_MPU_PROTECTION_IS_READY  1
-#if EMI_MPU_PROTECTION_IS_READY
-#include <memory/mediatek/emi.h>
-#endif
-#endif
-
-#ifdef MTK_GENERIC_HAL
-#define GPS_EMI_NEW_API
-int gps_emi_mpu_region = -1;
-int gps_emi_base_addr_offset = -1;
-int gps_emi_mpu_size = -1;
-int gps_emi_mpu_domain_ap = -1;
-int gps_emi_mpu_domain_conn = -1;
 #define EMI_MPU_PROTECTION_IS_READY  0
-#endif
 int gps_emi_mpu_region_param_ready;
 
 #define GPS_ADC_CAPTURE_BUFF_SIZE   0x50000
@@ -485,58 +459,57 @@ static const struct of_device_id apgps_of_ids[] = {
 /*****************************************************************************/
 static int gps_emi_mod_init(void)
 {
-	int ret = 0;
-	int err = 0;
+	int ret;
 
 	GPS_ERR("gps emi mod register begin");
 
 	sema_init(&fw_dl_mtx, 1);
 
 	devobj = kzalloc(sizeof(*devobj), GFP_KERNEL);
-	if (devobj == NULL) {
-		err = -ENOMEM;
-		ret = -ENOMEM;
-		goto err_out;
-	}
+	if (devobj == NULL)
+		return -ENOMEM;
 
 	GPS_ERR("Registering chardev\n");
 	ret = alloc_chrdev_region(&devobj->devno, 0, 1, GPSEMI_DEVNAME);
 	if (ret) {
 		GPS_ERR("alloc_chrdev_region fail: %d\n", ret);
-		err = -ENOMEM;
-		goto err_out;
-	} else {
-		GPS_ERR("major: %d, minor: %d\n", MAJOR(devobj->devno), MINOR(devobj->devno));
+		goto err_free;
 	}
+	GPS_ERR("major: %d, minor: %d\n", MAJOR(devobj->devno), MINOR(devobj->devno));
+
 	cdev_init(&devobj->chdev, &gps_emi_fops);
 	devobj->chdev.owner = THIS_MODULE;
-	err = cdev_add(&devobj->chdev, devobj->devno, 1);
-	if (err) {
-		GPS_ERR("cdev_add fail: %d\n", err);
-		goto err_out;
+	ret = cdev_add(&devobj->chdev, devobj->devno, 1);
+	if (ret) {
+		GPS_ERR("cdev_add fail: %d\n", ret);
+		goto err_region;
 	}
-	devobj->cls = class_create(THIS_MODULE, "gpsemi");
+	devobj->cls = class_create("gpsemi");
 	if (IS_ERR(devobj->cls)) {
-		GPS_ERR("Unable to create class, err = %d\n", (int)PTR_ERR(devobj->cls));
-	goto err_out;
+		ret = PTR_ERR(devobj->cls);
+		GPS_ERR("Unable to create class, err = %d\n", ret);
+		goto err_cdev;
 	}
 	devobj->dev = device_create(devobj->cls, NULL, devobj->devno, devobj, "gps_emi");
-
+	if (IS_ERR(devobj->dev)) {
+		ret = PTR_ERR(devobj->dev);
+		GPS_ERR("Unable to create device, err = %d\n", ret);
+		goto err_class;
+	}
 
 	GPS_ERR("GPS EMI Done\n");
 	return 0;
 
-err_out:
-	if (devobj != NULL) {
-		if (err == 0)
-			cdev_del(&devobj->chdev);
-		if (ret == 0)
-			unregister_chrdev_region(devobj->devno, 1);
-
-		kfree(devobj);
-		devobj = NULL;
-	}
-	return -1;
+err_class:
+	class_destroy(devobj->cls);
+err_cdev:
+	cdev_del(&devobj->chdev);
+err_region:
+	unregister_chrdev_region(devobj->devno, 1);
+err_free:
+	kfree(devobj);
+	devobj = NULL;
+	return ret;
 }
 
 /*****************************************************************************/
@@ -548,11 +521,12 @@ static void gps_emi_mod_exit(void)
 	}
 
 	GPS_ERR("Unregistering chardev\n");
-	cdev_del(&devobj->chdev);
-	unregister_chrdev_region(devobj->devno, 1);
 	device_destroy(devobj->cls, devobj->devno);
 	class_destroy(devobj->cls);
+	cdev_del(&devobj->chdev);
+	unregister_chrdev_region(devobj->devno, 1);
 	kfree(devobj);
+	devobj = NULL;
 	GPS_ERR("Done\n");
 }
 
@@ -575,6 +549,3 @@ module_exit(gps_emi_mod_exit);
 #endif
 /*****************************************************************************/
 MODULE_AUTHOR("Heiping Lei <Heiping.Lei@mediatek.com>");
-MODULE_DESCRIPTION("GPS EMI Driver");
-MODULE_LICENSE("GPL");
-#endif
