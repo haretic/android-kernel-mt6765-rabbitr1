@@ -41,11 +41,6 @@ PRODUCT_COPY_FILES += \
 PRODUCT_COPY_FILES += \
     $(MTK_CONSYS_PATH)/init.mtk-consys.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/init.mtk-consys.rc
 
-# wpa_supplicant overlays: STA on wlan0, P2P on gen4m's p2p0.
-PRODUCT_COPY_FILES += \
-    $(MTK_CONSYS_PATH)/wifi/wpa_supplicant_overlay.conf:$(TARGET_COPY_OUT_VENDOR)/etc/wifi/wpa_supplicant_overlay.conf \
-    $(MTK_CONSYS_PATH)/wifi/p2p_supplicant_overlay.conf:$(TARGET_COPY_OUT_VENDOR)/etc/wifi/p2p_supplicant_overlay.conf
-
 # Wi-Fi HAL: the AIDL service with the gen4m legacy HAL (wifi_hal/), which
 # reports the driver's feature set, channels, country code and link stats.
 PRODUCT_SOONG_NAMESPACES += \
