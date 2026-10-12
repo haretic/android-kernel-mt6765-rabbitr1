@@ -1,0 +1,22 @@
+//
+// SPDX-FileCopyrightText: The LineageOS Project
+// SPDX-License-Identifier: Apache-2.0
+//
+
+// Packed into com.android.hardware.wpa_supplicant.mainline_common, where the
+// APEX supplicant reads them (/apex/com.android.hardware.wpa_supplicant/etc/wifi).
+prebuilt_etc {
+    name: "wpa_supplicant_overlay.conf.r1",
+    src: "wpa_supplicant_overlay.conf",
+    filename: "wpa_supplicant_overlay.conf",
+    relative_install_path: "wifi",
+    installable: false,
+}
+
+prebuilt_etc {
+    name: "p2p_supplicant_overlay.conf.r1",
+    src: "p2p_supplicant_overlay.conf",
+    filename: "p2p_supplicant_overlay.conf",
+    relative_install_path: "wifi",
+    installable: false,
+}

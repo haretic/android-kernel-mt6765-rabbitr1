@@ -6,6 +6,10 @@ TARGET_INITIAL_BRINGUP := true
 TARGET_HAS_BATTERY := true
 # inherit-product defers and sorts children; set the selector before common defaults.
 include device/rabbit/r1/health/product.mk
+# wpa_supplicant APEX with the device overlays (connectivity/wifi).
+TARGET_HOSTAPD_AND_WPA_SUPPLICANT_FORM := apex-mainline_common
+$(call soong_config_set_string_list,mainline_common_apex_wpa_supplicant,include_prebuilts,\
+    wpa_supplicant.conf.prebuilt wpa_supplicant_overlay.conf.r1 p2p_supplicant_overlay.conf.r1)
 # GPU: the stock RabbitOS PowerVR GE8320 userspace on the ported DDK 1.13 pvrsrvkm,
 # or SwiftShader software rendering.
 R1_GPU ?= pvr

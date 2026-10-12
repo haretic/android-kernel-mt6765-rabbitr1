@@ -72,7 +72,7 @@ Both modes run `android.hardware.wifi-service` with the gen4m vendor HAL in
 `wifi_hal/` (`libwifi-hal-r1`, see its README).
 
 wpa_supplicant runs STA only on wlan0 (`wifi/wpa_supplicant_overlay.conf`,
-`p2p_disabled=1`); without it P2P is initialised on wlan0 and the AIDL
+`p2p_disabled=1`, packed into the supplicant APEX by device.mk); without it P2P is initialised on wlan0 and the AIDL
 service registers wlan0 as a P2P interface, so the framework cannot add it
 as STA.
 
