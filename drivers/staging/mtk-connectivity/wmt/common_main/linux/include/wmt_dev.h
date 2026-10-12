@@ -38,6 +38,12 @@ extern LONG wmt_dev_tm_temp_query(VOID);
 
 INT32 mtk_wcn_common_drv_init(VOID);
 VOID mtk_wcn_common_drv_exit(VOID);
+INT32 wmt_dev_set_stp_mode(ULONG arg);
+
+/* wmt_autolaunch.c: in-kernel replacement for wmt_loader/wmt_launcher */
+MTK_WCN_BOOL wmt_klaunch_enabled(VOID);
+INT32 wmt_klaunch_ul_cmd(const PUINT8 pCmdStr);
+INT32 wmt_klaunch_start(VOID);
 
 int mtk_wcn_hif_sdio_drv_init(VOID);
 int mtk_wcn_stp_uart_drv_init(VOID);

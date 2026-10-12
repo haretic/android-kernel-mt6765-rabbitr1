@@ -84,6 +84,7 @@ wmt_drv-y += common_main/linux/stp_dbg_soc.o
 wmt_drv-y += common_main/linux/stp_dbg_combo.o
 wmt_drv-y += common_main/linux/osal.o
 wmt_drv-y += common_main/linux/wmt_dev.o
+wmt_drv-y += common_main/linux/wmt_autolaunch.o
 wmt_drv-y += common_main/linux/stp_sdio.o
 wmt_drv-y += common_main/linux/bgw_desense.o
 wmt_drv-y += common_main/linux/wmt_idc.o

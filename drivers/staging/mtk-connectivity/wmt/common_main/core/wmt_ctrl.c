@@ -451,6 +451,10 @@ INT32 wmt_ctrl_ul_cmd(P_DEV_WMT pWmtDev, const PUINT8 pCmdStr)
 	P_OSAL_SIGNAL pCmdSignal;
 	P_OSAL_EVENT pCmdReq;
 
+	/* no userspace launcher on mainline: answer the command here */
+	if (wmt_klaunch_enabled())
+		return wmt_klaunch_ul_cmd(pCmdStr);
+
 	if (osal_test_and_set_bit(WMT_STAT_CMD, &pWmtDev->state)) {
 		WMT_WARN_FUNC("cmd buf is occupied by (%s)\n", pWmtDev->cCmd);
 		return -1;
