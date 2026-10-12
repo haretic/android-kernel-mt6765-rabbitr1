@@ -26,6 +26,24 @@ static const struct scpsys_domain_data scpsys_domain_data_mt6765[] = {
 		.pwr_sta2nd_offs = MT6765_PWR_STATUS_2ND,
 		.sram_pdn_bits = GENMASK(8, 8),
 		.sram_pdn_ack_bits = 0,
+		/* MD_SRAM_ISO_CON and MD_EXTRA_PWR_CON */
+		.ext_sram_iso_offs = 0x394,
+		.ext_sram_iso_mask = BIT(0),
+		.ext_buck_iso_offs = 0x398,
+		.ext_buck_iso_mask = BIT(0),
+		/*
+		 * Off until the modem driver boots the modem, instead of being
+		 * powered at probe and powered off again as unused.
+		 */
+		.caps = MTK_SCPD_MODEM_LEGACY_PWRSEQ | MTK_SCPD_EXT_SRAM_ISO |
+			MTK_SCPD_KEEP_DEFAULT_OFF,
+		.bp_cfg = {
+			/* PERI2MD, then the MD bus masters and MD2PERI */
+			BUS_PROT_WR_IGN(INFRA, BIT(7), 0x2a0, 0x2a4, 0x228),
+			BUS_PROT_WR_IGN(INFRA, BIT(3) | BIT(4),
+					0x2a0, 0x2a4, 0x228),
+			BUS_PROT_WR_IGN(INFRA, BIT(6), 0x2a8, 0x2ac, 0x258),
+		},
 	},
 	[MT6765_POWER_DOMAIN_CONN] = {
 		.name = "conn",

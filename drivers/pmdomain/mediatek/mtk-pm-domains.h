@@ -17,6 +17,8 @@
 #define MTK_SCPD_MODEM_PWRSEQ		BIT(10)
 #define MTK_SCPD_SKIP_RESET_B		BIT(11)
 #define MTK_SCPD_INFRA_PWR_CTL		BIT(12)
+#define MTK_SCPD_EXT_SRAM_ISO		BIT(13)
+#define MTK_SCPD_MODEM_LEGACY_PWRSEQ	BIT(14)
 #define MTK_SCPD_CAPS(_scpd, _x)	((_scpd)->data ?		\
 					 (_scpd)->data->caps & (_x) :	\
 					 (_scpd)->hwv_data->caps & (_x))
@@ -155,6 +157,11 @@ enum scpsys_mtcmos_type {
  * @sram_pdn_ack_bits: The mask for sram power control acked bits.
  * @ext_buck_iso_offs: The offset for external buck isolation
  * @ext_buck_iso_mask: The mask for external buck isolation
+ * @ext_sram_iso_offs: The offset for an SRAM isolation register outside of
+ *		       the main power control register
+ * @ext_sram_iso_mask: The mask for that SRAM isolation; the bits are set
+ *		       while the SRAM is powered and cleared before it is
+ *		       powered down
  * @caps: The flag for active wake-up action.
  * @rtff_type: The power domain RTFF HW type
  * @bp_cfg: bus protection configuration for any subsystem
@@ -168,6 +175,8 @@ struct scpsys_domain_data {
 	u32 sram_pdn_ack_bits;
 	int ext_buck_iso_offs;
 	u32 ext_buck_iso_mask;
+	int ext_sram_iso_offs;
+	u32 ext_sram_iso_mask;
 	u16 caps;
 	enum scpsys_rtff_type rtff_type;
 	const struct scpsys_bus_prot_data bp_cfg[SPM_MAX_BUS_PROT_DATA];
