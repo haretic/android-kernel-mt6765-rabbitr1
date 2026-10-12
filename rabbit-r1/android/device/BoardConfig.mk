@@ -56,6 +56,9 @@ BOARD_KERNEL_CMDLINE += $(MAINLINE_COMMON_ANDROIDBOOT_PARAMS)
 BOARD_KERNEL_CMDLINE += bootopt=64S3,32N2,64N2 androidboot.fstab_suffix=r1
 BOARD_KERNEL_CMDLINE += earlycon=uart8250,mmio32,0x11002000 console=ttyS0,921600n8
 BOARD_KERNEL_CMDLINE += maxcpus=1 clk_ignore_unused regulator_ignore_unused
+# The stock ATF offers PSCI SYSTEM_SUSPEND, but it runs SPM firmware that only
+# the stock kernel hands over. "mem" must mean suspend-to-idle.
+BOARD_KERNEL_CMDLINE += mem_sleep_default=s2idle
 
 BOARD_USES_RECOVERY_AS_BOOT := true
 TARGET_NO_RECOVERY := false

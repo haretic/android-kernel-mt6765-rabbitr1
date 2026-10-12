@@ -88,4 +88,4 @@ Plan and background: `docs/research/r1-modem-ril-feasibility.md`.
   - `gsm0710muxd` and `muxreport`: disabled on stock as well.
   - `ccci3_mdinit`: there is no MD3.
   - `volte_*`, `atcid` and `md_apps`.
-- **Flight mode and power.** `clk_buf` flight mode, PBM and the VCORE hold are no-ops in the kernel port. `TARGET_SUPPORTS_SUSPEND` is false, so suspend interplay is untested.
+- **Flight mode and power.** `clk_buf` flight mode, PBM and the VCORE hold are no-ops in the kernel port. Android now autosuspends (suspend-to-idle). The CCIF and MD WDT interrupts wake the AP and the MD1 domain stays on while the AP sleeps, but suspend interplay with the modem is untested.
