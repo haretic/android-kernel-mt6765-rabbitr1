@@ -60,15 +60,18 @@ function on, and gen4m probes and registers `wlan0` before the write returns.
 
 `MTK_CONSYS_WIFI_POWER` selects who writes it:
 
-* `boot`: the `vendor.mtk-consys-wifi-on` service writes `1` once
-  at boot. wlan0 stays up, and the framework runs without a Wi-Fi HAL
+* `boot` (default): the `vendor.mtk-consys-wifi-on` service writes `1` once
+  at post-fs-data, so wlan0 exists before the framework first enables Wi-Fi. wlan0 stays up, and the framework runs without a Wi-Fi HAL
   (STA through wificond and wpa_supplicant). This is the simplest path for
   bring-up.
-* `hal` (default): `android.hardware.wifi-service` with the legacy-HAL fallback.
+* `hal`: `android.hardware.wifi-service` with the legacy-HAL fallback.
   libwifi_hal writes `WIFI_DRIVER_STATE_ON/OFF` (1/0) to
   `WIFI_DRIVER_STATE_CTRL_PARAM` (/dev/wmtWifi) when Wi-Fi is toggled, so
   CONSYS Wi-Fi is really off when disabled. Soft AP is not wired: it would
-  need the `A` write.
+  need the `A` write. Not usable yet: the AIDL service also needs a vendor
+  legacy HAL (`BOARD_WLAN_DEVICE`, e.g. MediaTek's `libwifi-hal-mediatek`),
+  and the fallback fails `IWifi.start()` ("Can not initialize the vendor
+  function pointer table").
 
 wpa_supplicant comes from `optional/wpa_supplicant_8` (APEX, nl80211). There
 is no `BOARD_WPA_SUPPLICANT_PRIVATE_LIB`, so MediaTek `DRIVER` private

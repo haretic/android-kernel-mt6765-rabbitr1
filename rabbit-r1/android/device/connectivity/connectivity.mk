@@ -45,7 +45,7 @@ PRODUCT_COPY_FILES += \
 # up and the framework runs without a Wi-Fi HAL (STA through wpa_supplicant).
 # "hal": the AOSP Wi-Fi HAL writes 1/0 to /dev/wmtWifi when Wi-Fi is
 # toggled; set the same value in BoardConfig (see BoardConfigConnectivity.mk).
-MTK_CONSYS_WIFI_POWER ?= hal
+MTK_CONSYS_WIFI_POWER ?= boot
 
 ifeq ($(MTK_CONSYS_WIFI_POWER),boot)
 PRODUCT_COPY_FILES += \
