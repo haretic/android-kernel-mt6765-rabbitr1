@@ -51,6 +51,11 @@
 
 #define SENINF_INSTANCE_SIZE		0x1000
 
+static bool cam_mux_broadcast;
+module_param(cam_mux_broadcast, bool, 0644);
+MODULE_PARM_DESC(cam_mux_broadcast,
+		 "Route the active MUX to all CAM MUX outputs (bring-up aid)");
+
 #define MTK_CSI_MAX_LANES 4
 
 /* Port number in the device tree. */
@@ -721,6 +726,13 @@ static void mtk_seninf_top_mux_setup(struct mtk_seninf *priv,
 		    & ~(0xf << (mux->mux_id * 4));
 	val |= (seninf_id & 0xf) << (mux->mux_id * 4);
 	mtk_seninf_write(priv, SENINF_TOP_MUX_CTRL, val);
+
+	if (priv->conf->camsv_cam_mux && cam_mux_broadcast) {
+		/* Bring-up aid: feed this MUX to every CAM MUX output. */
+		mtk_seninf_write(priv, SENINF_TOP_CAM_MUX_CTRL,
+				 (mux->mux_id & 0xf) * 0x11111111);
+		return;
+	}
 
 	if (priv->conf->camsv_cam_mux) {
 		/* Route MUX N to the CAM MUX of the CAMSV on output N. */
