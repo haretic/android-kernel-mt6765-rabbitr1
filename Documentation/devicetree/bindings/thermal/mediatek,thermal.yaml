@@ -24,6 +24,7 @@ properties:
       - enum:
           - mediatek,mt2701-thermal
           - mediatek,mt2712-thermal
+          - mediatek,mt6765-thermal
           - mediatek,mt7622-thermal
           - mediatek,mt7986-thermal
           - mediatek,mt8173-thermal
@@ -74,6 +75,12 @@ properties:
   nvmem-cell-names:
     items:
       - const: calibration-data
+
+  "#thermal-sensor-cells":
+    description:
+      Sensor ID 0 is the hottest of all sensors, sensor ID n (n > 0) is the
+      n-th temperature sensor of the SoC on its own.
+    enum: [0, 1]
 
 required:
   - reg
