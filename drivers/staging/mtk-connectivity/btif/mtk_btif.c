@@ -38,7 +38,7 @@
 
 /*-----------static function declearation----------------*/
 static int mtk_btif_probe(struct platform_device *pdev);
-static int mtk_btif_remove(struct platform_device *pdev);
+static void mtk_btif_remove(struct platform_device *pdev);
 static int mtk_btif_suspend(struct platform_device *pdev, pm_message_t state);
 static int mtk_btif_resume(struct platform_device *pdev);
 static int mtk_btif_drv_resume(struct device *dev);
@@ -256,26 +256,39 @@ static int mtk_btif_probe(struct platform_device *pdev)
 {
 /*Chaozhong: ToDo: to be implement*/
 /*register IRQ for BTIF and Tx Rx DMA and disable them by default*/
+	int ret;
+
 	BTIF_INFO_FUNC("DO BTIF PROBE\n");
-	platform_set_drvdata(pdev, &g_btif[0]);
-	g_btif[0].private_data = (struct device *)&pdev->dev;
+
+	/* The vFIFOs are handed to AP_DMA as 32-bit addresses. */
+	ret = dma_coerce_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32));
+	if (ret) {
+		dev_err(&pdev->dev, "no usable 32-bit DMA mask: %d\n", ret);
+		return ret;
+	}
 
 #if !defined(CONFIG_MTK_CLKMGR)
-	hal_btif_clk_get_and_prepare(pdev);
+	ret = hal_btif_clk_get_and_prepare(pdev);
+	if (ret) {
+		dev_err(&pdev->dev, "failed to get BTIF/AP_DMA clocks: %d\n",
+			ret);
+		return ret;
+	}
 #endif
 
+	platform_set_drvdata(pdev, &g_btif[0]);
+	g_btif[0].private_data = (struct device *)&pdev->dev;
 	btif_probed = 1;
 
 	return 0;
 }
 
-static int mtk_btif_remove(struct platform_device *pdev)
+static void mtk_btif_remove(struct platform_device *pdev)
 {
 /*Chaozhong: ToDo: to be implement*/
 	BTIF_INFO_FUNC("DO BTIF REMOVE\n");
 	platform_set_drvdata(pdev, NULL);
 	g_btif[0].private_data = NULL;
-	return 0;
 }
 
 int _btif_suspend(struct _mtk_btif_ *p_btif)
@@ -1098,9 +1111,11 @@ unsigned int btif_dma_rx_data_receiver(struct _MTK_DMA_INFO_STR_ *p_dma_info,
 	unsigned int index = 0;
 	struct _mtk_btif_ *p_btif = &(g_btif[index]);
 
-	/* Although we use coherent DMA, we still need to flush cache. */
-	/* Or some data might be inconsistent. */
-	__flush_dcache_area(p_buf, buf_len);
+	/*
+	 * The vFIFO comes from dma_alloc_coherent(), which on this
+	 * non-coherent SoC is an uncached mapping, so there is nothing to
+	 * flush (the stock kernel called the private __flush_dcache_area).
+	 */
 
 	btif_bbs_write(&(p_btif->btif_buf), p_buf, buf_len);
 /*save DMA Rx packet here*/
@@ -1897,8 +1912,8 @@ static int _btif_vfifo_init(struct _mtk_btif_dma_ *p_dma)
 	}
 
 /*vFIFO memory allocation*/
-	p_vfifo->p_vir_addr = dma_zalloc_coherent(dev, p_vfifo->vfifo_size,
-			&p_vfifo->phy_addr, GFP_DMA | GFP_DMA32);
+	p_vfifo->p_vir_addr = dma_alloc_coherent(dev, p_vfifo->vfifo_size,
+			&p_vfifo->phy_addr, GFP_KERNEL);
 	if (p_vfifo->p_vir_addr == NULL) {
 		BTIF_ERR_FUNC("alloc vFIFO memory for BTIF failed\n");
 		return E_BTIF_FAIL;
@@ -1936,6 +1951,8 @@ static int _btif_vfifo_deinit(struct _mtk_btif_dma_ *p_dma)
 	if (dev == NULL)
 		BTIF_WARN_FUNC("Null dev pointer!!!!\n");
 
+	if (!p_dma->p_dma_info)
+		return 0;
 	p_vfifo = p_dma->p_dma_info->p_vfifo;
 
 /*free DMA memory if allocated successfully before*/
@@ -2505,26 +2522,17 @@ static int _btif_rx_btm_init(struct _mtk_btif_ *p_btif)
 		/*create kernel thread for later rx data handle*/
 		p_btif->p_task = kthread_create(btif_rx_thread, p_btif,
 				"btif_rxd");
-		if (p_btif->p_task == NULL) {
+		if (IS_ERR(p_btif->p_task)) {
 			BTIF_ERR_FUNC("kthread_create fail\n");
+			p_btif->p_task = NULL;
 			i_ret = -ENOMEM;
 			goto btm_init_err;
 		}
 
 #if ENABLE_BTIF_RX_THREAD_RT_SCHED
-		{
-			int i_ret = -1;
-			int policy = SCHED_FIFO;
-			struct sched_param param;
-
-			param.sched_priority = MAX_RT_PRIO - 20;
-			i_ret = sched_setscheduler(p_btif->p_task, policy,
-					&param);
-			if (i_ret != 0)
-				BTIF_WARN_FUNC("set RT to workqueue failed\n");
-			else
-				BTIF_INFO_FUNC("set RT to workqueue succeed\n");
-		}
+		/* sched_setscheduler() is no longer exported to modules */
+		sched_set_fifo(p_btif->p_task);
+		BTIF_INFO_FUNC("set RT to btif_rxd\n");
 #endif
 
 		wake_up_process(p_btif->p_task);
@@ -3275,9 +3283,16 @@ static int BTIF_init(void)
 		BTIF_ERR_FUNC("BTIF pdriver_create_file failed, ret(%d)\n",
 				i_ret);
 
-	/* we keep waiting because KE happens if probe function is not called. */
-	while (btif_probed == 0)
-		msleep(500);
+	/*
+	 * The stock driver slept here until probe ran, which hangs module
+	 * load forever when the DT node is missing or a clock is not
+	 * there. Bail out instead.
+	 */
+	if (!btif_probed) {
+		pr_err("MTK-BTIF: no usable mediatek,btif device, giving up\n");
+		i_ret = -ENODEV;
+		goto err_exit_unreg;
+	}
 
 /*SW init*/
 	for (index = 0; index < BTIF_PORT_NR; index++) {
@@ -3314,6 +3329,15 @@ static int BTIF_init(void)
 		g_btif[index].open_counter = 0;
 		g_btif[index].setting = &g_btif_setting[index];
 		g_btif[index].p_btif_info = hal_btif_info_get();
+		if (!g_btif[index].p_btif_info->base ||
+		    !g_btif[index].p_btif_info->p_irq->irq_id) {
+			pr_err("MTK-BTIF: BTIF registers or IRQ not mapped, giving up\n");
+			kfree(p_btif_buffer);
+			kfree(p_tx_queue);
+			kfree(p_rx_queue);
+			i_ret = -ENODEV;
+			goto err_exit_unreg;
+		}
 		g_btif[index].tx_mode = g_btif_setting[index].tx_mode;
 		g_btif[index].rx_mode = g_btif_setting[index].rx_mode;
 		g_btif[index].btm_type = g_btif_setting[index].rx_type;
@@ -3350,6 +3374,12 @@ static int BTIF_init(void)
 
 /*DMA Tx vFIFO initialization*/
 		p_tx_dma->p_dma_info = hal_btif_dma_info_get(DMA_DIR_TX);
+		if (!p_tx_dma->p_dma_info->base ||
+		    !p_tx_dma->p_dma_info->p_irq->irq_id) {
+			pr_err("MTK-BTIF: TX DMA registers or IRQ not mapped, giving up\n");
+			i_ret = -ENODEV;
+			goto err_exit2;
+		}
 /*spinlock init*/
 		spin_lock_init(&(p_tx_dma->iolock));
 /*entry setup*/
@@ -3385,6 +3415,12 @@ static int BTIF_init(void)
 
 /*DMA Tx vFIFO initialization*/
 		p_rx_dma->p_dma_info = hal_btif_dma_info_get(DMA_DIR_RX);
+		if (!p_rx_dma->p_dma_info->base ||
+		    !p_rx_dma->p_dma_info->p_irq->irq_id) {
+			pr_err("MTK-BTIF: RX DMA registers or IRQ not mapped, giving up\n");
+			i_ret = -ENODEV;
+			goto err_exit2;
+		}
 /*spinlock init*/
 		spin_lock_init(&(p_rx_dma->iolock));
 /*entry setup*/
@@ -3469,13 +3505,13 @@ err_exit2:
 		g_btif[index].open_counter = 0;
 		g_btif[index].enable = false;
 	}
+err_exit_unreg:
 	driver_remove_file(&mtk_btif_dev_drv.driver, &driver_attr_flag);
 	platform_driver_unregister(&mtk_btif_dev_drv);
 
 err_exit1:
-	i_ret = -1;
 	BTIF_DBG_FUNC("--\n");
-	return i_ret;
+	return i_ret < 0 ? i_ret : -1;
 }
 
 static void BTIF_exit(void)
