@@ -1,0 +1,208 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# gen4m for the MT6765 CONSYS Wi-Fi: CONNAC 1 ("soc1_0"), AXI WFDMA HIF,
+# powered through WMT. This is the stock Makefile reduced to the one
+# configuration the stock Rabbit R1 vendor build used:
+#   MTK_COMBO_CHIP=CONNAC WLAN_CHIP_ID=6765 CONFIG_MTK_COMBO_WIFI_HIF=axi
+#   MTK_ANDROID_WMT=y MTK_ANDROID_EMI=y (user build)
+# with the vendor-kernel-only features (EMI MPU API, MDDP, AEE, MET,
+# wlan_service test engine, connfem) switched off.
+
+CONN_DIR := $(src)/..
+WMT_DIR := $(CONN_DIR)/wmt
+
+ccflags-y += -include $(CONN_DIR)/adapter/mtk_conn_compat.h
+ccflags-y += -I$(CONN_DIR)/adapter
+
+# --- chip / HIF selection -------------------------------------------------
+ccflags-y += -UMT6620 -UMT6628 -UMT5931 -UMT6630 -UMT6632 -UMT7663
+ccflags-y += -USOC2_1X1 -USOC2_2X2 -UUT_TEST_MODE -UMT7915 -USOC3_0
+ccflags-y += -UMT7961 -USOC5_0 -USOC7_0
+ccflags-y += -DCONNAC
+ccflags-y += -D_HIF_AXI=1
+ccflags-y += -DLINUX
+
+# --- feature switches, as the stock Makefile sets them for CONNAC/6765 -----
+ccflags-y += -DCFG_SUPPORT_DEBUG_FS=0
+ccflags-y += -DWLAN_INCLUDE_PROC
+ccflags-y += -DCFG_SUPPORT_AGPS_ASSIST=0
+ccflags-y += -DCFG_SUPPORT_TSF_USING_BOOTTIME=1
+ccflags-y += -DARP_MONITER_ENABLE=1
+ccflags-y += -DCFG_ENABLE_HOST_BUS_TIMEOUT=0
+ccflags-y += -DCFG_SUPPORT_SET_IPV6_NETWORK=0
+ccflags-y += -DCFG_SUPPORT_MDDP_AOR=0
+ccflags-y += -DCFG_TRI_TX_RING=0
+ccflags-y += -DCFG_ANDORID_CONNINFRA_SUPPORT=0
+ccflags-y += -DCFG_SUPPORT_CONNAC2X=0
+ccflags-y += -DCFG_SUPPORT_CONNAC2X_2x2=0
+ccflags-y += -DCFG_SUPPORT_802_11AX=0
+ccflags-y += -DCFG_SUPPORT_802_11BE=0
+ccflags-y += -DCFG_SUPPORT_WIFI_6G=0
+ccflags-y += -DCFG_SUPPORT_TWT=0
+ccflags-y += -DCFG_TWT_SMART_STA=0
+ccflags-y += -DCFG_DRIVER_INITIAL_RUNNING_MODE=3
+ccflags-y += -DCFG_SUPPORT_DUAL_STA=0
+ccflags-y += -DCFG_MTK_ANDROID_WMT=1
+ccflags-y += -DCFG_SUPPORT_CONNINFRA=0
+ccflags-y += -DCFG_ANDORID_CONNINFRA_COREDUMP_SUPPORT=0
+ccflags-y += -DCFG_SUPPORT_PRE_ON_PHY_ACTION=0
+ccflags-y += -DWMT_IDC_SUPPORT=0
+ccflags-y += -DMTK_WCN_WMT_STP_EXP_SYMBOL_ABSTRACT
+ccflags-y += -DCFG_SUPPORT_POWER_THROTTLING=0
+ccflags-y += -DCFG_TMAC_POWER_LEGACY=1
+ccflags-y += -DCFG_TXPOWR_SUPPORT_DBDC=0
+ccflags-y += -DCFG_MTK_ANDROID_EMI=1
+ccflags-y += -DCFG_WIFI_IP_SET=1
+ccflags-y += -DCFG_BUILT_IN_DRIVER=0
+ccflags-y += -DCFG_SUPPORT_CHNL_CONFLICT_REVISE=0
+ccflags-y += -DCFG_SUPPORT_AEE=0
+ccflags-y += -DBUILD_QA_DBG=0
+ccflags-y += -DCFG_WPS_DISCONNECT=1
+ccflags-y += -DCFG_DOWNLOAD_DYN_MEMORY_MAP=0
+ccflags-y += -DCFG_SUPPORT_PASSPOINT=1
+ccflags-y += -DCFG_HS20_DEBUG=1
+ccflags-y += -DCFG_MET_PACKET_TRACE_SUPPORT=0
+ccflags-y += -DCFG_MET_TAG_SUPPORT=0
+ccflags-y += -DCFG_TC3_FEATURE=0
+ccflags-y += -DCFG_TC10_FEATURE=0
+ccflags-y += -DCONFIG_MTK_MD_SUPPORT=0
+ccflags-y += -DCFG_TC1_FEATURE=0
+ccflags-y += -DCFG_SUPPORT_NAN=0
+ccflags-y += -DCFG_MTK_MDDP_SUPPORT=0
+ccflags-y += -DCONFIG_WLAN_DRV_BUILD_IN=0
+ccflags-y += -DCFG_SUPPORT_PKT_OFLD=0
+ccflags-y += -DCONFIG_WLAN_SERVICE=0
+ccflags-y += -DCONFIG_TEST_ENGINE_OFFLOAD=0
+ccflags-y += -DDBG=0
+# needs the vendor PMIC low-battery service (pmic_lbat_service.h)
+ccflags-y += -DCFG_MODIFY_TX_POWER_BY_BAT_VOLT=0
+
+# --- include paths ----------------------------------------------------------
+ccflags-y += -I$(src)/os -I$(src)/os/linux/include
+ccflags-y += -I$(src)/include -I$(src)/include/nic -I$(src)/include/mgmt
+ccflags-y += -I$(src)/include/chips
+ccflags-y += -I$(src)/os/linux/hif/common/include
+ccflags-y += -I$(src)/os/linux/hif/axi/include
+ccflags-y += -I$(WMT_DIR)/common_main/include
+ccflags-y += -I$(WMT_DIR)/common_main/linux/include
+ccflags-y += -I$(srctree)/net
+
+# stock: -Wno-unused-value -Wno-unused-result -Wno-format -Wno-parentheses
+ccflags-y += -Wno-unused-value -Wno-unused-result -Wno-format -Wno-parentheses
+ccflags-y += -Wno-missing-prototypes -Wno-missing-declarations
+ccflags-y += -Wno-unused-but-set-variable -Wno-unused-variable
+ccflags-y += -Wno-unused-function -Wno-implicit-fallthrough
+ccflags-y += -Wno-enum-conversion
+
+obj-$(CONFIG_MTK_CONN_WLAN_GEN4M) += wlan_drv_gen4m.o
+
+wlan_drv_gen4m-y := \
+	common/dump.o \
+	common/wlan_lib.o \
+	common/wlan_oid.o \
+	common/wlan_bow.o \
+	common/debug.o \
+	common/wlan_p2p.o \
+	common/wlan_he.o
+
+wlan_drv_gen4m-y += \
+	nic/nic.o \
+	nic/nic_tx.o \
+	nic/nic_txd_v1.o \
+	nic/nic_rxd_v1.o \
+	nic/nic_rx.o \
+	nic/nic_pwr_mgt.o \
+	nic/nic_rate.o \
+	nic/cmd_buf.o \
+	nic/que_mgt.o \
+	nic/nic_cmd_event.o \
+	nic/nic_umac.o \
+	nic/radiotap.o \
+	nic/p2p_nic.o
+
+wlan_drv_gen4m-y += \
+	os/linux/gl_init.o \
+	os/linux/gl_kal.o \
+	os/linux/gl_bow.o \
+	os/linux/gl_wext.o \
+	os/linux/gl_wext_priv.o \
+	os/linux/gl_ate_agent.o \
+	os/linux/gl_qa_agent.o \
+	os/linux/gl_hook_api.o \
+	os/linux/gl_rst.o \
+	os/linux/gl_cfg80211.o \
+	os/linux/gl_cfg80211_compat.o \
+	os/linux/gl_proc.o \
+	os/linux/gl_sys.o \
+	os/linux/gl_vendor.o \
+	os/linux/platform.o \
+	os/linux/gl_p2p.o \
+	os/linux/gl_p2p_cfg80211.o \
+	os/linux/gl_p2p_init.o \
+	os/linux/gl_p2p_kal.o \
+	os/linux/plat/mt6765/plat_priv.o
+
+wlan_drv_gen4m-y += \
+	os/linux/hif/common/hal_pdma.o \
+	os/linux/hif/common/kal_pdma.o \
+	os/linux/hif/common/dbg_pdma.o \
+	os/linux/hif/common/sw_wfdma.o \
+	os/linux/hif/axi/axi.o
+
+wlan_drv_gen4m-y += \
+	mgmt/ais_fsm.o \
+	mgmt/aaa_fsm.o \
+	mgmt/assoc.o \
+	mgmt/auth.o \
+	mgmt/bss.o \
+	mgmt/cnm.o \
+	mgmt/cnm_timer.o \
+	mgmt/cnm_mem.o \
+	mgmt/hem_mbox.o \
+	mgmt/mib.o \
+	mgmt/privacy.o \
+	mgmt/rate.o \
+	mgmt/rlm.o \
+	mgmt/rlm_domain.o \
+	mgmt/reg_rule.o \
+	mgmt/rlm_obss.o \
+	mgmt/rlm_protection.o \
+	mgmt/rrm.o \
+	mgmt/rsn.o \
+	mgmt/saa_fsm.o \
+	mgmt/scan.o \
+	mgmt/scan_fsm.o \
+	mgmt/scan_cache.o \
+	mgmt/swcr.o \
+	mgmt/roaming_fsm.o \
+	mgmt/tkip_mic.o \
+	mgmt/hs20.o \
+	mgmt/tdls.o \
+	mgmt/wnm.o \
+	mgmt/qosmap.o \
+	mgmt/ap_selection.o \
+	mgmt/wmm.o \
+	mgmt/mddp.o \
+	mgmt/thrm.o \
+	mgmt/mscs.o \
+	mgmt/ie_sort.o \
+	mgmt/stats.o \
+	mgmt/p2p_dev_fsm.o \
+	mgmt/p2p_dev_state.o \
+	mgmt/p2p_role_fsm.o \
+	mgmt/p2p_role_state.o \
+	mgmt/p2p_func.o \
+	mgmt/p2p_scan.o \
+	mgmt/p2p_ie.o \
+	mgmt/p2p_rlm.o \
+	mgmt/p2p_assoc.o \
+	mgmt/p2p_bss.o \
+	mgmt/p2p_rlm_obss.o \
+	mgmt/p2p_fsm.o \
+	mgmt/wapi.o
+
+wlan_drv_gen4m-y += \
+	chips/common/cmm_asic_connac.o \
+	chips/common/dbg_connac.o \
+	chips/common/fw_dl.o \
+	chips/connac/connac.o

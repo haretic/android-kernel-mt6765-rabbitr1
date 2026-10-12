@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: GPL-2.0
+menuconfig MTK_CONNECTIVITY
+	bool "MediaTek MT6765 CONSYS connectivity (WMT/STP, gen4m, BT)"
+	depends on ARCH_MEDIATEK && ARM64 && OF
+	help
+	  Port of the MediaTek out-of-tree connectivity stack shipped with
+	  the stock Rabbit R1 (MT6765, CONNAC 1.x "soc1_0" CONSYS): the
+	  BTIF UART-like link, the WMT/STP/PSM core that powers CONSYS and
+	  downloads its ROM patches, the gen4m WLAN driver over the AXI
+	  WFDMA, and a Bluetooth HCI driver on top of the STP BT channel.
+
+	  If unsure, say N.
+
+if MTK_CONNECTIVITY
+
+config MTK_CONN_BTIF
+	tristate "MediaTek BTIF (Bluetooth interface) driver"
+	depends on COMMON_CLK && HAS_DMA
+	help
+	  The BTIF block carries MediaTek STP between the AP and the CONSYS
+	  MCU, using two AP_DMA channels. Required by the WMT core.
+
+	  The module is called mtk_btif_drv.
+
+config MTK_CONN_WMT
+	tristate "MediaTek WMT/STP CONSYS core"
+	depends on MTK_CONN_BTIF
+	depends on MFD_MT6397 && REGULATOR && PM
+	depends on THERMAL_OF || !THERMAL_OF
+	select FW_LOADER
+	help
+	  Powers the MT6765 CONSYS on through the CONN power domain and the
+	  MT6357 VCN18/VCN28/VCN33 regulators, loads the soc1_0 ROM patches
+	  into the consys-reserve-memory carveout and runs the WMT handshake
+	  over BTIF/STP. Firmware (soc1_0_*.bin, WMT_SOC.cfg) is requested
+	  at runtime, so build this as a module and load it after /vendor
+	  is mounted.
+
+	  The module is called wmt_drv.
+
+config MTK_CONN_WMT_AUTOLAUNCH
+	bool "Do the wmt_launcher patch lookup in the kernel"
+	depends on MTK_CONN_WMT
+	default y
+	help
+	  The stock Android build runs the proprietary wmt_loader and
+	  wmt_launcher daemons, which select the BTIF STP mode and answer
+	  the kernel's "srh_patch"/"srh_rom_patch" requests. With this
+	  option the WMT core does both itself from the firmware headers,
+	  so no MediaTek userspace is needed. The daemons' ioctls still
+	  work.
+
+config MTK_CONN_WLAN_CHRDEV
+	tristate "MediaTek WMT Wi-Fi power control character device"
+	depends on MTK_CONN_WMT
+	help
+	  Provides /dev/wmtWifi, which turns the CONSYS Wi-Fi function on
+	  and off. Required by the gen4m driver.
+
+	  The module is called wmt_chrdev_wifi.
+
+config MTK_CONN_WLAN_GEN4M
+	tristate "MediaTek gen4m Wi-Fi driver (CONNAC soc1_0, AXI)"
+	depends on MTK_CONN_WLAN_CHRDEV && CFG80211
+	help
+	  The MediaTek gen4m cfg80211 driver for the MT6765 CONSYS Wi-Fi
+	  (WIFI_RAM_CODE_soc1_0_1_1.bin).
+
+	  The module is called wlan_drv_gen4m.
+
+config MTK_CONN_BT
+	tristate "Bluetooth HCI driver over the WMT STP BT channel"
+	depends on MTK_CONN_WMT && BT
+	help
+	  Registers an HCI device that carries H:4 packets over the STP
+	  Bluetooth channel of the MT6765 CONSYS, so that the kernel
+	  Bluetooth stack (and the HCI user channel used by the AOSP
+	  Bluetooth HAL) can drive the controller.
+
+	  The module is called btmtk_wmt.
+
+endif

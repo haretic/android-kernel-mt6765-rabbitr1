@@ -292,7 +292,7 @@
 			alloc-ranges = <0 0x40000000 0 0x50000000>;
 		};
 
-		consys-reserve-memory {
+		consys_mem: consys-reserve-memory {
 			compatible = "mediatek,consys-reserve-memory";
 			no-map;
 			size = <0 0x400000>;
@@ -300,7 +300,7 @@
 			alloc-ranges = <0 0x40000000 0 0x80000000>;
 		};
 
-		wifi-reserve-memory {
+		wifi_mem: wifi-reserve-memory {
 			compatible = "shared-dma-pool";
 			no-map;
 			size = <0 0x300000>;
@@ -320,6 +320,69 @@
 			alignment = <0 0x400000>;
 			alloc-ranges = <0 0x40000000 0 0xc0000000>;
 		};
+	};
+};
+
+/*
+ * Connectivity (WiFi/BT/GPS CONSYS, CONNAC1 "soc1_0") for the vendor
+ * WMT/BTIF/gen4m drivers in drivers/staging/mtk-connectivity. Addresses,
+ * interrupts and register order follow the stock DT; the "conn" scpsys
+ * clock of the vendor kernel is the CONN power domain here.
+ */
+&{/soc} {
+	btif: serial@1100c000 {
+		compatible = "mediatek,btif";
+		/* BTIF, then the AP DMA Tx and Rx channels it owns */
+		reg = <0 0x1100c000 0 0x1000>,
+		      <0 0x11000880 0 0x80>,
+		      <0 0x11000900 0 0x80>;
+		interrupts = <GIC_SPI 112 IRQ_TYPE_LEVEL_LOW>,
+			     <GIC_SPI 132 IRQ_TYPE_LEVEL_LOW>,
+			     <GIC_SPI 133 IRQ_TYPE_LEVEL_LOW>;
+		clocks = <&infracfg CLK_IFR_BTIF>,
+			 <&infracfg CLK_IFR_AP_DMA>;
+		clock-names = "btifc", "apdmac";
+	};
+
+	consys: consys@18002000 {
+		compatible = "mediatek,mt6765-consys";
+		/*
+		 * The driver maps these by index: CONN MCU, TOPRGU, INFRACFG_AO,
+		 * SPM, CONN_HIF_ON, TOP_MISC_OFF, CFG_ON, CIRQ, TOP_MISC_ON,
+		 * HIF_PDMA, AP_PCCIF4 (unused, empty), INFRA_AO_PERICFG (unused)
+		 * and INFRACFG for the bus debug dump. The stock DT stopped one
+		 * entry short, which left the debug dump with a NULL base.
+		 */
+		reg = <0 0x18002000 0 0x1000>,
+		      <0 0x10007000 0 0x100>,
+		      <0 0x10001000 0 0x1000>,
+		      <0 0x10006000 0 0x1000>,
+		      <0 0x18007000 0 0x1000>,
+		      <0 0x180b1000 0 0x1000>,
+		      <0 0x180a3000 0 0x1000>,
+		      <0 0x180a5000 0 0x800>,
+		      <0 0x180c1000 0 0x1000>,
+		      <0 0x18004000 0 0x1000>,
+		      <0 0 0 0>,
+		      <0 0x1020e000 0 0x1000>,
+		      <0 0x1020e000 0 0x1000>;
+		interrupts = <GIC_SPI 267 IRQ_TYPE_LEVEL_LOW>,
+			     <GIC_SPI 269 IRQ_TYPE_LEVEL_LOW>,
+			     <GIC_SPI 270 IRQ_TYPE_EDGE_RISING>;
+		power-domains = <&spm MT6765_POWER_DOMAIN_CONN>;
+		memory-region = <&consys_mem>;
+		pmic = <&mt6357_pmic>;
+		vcn18-supply = <&mt6357_vcn18_reg>;
+		vcn28-supply = <&mt6357_vcn28_reg>;
+		vcn33_bt-supply = <&mt6357_vcn33_bt_reg>;
+		vcn33_wifi-supply = <&mt6357_vcn33_wifi_reg>;
+	};
+
+	wifi: wifi@18000000 {
+		compatible = "mediatek,wifi";
+		reg = <0 0x18000000 0 0x100000>;
+		interrupts = <GIC_SPI 268 IRQ_TYPE_LEVEL_LOW>;
+		memory-region = <&wifi_mem>;
 	};
 };
 
