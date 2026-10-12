@@ -36,6 +36,18 @@ static const struct scpsys_domain_data scpsys_domain_data_mt6765[] = {
 		.sram_pdn_bits = 0,
 		.sram_pdn_ack_bits = 0,
 		.caps = MTK_SCPD_KEEP_DEFAULT_OFF,
+		/*
+		 * Same steps as the vendor clk-mt6765-pg.c. The vendor code
+		 * never waits for the INFRA_TOPAXI_PROTECTEN_1 bit 18 ack, so
+		 * that step has no ack mask here; the others ack in STA1.
+		 */
+		.bp_cfg = {
+			BUS_PROT_WR_IGN(INFRA, BIT(13), 0x2a0, 0x2a4, 0x228),
+			_BUS_PROT(INFRA, BIT(18), 0x2a8, 0x2ac, 0, 0x258,
+				  BUS_PROT_IGNORE_CLR_ACK),
+			BUS_PROT_WR_IGN(INFRA, BIT(14) | BIT(16),
+					0x2a0, 0x2a4, 0x228),
+		},
 	},
 	[MT6765_POWER_DOMAIN_DPY] = {
 		.name = "dpy",
