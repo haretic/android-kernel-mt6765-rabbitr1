@@ -1636,7 +1636,9 @@ kalP2PGOStationUpdate(IN struct GLUE_INFO *prGlueInfo,
 			rStationInfo.assoc_req_ies_len =
 				prCliStaRec->u2AssocReqIeLen;
 
-			cfg80211_new_sta(prP2pGlueInfo->aprRoleHandler,
+			cfg80211_new_sta(
+				MTK_CFG80211_STA_DEV(
+					prP2pGlueInfo->aprRoleHandler),
 				/* struct net_device * dev, */
 				prCliStaRec->aucMacAddr,
 				&rStationInfo, GFP_KERNEL);
@@ -1651,7 +1653,9 @@ kalP2PGOStationUpdate(IN struct GLUE_INFO *prGlueInfo,
 				if (prCliStaRec->fgIsConnected == FALSE)
 					break;
 				prCliStaRec->fgIsConnected = FALSE;
-				cfg80211_del_sta(prP2pGlueInfo->aprRoleHandler,
+				cfg80211_del_sta(
+					MTK_CFG80211_STA_DEV(
+					prP2pGlueInfo->aprRoleHandler),
 					/* struct net_device * dev, */
 					prCliStaRec->aucMacAddr, GFP_KERNEL);
 			}
@@ -2620,7 +2624,15 @@ void kalP2pIndicateChnlSwitch(IN struct ADAPTER *prAdapter,
 	}
 
 	/* Ch notify */
+#if KERNEL_VERSION(6, 9, 0) <= CFG80211_VERSION_CODE
+	cfg80211_ch_switch_notify(prNetdevice, &prP2PInfo->chandefCsa, 0);
+#elif KERNEL_VERSION(6, 5, 0) <= CFG80211_VERSION_CODE
+	cfg80211_ch_switch_notify(prNetdevice, &prP2PInfo->chandefCsa, 0, 0);
+#elif KERNEL_VERSION(6, 3, 0) <= CFG80211_VERSION_CODE
+	cfg80211_ch_switch_notify(prNetdevice, &prP2PInfo->chandefCsa, 0);
+#else
 	cfg80211_ch_switch_notify(
 		prNetdevice,
 		&prP2PInfo->chandefCsa);
+#endif
 }

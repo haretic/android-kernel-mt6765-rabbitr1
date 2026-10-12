@@ -132,7 +132,9 @@ struct WLANDEV_INFO {
 
 MODULE_AUTHOR(NIC_AUTHOR);
 MODULE_DESCRIPTION(NIC_DESC);
+#if KERNEL_VERSION(5, 12, 0) > LINUX_VERSION_CODE
 MODULE_SUPPORTED_DEVICE(NIC_NAME);
+#endif
 
 /* MODULE_LICENSE("MTK Propietary"); */
 MODULE_LICENSE("Dual BSD/GPL");
@@ -730,19 +732,19 @@ static struct cfg80211_ops mtk_cfg_ops = {
 	.add_virtual_intf = mtk_cfg_add_iface,
 	.del_virtual_intf = mtk_cfg_del_iface,
 	.change_virtual_intf = mtk_cfg_change_iface,
-	.add_key = mtk_cfg_add_key,
-	.get_key = mtk_cfg_get_key,
-	.del_key = mtk_cfg_del_key,
-	.set_default_mgmt_key = mtk_cfg_set_default_mgmt_key,
-	.set_default_key = mtk_cfg_set_default_key,
-	.get_station = mtk_cfg_get_station,
+	.add_key = mtk_cfg_op_add_key,
+	.get_key = mtk_cfg_op_get_key,
+	.del_key = mtk_cfg_op_del_key,
+	.set_default_mgmt_key = mtk_cfg_op_set_default_mgmt_key,
+	.set_default_key = mtk_cfg_op_set_default_key,
+	.get_station = mtk_cfg_op_get_station,
 #if CFG_SUPPORT_TDLS
-	.change_station = mtk_cfg_change_station,
-	.add_station = mtk_cfg_add_station,
+	.change_station = mtk_cfg_op_change_station,
+	.add_station = mtk_cfg_op_add_station,
 	.tdls_oper = mtk_cfg_tdls_oper,
-	.tdls_mgmt = mtk_cfg_tdls_mgmt,
+	.tdls_mgmt = mtk_cfg_op_tdls_mgmt,
 #endif
-	.del_station = mtk_cfg_del_station,	/* AP/P2P use this function */
+	.del_station = mtk_cfg_op_del_station,	/* AP/P2P use this function */
 	.scan = mtk_cfg_scan,
 #if KERNEL_VERSION(4, 5, 0) <= CFG80211_VERSION_CODE
 	.abort_scan = mtk_cfg_abort_scan,
@@ -786,7 +788,7 @@ static struct cfg80211_ops mtk_cfg_ops = {
 #endif
 
 #if (CFG_SUPPORT_DFS_MASTER == 1)
-	.start_radar_detection = mtk_cfg_start_radar_detection,
+	.start_radar_detection = mtk_cfg_op_start_radar_detection,
 #if KERNEL_VERSION(3, 13, 0) <= CFG80211_VERSION_CODE
 	.channel_switch = mtk_cfg_channel_switch,
 #endif
@@ -798,12 +800,12 @@ static struct cfg80211_ops mtk_cfg_ops = {
 	.deauth = mtk_cfg_deauth,
 	.disassoc = mtk_cfg_disassoc,
 	.start_ap = mtk_cfg_start_ap,
-	.change_beacon = mtk_cfg_change_beacon,
-	.stop_ap = mtk_cfg_stop_ap,
-	.set_wiphy_params = mtk_cfg_set_wiphy_params,
-	.set_bitrate_mask = mtk_cfg_set_bitrate_mask,
-	.set_tx_power = mtk_cfg_set_txpower,
-	.get_tx_power = mtk_cfg_get_txpower,
+	.change_beacon = mtk_cfg_op_change_beacon,
+	.stop_ap = mtk_cfg_op_stop_ap,
+	.set_wiphy_params = mtk_cfg_op_set_wiphy_params,
+	.set_bitrate_mask = mtk_cfg_op_set_bitrate_mask,
+	.set_tx_power = mtk_cfg_op_set_txpower,
+	.get_tx_power = mtk_cfg_op_get_txpower,
 #endif
 	.update_ft_ies = mtk_cfg80211_update_ft_ies,
 #ifdef CFG_SUPPORT_SNIFFER_RADIOTAP
@@ -2195,8 +2197,13 @@ static int wlanInit(struct net_device *prDev)
 		netdev_priv(prDev);
 	spin_lock_init(&prNetDevPrivate->napi_spinlock);
 	prNetDevPrivate->napi.dev = prDev;
+#if KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE
+	netif_napi_add_weight(prNetDevPrivate->napi.dev,
+		&prNetDevPrivate->napi, kal_napi_poll, 64);
+#else
 	netif_napi_add(prNetDevPrivate->napi.dev,
 		&prNetDevPrivate->napi, kal_napi_poll, 64);
+#endif
 	DBGLOG(INIT, INFO,
 		"GRO interface added successfully:%p\n", prDev);
 #endif
@@ -2266,7 +2273,7 @@ static int wlanSetMacAddress(struct net_device *ndev, void *addr)
 		wlanGetBssIdx(ndev));
 
 	COPY_MAC_ADDR(prAisBssInfo->aucOwnMacAddr, sa->sa_data);
-	COPY_MAC_ADDR(ndev->dev_addr, sa->sa_data);
+	kalSetNetDevAddr(ndev, sa->sa_data);
 	DBGLOG(INIT, INFO,
 		"[wlan%d] Set connect random macaddr to " MACSTR ".\n",
 		prAisBssInfo->ucBssIndex,
@@ -4978,8 +4985,8 @@ static int32_t wlanOnPreNetRegister(struct GLUE_INFO *prGlueInfo,
 			DBGLOG(INIT, WARN, "set MAC addr fail 0x%x\n",
 							rStatus);
 		} else {
-			kalMemCopy(prGlueInfo->prDevHandler->dev_addr,
-					&MacAddr.sa_data, ETH_ALEN);
+			kalSetNetDevAddr(prGlueInfo->prDevHandler,
+					MacAddr.sa_data);
 			kalMemCopy(prGlueInfo->prDevHandler->perm_addr,
 					prGlueInfo->prDevHandler->dev_addr,
 					ETH_ALEN);
@@ -4994,9 +5001,8 @@ static int32_t wlanOnPreNetRegister(struct GLUE_INFO *prGlueInfo,
 		if (KAL_AIS_NUM > 1) {
 			prDevHandler = wlanGetNetDev(prGlueInfo, 1);
 			if (prDevHandler) {
-				kalMemCopy(prDevHandler->dev_addr,
-					&prAdapter->rWifiVar.aucMacAddress1,
-					ETH_ALEN);
+				kalSetNetDevAddr(prDevHandler,
+					prAdapter->rWifiVar.aucMacAddress1);
 				kalMemCopy(prDevHandler->perm_addr,
 					prDevHandler->dev_addr,
 					ETH_ALEN);
@@ -5891,7 +5897,9 @@ static int32_t wlanProbe(void *pvData, void *pvDriverData)
 		switch (eFailReason) {
 		case FAIL_BY_RESET:
 		case FAIL_MET_INIT_PROCFS:
+#if (CFG_MET_PACKET_TRACE_SUPPORT == 1)
 			kalMetRemoveProcfs();
+#endif
 		case PROC_INIT_FAIL:
 			wlanNetUnregister(prWdev);
 			/* Unregister notifier callback */

@@ -1019,9 +1019,26 @@ do { \
 #endif
 
 /*----------------------------------------------------------------------------*/
+/* net_device MAC address: dev_addr is const and must go through the core     */
+/* (eth_hw_addr_set) since 5.15                                               */
+/*----------------------------------------------------------------------------*/
+#if KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE
+#define kalSetNetDevAddr(_ndev, _addr) \
+	eth_hw_addr_set(_ndev, (const u8 *)(_addr))
+#else
+#define kalSetNetDevAddr(_ndev, _addr) \
+	kalMemCopy((_ndev)->dev_addr, _addr, ETH_ALEN)
+#endif
+
+/*----------------------------------------------------------------------------*/
 /* Macros of show stack operations for using in Driver Layer                  */
 /*----------------------------------------------------------------------------*/
-#if CFG_MTK_ANDROID_WMT
+#if CFG_MTK_ANDROID_WMT && (KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE)
+/* mainline has no connectivity_export_show_stack() */
+#include <linux/sched/debug.h>
+#define kal_show_stack(_adapter, _task, _sp) \
+	sched_show_task(_task)
+#elif CFG_MTK_ANDROID_WMT
 #define kal_show_stack(_adapter, _task, _sp) \
 	connectivity_export_show_stack(_task, _sp)
 #else

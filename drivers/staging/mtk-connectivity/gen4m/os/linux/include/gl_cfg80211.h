@@ -781,6 +781,8 @@ int mtk_cfg80211_external_auth(struct wiphy *wiphy, struct net_device *dev,
 int mtk_IsP2PNetDevice(struct GLUE_INFO *prGlueInfo,
 			  struct net_device *ndev);
 
+#include "gl_cfg80211_compat.h"
+
 /*******************************************************************************
  *                              F U N C T I O N S
  *******************************************************************************

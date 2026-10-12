@@ -24,7 +24,11 @@ TRACE_EVENT(wifi_standalone_log,
 	),
 
 	TP_fast_assign(
+#if KERNEL_VERSION(6, 10, 0) <= LINUX_VERSION_CODE
+		__assign_str(msg);
+#else
 		__assign_str(msg, str);
+#endif
 	),
 
 	TP_printk("[wlan]%s", __get_str(msg))

@@ -125,14 +125,13 @@ void kalSetTaskUtilMinPct(IN int pid, IN unsigned int min)
 
 	/* get task_struct */
 	rcu_read_lock();
-	p = find_task_by_vpid(pid);
-	if (likely(p))
-		get_task_struct(p);
+	/* find_task_by_vpid() is not exported */
+	p = get_pid_task(find_vpid(pid), PIDTYPE_PID);
 	rcu_read_unlock();
 
-	/* sched_setattr */
+	/* sched_setattr, which is not exported either */
 	if (likely(p)) {
-		ret = sched_setattr(p, &attr);
+		ret = sched_setattr_nocheck(p, &attr);
 		put_task_struct(p);
 	}
 }

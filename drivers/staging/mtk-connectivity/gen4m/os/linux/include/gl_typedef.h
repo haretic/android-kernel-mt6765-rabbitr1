@@ -167,6 +167,10 @@ typedef void(*remove_card) (void);
 
 #define __KAL_INLINE__                  inline
 #define __KAL_ATTRIB_PACKED__           __attribute__((__packed__))
+/* normally from wlan_service's sys_adaption.h, which is not imported */
+#ifndef GNU_PACKED
+#define GNU_PACKED			__packed
+#endif
 #define __KAL_ATTRIB_ALIGN_4__          __aligned(4)
 
 #ifndef BIT

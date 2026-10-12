@@ -17213,6 +17213,10 @@ uint32_t wlanoidListMode(IN struct ADAPTER *prAdapter,
 	if (!prAdapter || !pvQueryBuffer)
 		return WLAN_STATUS_INVALID_DATA;
 
+#if (CONFIG_WLAN_SERVICE == 0)
+	/* list mode is part of the wlan_service test engine, not built */
+	return WLAN_STATUS_NOT_SUPPORTED;
+#endif
 	DBGLOG(OID, TRACE, "wlanoidListMode\n");
 
 	pCmdBuf = kalMemAlloc(u4QueryBufferLen, VIR_MEM_TYPE);
@@ -17227,7 +17231,11 @@ uint32_t wlanoidListMode(IN struct ADAPTER *prAdapter,
 		      FALSE,
 		      TRUE,
 		      TRUE,
+#if (CONFIG_WLAN_SERVICE == 1)
 		      nicCmdEventListmode,
+#else
+		      NULL,
+#endif
 		      nicOidCmdTimeoutCommon,
 		      u4QueryBufferLen,
 		      pCmdBuf,

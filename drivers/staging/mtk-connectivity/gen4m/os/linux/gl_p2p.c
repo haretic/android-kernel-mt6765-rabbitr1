@@ -563,8 +563,13 @@ static int p2pInit(struct net_device *prDev)
 	prDev->hw_features |= NETIF_F_GRO;
 	spin_lock_init(&prNetDevPrivate->napi_spinlock);
 	prNetDevPrivate->napi.dev = prDev;
+#if KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE
+	netif_napi_add_weight(prNetDevPrivate->napi.dev,
+		&prNetDevPrivate->napi, p2p_napi_poll, 64);
+#else
 	netif_napi_add(prNetDevPrivate->napi.dev,
 		&prNetDevPrivate->napi, p2p_napi_poll, 64);
+#endif
 	DBGLOG(INIT, TRACE,
 		"GRO interface added successfully:%p\n", prDev);
 #endif
@@ -1382,7 +1387,7 @@ u_int8_t glRegisterP2P(struct GLUE_INFO *prGlueInfo, const char *prDevName,
 			"Set p2p role[%d] mac to " MACSTR " fgIsApMode(%d)\n",
 			i, MAC2STR(rMacAddr), fgIsApMode);
 
-		kalMemCopy(prP2pDev->dev_addr, rMacAddr, ETH_ALEN);
+		kalSetNetDevAddr(prP2pDev, rMacAddr);
 		kalMemCopy(prP2pDev->perm_addr, prP2pDev->dev_addr, ETH_ALEN);
 
 		if (glSetupP2P(prGlueInfo, prP2pWdev, prP2pDev, i, fgIsApMode)
@@ -2309,7 +2314,7 @@ skip_role:
 		return -EINVAL;
 	}
 
-	COPY_MAC_ADDR(prDev->dev_addr, sa->sa_data);
+	kalSetNetDevAddr(prDev, sa->sa_data);
 
 	if ((prP2pInfo->prDevHandler == prDev)
 		&& mtk_IsP2PNetDevice(prGlueInfo, prDev)) {
