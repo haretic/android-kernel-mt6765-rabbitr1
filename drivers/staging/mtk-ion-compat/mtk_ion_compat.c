@@ -243,8 +243,9 @@ static int mic_buffer_iova(struct mic_buffer *buffer, int port, u64 *iova)
 		goto out_unlock;
 	}
 
+	/* One mapping per device, whichever of its port ranges asked first. */
 	list_for_each_entry(map, &buffer->iova_maps, buf_node) {
-		if (map->idev == idev)
+		if (map->idev->dev == idev->dev)
 			goto out_found;
 	}
 
