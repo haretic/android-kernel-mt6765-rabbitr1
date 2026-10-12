@@ -60,11 +60,11 @@ function on, and gen4m probes and registers `wlan0` before the write returns.
 
 `MTK_CONSYS_WIFI_POWER` selects who writes it:
 
-* `boot` (default): the `vendor.mtk-consys-wifi-on` service writes `1` once
+* `boot`: the `vendor.mtk-consys-wifi-on` service writes `1` once
   at boot. wlan0 stays up, and the framework runs without a Wi-Fi HAL
   (STA through wificond and wpa_supplicant). This is the simplest path for
   bring-up.
-* `hal`: `android.hardware.wifi-service` with the legacy-HAL fallback.
+* `hal` (default): `android.hardware.wifi-service` with the legacy-HAL fallback.
   libwifi_hal writes `WIFI_DRIVER_STATE_ON/OFF` (1/0) to
   `WIFI_DRIVER_STATE_CTRL_PARAM` (/dev/wmtWifi) when Wi-Fi is toggled, so
   CONSYS Wi-Fi is really off when disabled. Soft AP is not wired: it would
@@ -100,7 +100,8 @@ through MGMT; btmtk_wmt implements the MediaTek 0xfc1a set-address command.
 
 ## SELinux (sepolicy/)
 
-* `wmtwifi_device` for `/dev/wmtWifi`; init chowns it to wifi:wifi 0660.
+* `wmtwifi_device` for `/dev/wmtWifi`; ueventd creates it as wifi:wifi 0660
+  (rootdir/ueventd.r1.rc).
 * `mtk_consys_wifi_on` domain for `/vendor/bin/mtk-consys-wifi-on.sh`.
 * `hal_wifi_default` may write `/dev/wmtWifi` (used with `MTK_CONSYS_WIFI_POWER=hal`).
 * Module loading needs nothing new: init already loads `/vendor/lib/modules`.

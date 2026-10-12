@@ -9,7 +9,7 @@ BOARD_VENDOR_SEPOLICY_DIRS += \
     device/rabbit/r1/connectivity/sepolicy
 
 # Must match MTK_CONSYS_WIFI_POWER in connectivity.mk.
-MTK_CONSYS_WIFI_POWER ?= boot
+MTK_CONSYS_WIFI_POWER ?= hal
 
 ifeq ($(MTK_CONSYS_WIFI_POWER),hal)
 # libwifi_hal (legacy HAL fallback) powers the CONSYS Wi-Fi function

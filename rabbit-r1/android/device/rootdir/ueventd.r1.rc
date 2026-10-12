@@ -1,2 +1,5 @@
 # PowerVR sync device: opened by every EGL/Vulkan client.
 /dev/pvr_sync             0666   system     graphics
+
+# CONSYS Wi-Fi power switch (wmt_chrdev_wifi): written by the Wi-Fi HAL.
+/dev/wmtWifi              0660   wifi       wifi
