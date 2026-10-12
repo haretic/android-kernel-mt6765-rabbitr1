@@ -46,9 +46,17 @@ PRODUCT_COPY_FILES += \
     $(MTK_CONSYS_PATH)/wifi/wpa_supplicant_overlay.conf:$(TARGET_COPY_OUT_VENDOR)/etc/wifi/wpa_supplicant_overlay.conf \
     $(MTK_CONSYS_PATH)/wifi/p2p_supplicant_overlay.conf:$(TARGET_COPY_OUT_VENDOR)/etc/wifi/p2p_supplicant_overlay.conf
 
+# Wi-Fi HAL: the AIDL service with the gen4m legacy HAL (wifi_hal/), which
+# reports the driver's feature set, channels, country code and link stats.
+PRODUCT_SOONG_NAMESPACES += \
+    $(MTK_CONSYS_PATH)/wifi_hal
+PRODUCT_PACKAGES += \
+    android.hardware.wifi-service \
+    libwifi-hal-r1 \
+    libwifi-hal-r1.xml
+
 # Wi-Fi power. "boot": power the Wi-Fi function on once at boot, wlan0 stays
-# up and the framework runs without a Wi-Fi HAL (STA through wpa_supplicant).
-# "hal": the AOSP Wi-Fi HAL writes 1/0 to /dev/wmtWifi when Wi-Fi is
+# up. "hal": the Wi-Fi HAL writes 1/0 to /dev/wmtWifi when Wi-Fi is
 # toggled; set the same value in BoardConfig (see BoardConfigConnectivity.mk).
 MTK_CONSYS_WIFI_POWER ?= boot
 
@@ -56,9 +64,6 @@ ifeq ($(MTK_CONSYS_WIFI_POWER),boot)
 PRODUCT_COPY_FILES += \
     $(MTK_CONSYS_PATH)/init.mtk-consys.wifi-on.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/init.mtk-consys.wifi-on.rc \
     $(MTK_CONSYS_PATH)/mtk-consys-wifi-on.sh:$(TARGET_COPY_OUT_VENDOR)/bin/mtk-consys-wifi-on.sh
-else ifeq ($(MTK_CONSYS_WIFI_POWER),hal)
-PRODUCT_PACKAGES += \
-    android.hardware.wifi-service
 endif
 
 # Bluetooth: btmtk_wmt registers hci0, which the default AIDL HAL

@@ -61,17 +61,20 @@ function on, and gen4m probes and registers `wlan0` before the write returns.
 `MTK_CONSYS_WIFI_POWER` selects who writes it:
 
 * `boot` (default): the `vendor.mtk-consys-wifi-on` service writes `1` once
-  at post-fs-data, so wlan0 exists before the framework first enables Wi-Fi. wlan0 stays up, and the framework runs without a Wi-Fi HAL
-  (STA through wificond and wpa_supplicant). This is the simplest path for
-  bring-up.
-* `hal`: `android.hardware.wifi-service` with the legacy-HAL fallback.
-  libwifi_hal writes `WIFI_DRIVER_STATE_ON/OFF` (1/0) to
+  at post-fs-data, so wlan0 exists before the framework first enables Wi-Fi.
+  wlan0 stays up.
+* `hal`: libwifi_hal writes `WIFI_DRIVER_STATE_ON/OFF` (1/0) to
   `WIFI_DRIVER_STATE_CTRL_PARAM` (/dev/wmtWifi) when Wi-Fi is toggled, so
   CONSYS Wi-Fi is really off when disabled. Soft AP is not wired: it would
-  need the `A` write. Not usable yet: the AIDL service also needs a vendor
-  legacy HAL (`BOARD_WLAN_DEVICE`, e.g. MediaTek's `libwifi-hal-mediatek`),
-  and the fallback fails `IWifi.start()` ("Can not initialize the vendor
-  function pointer table").
+  need the `A` write.
+
+Both modes run `android.hardware.wifi-service` with the gen4m vendor HAL in
+`wifi_hal/` (`libwifi-hal-r1`, see its README).
+
+wpa_supplicant runs STA only on wlan0 (`wifi/wpa_supplicant_overlay.conf`,
+`p2p_disabled=1`); without it P2P is initialised on wlan0 and the AIDL
+service registers wlan0 as a P2P interface, so the framework cannot add it
+as STA.
 
 wpa_supplicant comes from `optional/wpa_supplicant_8` (APEX, nl80211). There
 is no `BOARD_WPA_SUPPLICANT_PRIVATE_LIB`, so MediaTek `DRIVER` private
@@ -106,7 +109,8 @@ through MGMT; btmtk_wmt implements the MediaTek 0xfc1a set-address command.
 * `wmtwifi_device` for `/dev/wmtWifi`; ueventd creates it as wifi:wifi 0660
   (rootdir/ueventd.r1.rc).
 * `mtk_consys_wifi_on` domain for `/vendor/bin/mtk-consys-wifi-on.sh`.
-* `hal_wifi_default` may write `/dev/wmtWifi` (used with `MTK_CONSYS_WIFI_POWER=hal`).
+* `hal_wifi_default` may write `/dev/wmtWifi` (used with `MTK_CONSYS_WIFI_POWER=hal`)
+  and set `vendor.wlan.{driver,firmware}.version`.
 * Module loading needs nothing new: init already loads `/vendor/lib/modules`.
 * `/proc/driver/wmt_dbg` (debug only) is not labeled; use it from a root
   shell on a permissive or userdebug build.

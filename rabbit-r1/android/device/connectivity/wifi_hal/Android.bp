@@ -1,0 +1,45 @@
+// SPDX-FileCopyrightText: The LineageOS Project
+// SPDX-License-Identifier: Apache-2.0
+
+soong_namespace {}
+
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
+// Legacy Wi-Fi vendor HAL for gen4m, loaded by android.hardware.wifi-service
+// through /vendor/etc/wifi/vendor_hals/libwifi-hal-r1.xml.
+cc_library_shared {
+    name: "libwifi-hal-r1",
+    vendor: true,
+    // Only the 64-bit service loads it, and the link layer stats parser
+    // relies on the 64-bit kernel and userspace structure layouts matching.
+    compile_multilib: "first",
+    srcs: [
+        "eventloop.cpp",
+        "halstate.cpp",
+        "info.cpp",
+        "interface.cpp",
+        "nl80211.cpp",
+        "wifi_hal.cpp",
+    ],
+    header_libs: ["wifi_legacy_headers"],
+    shared_libs: [
+        "liblog",
+        "libnl",
+    ],
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        // Export only init_wifi_vendor_hal_func_table.
+        "-fvisibility=hidden",
+    ],
+}
+
+prebuilt_etc {
+    name: "libwifi-hal-r1.xml",
+    src: "libwifi-hal-r1.xml",
+    vendor: true,
+    relative_install_path: "wifi/vendor_hals",
+}

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+     SPDX-FileCopyrightText: The LineageOS Project
+     SPDX-License-Identifier: Apache-2.0
+
+     Read by WifiLegacyHalFactory::initVendorHalsDescriptorList() in
+     android.hardware.wifi-service. primary=1 makes the service set
+     wlan.driver.status and bring wlan0 up around this HAL.
+-->
+<WifiVendorHal version="1">
+    <path>/vendor/lib64/libwifi-hal-r1.so</path>
+    <primary>1</primary>
+</WifiVendorHal>
