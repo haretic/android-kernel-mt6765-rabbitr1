@@ -496,6 +496,8 @@ static int __init btmtk_wmt_init(void)
 	hdev->send = btmtk_wmt_send_frame;
 	hdev->setup = btmtk_wmt_setup;
 	hdev->set_bdaddr = btmtk_wmt_set_bdaddr;
+	/* Page 2 advertises a sync train the firmware rejects (0x0c77, unknown command), failing init. */
+	hci_set_quirk(hdev, HCI_QUIRK_BROKEN_LOCAL_EXT_FEATURES_PAGE_2);
 
 	WRITE_ONCE(btmtk_wmt_dev, bdev);
 
