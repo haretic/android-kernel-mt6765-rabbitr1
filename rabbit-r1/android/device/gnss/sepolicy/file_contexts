@@ -1,0 +1,14 @@
+# Daemons (stock vendor_file_contexts labels; the HAL runs in the AOSP domain)
+/(vendor|system/vendor)/bin/mnld                                         u:object_r:mnld_exec:s0
+/(vendor|system/vendor)/bin/hw/android\.hardware\.gnss-service\.mediatek  u:object_r:hal_gnss_default_exec:s0
+
+# gps_drv.ko
+/dev/stpgps                                                              u:object_r:stpgps_device:s0
+/dev/gps_emi                                                             u:object_r:gps_emi_device:s0
+
+# init socket "mnld"
+/dev/socket/mnld                                                         u:object_r:mnld_socket:s0
+
+# EPO/almanac caches, NV copy and mnld logs
+/data/vendor/gps(/.*)?                                                   u:object_r:gps_data_file:s0
+/data/vendor/log/gps(/.*)?                                               u:object_r:gps_data_file:s0

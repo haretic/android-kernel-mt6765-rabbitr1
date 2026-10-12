@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# GPS device nodes, as stock ueventd.rc. ueventd only reads
+# /vendor/etc/ueventd.rc and what it imports, so rootdir/ueventd.r1.rc
+# (installed as ueventd.mt6765.rc) needs:
+#   import /vendor/etc/ueventd.r1-gnss.rc
+#
+# /dev/gps_emi has no entry on stock either: it stays root 0600 and mnld
+# runs without it (its EMI init ioctl fails on MT6765 anyway).
+
+/dev/stpgps               0660   gps        gps
