@@ -9,6 +9,8 @@ config MTK_ION_COMPAT
 	  vendor blobs (gralloc, libion_mtk, libgralloc_extra) can allocate
 	  and share buffers. Every heap is served from ordinary system pages
 	  exported as standard dma-bufs, which any mainline driver can
-	  import. Secure heaps are not secure.
+	  import. Secure heaps are not secure. Buffers tagged for an M4U port
+	  whose driver registered with this device get their IOMMU address
+	  from ION_SYS_GET_PHYS and ION_MM_GET_IOVA, as on stock.
 
 	  If unsure, say N.
