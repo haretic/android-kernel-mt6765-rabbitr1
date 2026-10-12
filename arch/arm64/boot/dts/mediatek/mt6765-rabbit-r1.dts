@@ -69,6 +69,23 @@
 		pinctrl-3 = <&r1_aud_miso_on_pins>;
 	};
 
+	/*
+	 * Stock imgsensor powers the main camera's AVDD from an external
+	 * 2.8 V LDO enabled by GPIO165 (cam0_vcama_on), not from MT6357
+	 * VCAMA. The stock sequence waits 5 ms after each rail.
+	 */
+	r1_cam_avdd: regulator-cam-avdd {
+		compatible = "regulator-fixed";
+		regulator-name = "cam-avdd";
+		regulator-min-microvolt = <2800000>;
+		regulator-max-microvolt = <2800000>;
+		gpio = <&pio 165 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		startup-delay-us = <5000>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&r1_cam_avdd_pins>;
+	};
+
 	chosen {
 		stdout-path = "serial0:921600n8";
 		/* Single CPU until the r1's PSCI/firmware behavior is measured. */
@@ -480,6 +497,50 @@
 	regulator-always-on;
 };
 
+/* Stock hi846 power table: DVDD 1.2 V from VCAMD, DOVDD 1.8 V from VCAMIO. */
+&mt6357_vcamd_reg {
+	regulator-min-microvolt = <1200000>;
+	regulator-max-microvolt = <1200000>;
+};
+
+&i2c2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&r1_i2c2_pins>;
+	/* Stock runs 400 kHz open drain; standard speed for bring-up. */
+	clock-frequency = <100000>;
+	status = "okay";
+
+	/*
+	 * Main (and only) camera. Stock imgsensor probes hi846_mipi_raw at
+	 * 8-bit write ID 0x40, i.e. 7-bit 0x20; the stock DT's camera_main@1a
+	 * reg is not used by that driver. PDN (GPIO97) drives XSHUTDOWN and
+	 * RST (GPIO101) drives RESETB, both high when the sensor runs. Stock
+	 * MCLK is 24 MHz, so the PLL settings here yield 96% of the nominal
+	 * 25 MHz link frequencies.
+	 */
+	r1_camera: camera@20 {
+		compatible = "hynix,hi846";
+		reg = <0x20>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&r1_cam_pins>;
+		clocks = <&topckgen CLK_TOP_CAMTG_SEL>;
+		assigned-clocks = <&topckgen CLK_TOP_CAMTG_SEL>;
+		assigned-clock-parents = <&topckgen CLK_TOP_USB20_192M_D8>;
+		vdda-supply = <&r1_cam_avdd>;
+		vddd-supply = <&mt6357_vcamd_reg>;
+		vddio-supply = <&mt6357_vcamio_reg>;
+		reset-gpios = <&pio 101 GPIO_ACTIVE_LOW>;
+		shutdown-gpios = <&pio 97 GPIO_ACTIVE_LOW>;
+
+		port {
+			r1_camera_out: endpoint {
+				data-lanes = <1 2 3 4>;
+				link-frequencies = /bits/ 64 <80000000 200000000>;
+			};
+		};
+	};
+};
+
 &i2c4 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&r1_i2c4_pins>;
@@ -717,6 +778,34 @@
 				 <PINMUX_GPIO143__FUNC_GPIO143>;
 			input-enable;
 			bias-disable;
+		};
+	};
+
+	/* Stock gpio_init_default: GPIO103/104 in mode 1, pulled up. */
+	r1_i2c2_pins: i2c2-pins {
+		pins-bus {
+			pinmux = <PINMUX_GPIO103__FUNC_SCL2>,
+				 <PINMUX_GPIO104__FUNC_SDA2>;
+			input-enable;
+			bias-pull-up;
+		};
+	};
+
+	/* Stock gpio_init_default: GPIO99 as CMMCLK0, GPIO97/101 as GPIOs. */
+	r1_cam_pins: cam-pins {
+		pins-mclk {
+			pinmux = <PINMUX_GPIO99__FUNC_CMMCLK0>;
+		};
+
+		pins-ctrl {
+			pinmux = <PINMUX_GPIO97__FUNC_GPIO97>,
+				 <PINMUX_GPIO101__FUNC_GPIO101>;
+		};
+	};
+
+	r1_cam_avdd_pins: cam-avdd-pins {
+		pins-en {
+			pinmux = <PINMUX_GPIO165__FUNC_GPIO165>;
 		};
 	};
 
