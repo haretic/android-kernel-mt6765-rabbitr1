@@ -398,6 +398,42 @@ static int btmtk_wmt_send_frame(struct hci_dev *hdev, struct sk_buff *skb)
 	return 0;
 }
 
+static int btmtk_wmt_setup(struct hci_dev *hdev)
+{
+	struct hci_rp_read_bd_addr *rp;
+	struct sk_buff *skb;
+
+	skb = __hci_cmd_sync(hdev, HCI_OP_READ_BD_ADDR, 0, NULL,
+			     HCI_INIT_TIMEOUT);
+	if (IS_ERR(skb)) {
+		bt_dev_err(hdev, "reading the device address failed (%ld)",
+			   PTR_ERR(skb));
+		return PTR_ERR(skb);
+	}
+
+	if (skb->len != sizeof(*rp)) {
+		bt_dev_err(hdev, "device address event length mismatch");
+		kfree_skb(skb);
+		return -EIO;
+	}
+
+	rp = (struct hci_rp_read_bd_addr *)skb->data;
+	bt_dev_info(hdev, "controller address %pMR", &rp->bdaddr);
+
+	/*
+	 * The stock HAL programs the address from NVRAM on every power on.
+	 * Without it, leave the controller unconfigured so that userspace
+	 * (btmgmt public-addr, the mainline set_bdaddr service) sets one.
+	 */
+	if (!bacmp(&rp->bdaddr, BDADDR_ANY)) {
+		bt_dev_warn(hdev, "no device address programmed");
+		hci_set_quirk(hdev, HCI_QUIRK_INVALID_BDADDR);
+	}
+	kfree_skb(skb);
+
+	return 0;
+}
+
 static int btmtk_wmt_set_bdaddr(struct hci_dev *hdev, const bdaddr_t *bdaddr)
 {
 	struct sk_buff *skb;
@@ -457,6 +493,7 @@ static int __init btmtk_wmt_init(void)
 	hdev->close = btmtk_wmt_close;
 	hdev->flush = btmtk_wmt_flush;
 	hdev->send = btmtk_wmt_send_frame;
+	hdev->setup = btmtk_wmt_setup;
 	hdev->set_bdaddr = btmtk_wmt_set_bdaddr;
 
 	WRITE_ONCE(btmtk_wmt_dev, bdev);
