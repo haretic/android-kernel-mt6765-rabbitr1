@@ -1741,15 +1741,23 @@ static VOID consys_set_pdma_axi_rready_force_high(UINT32 enable)
 
 static VOID consys_infra_reg_dump(VOID)
 {
-	UINT32 infra_topaxi_si3_sta =
-		CONSYS_REG_READ(conn_reg.infracfg_reg_base + INFRAGCFG_REG_TOPAXI_SI3_STA_OFFSET);
-	UINT32 infra_topaxi_mi_sta =
-		CONSYS_REG_READ(conn_reg.infracfg_reg_base + INFRAGCFG_REG_TOPAXI_MI_STA_OFFSET);
-	UINT32 infra_topaxi_prot_sta0 =
-		CONSYS_REG_READ(conn_reg.topckgen_base + CONSYS_AHBAXI_PROT_STA0_OFFSET);
-	UINT32 infra_topaxi_prot_sta1 =
-		CONSYS_REG_READ(conn_reg.topckgen_base + CONSYS_AHBAXI_PROT_STA1_OFFSET);
+	UINT32 infra_topaxi_si3_sta, infra_topaxi_mi_sta;
+	UINT32 infra_topaxi_prot_sta0, infra_topaxi_prot_sta1;
 
+	/* the stock DT never provided this base; do not dump through NULL */
+	if (!conn_reg.infracfg_reg_base || !conn_reg.topckgen_base) {
+		WMT_PLAT_PR_ERR("INFRACFG not mapped, skipping infra bus dump\n");
+		return;
+	}
+
+	infra_topaxi_si3_sta =
+		CONSYS_REG_READ(conn_reg.infracfg_reg_base + INFRAGCFG_REG_TOPAXI_SI3_STA_OFFSET);
+	infra_topaxi_mi_sta =
+		CONSYS_REG_READ(conn_reg.infracfg_reg_base + INFRAGCFG_REG_TOPAXI_MI_STA_OFFSET);
+	infra_topaxi_prot_sta0 =
+		CONSYS_REG_READ(conn_reg.topckgen_base + CONSYS_AHBAXI_PROT_STA0_OFFSET);
+	infra_topaxi_prot_sta1 =
+		CONSYS_REG_READ(conn_reg.topckgen_base + CONSYS_AHBAXI_PROT_STA1_OFFSET);
 
 	WMT_PLAT_PR_INFO("INFRA_TOPAXI_SI3_STA(0x%zx): 0x%x\n",
 		conn_reg.infracfg_reg_base + INFRAGCFG_REG_TOPAXI_SI3_STA_OFFSET,
