@@ -1695,6 +1695,7 @@ static int hi846_set_format(struct v4l2_subdev *sd,
 	struct v4l2_mbus_framefmt *mf = &format->format;
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	const struct hi846_datafmt *fmt = hi846_find_datafmt(mf->code);
+	const struct hi846_mode *mode;
 	u32 tgt_fps;
 	s32 vblank_def, h_blank;
 
@@ -1709,14 +1710,18 @@ static int hi846_set_format(struct v4l2_subdev *sd,
 		return 0;
 	}
 
+	/* Check the requested mode, not the one being replaced. */
+	mode = v4l2_find_nearest_size(supported_modes,
+				      ARRAY_SIZE(supported_modes),
+				      width, height, mf->width, mf->height);
 	if (hi846->nr_lanes == 2) {
-		if (!hi846->cur_mode->reg_list_2lane.num_of_regs) {
+		if (!mode->reg_list_2lane.num_of_regs) {
 			dev_err(&client->dev,
 				"this mode is not supported for 2 lanes\n");
 			return -EINVAL;
 		}
 	} else {
-		if (!hi846->cur_mode->reg_list_4lane.num_of_regs) {
+		if (!mode->reg_list_4lane.num_of_regs) {
 			dev_err(&client->dev,
 				"this mode is not supported for 4 lanes\n");
 			return -EINVAL;
@@ -1732,10 +1737,7 @@ static int hi846_set_format(struct v4l2_subdev *sd,
 
 	hi846->fmt = fmt;
 
-	hi846->cur_mode =
-		v4l2_find_nearest_size(supported_modes,
-				       ARRAY_SIZE(supported_modes),
-				       width, height, mf->width, mf->height);
+	hi846->cur_mode = mode;
 	dev_dbg(&client->dev, "%s: found mode: %dx%d\n", __func__,
 		hi846->cur_mode->width, hi846->cur_mode->height);
 
@@ -2085,7 +2087,18 @@ static int hi846_probe(struct i2c_client *client)
 	if (ret)
 		goto err_power_off;
 
+	/* Default to the first mode the lane count can stream. */
 	hi846->cur_mode = &supported_modes[0];
+	for (i = 0; i < ARRAY_SIZE(supported_modes); i++) {
+		const struct hi846_reg_list *l = hi846->nr_lanes == 2 ?
+			&supported_modes[i].reg_list_2lane :
+			&supported_modes[i].reg_list_4lane;
+
+		if (l->num_of_regs) {
+			hi846->cur_mode = &supported_modes[i];
+			break;
+		}
+	}
 
 	ret = hi846_init_controls(hi846);
 	if (ret) {
