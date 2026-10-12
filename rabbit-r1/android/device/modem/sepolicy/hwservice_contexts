@@ -1,0 +1,3 @@
+vendor.mediatek.hardware.mtkradioex::IMtkRadioEx   u:object_r:mtk_hal_rild_hwservice:s0
+vendor.mediatek.hardware.nvram::INvram             u:object_r:nvram_hwservice:s0
+vendor.mediatek.hardware.netdagent::INetdagent     u:object_r:netdagent_hwservice:s0

@@ -1,0 +1,10 @@
+vendor.r1.modem.                u:object_r:vendor_r1_modem_prop:s0
+vendor.ril.                     u:object_r:vendor_mtk_ril_prop:s0
+vendor.radio.                   u:object_r:vendor_mtk_ril_prop:s0
+persist.vendor.radio.           u:object_r:vendor_mtk_ril_prop:s0
+vendor.md                       u:object_r:vendor_mtk_md_prop:s0
+vendor.mtk.md                   u:object_r:vendor_mtk_md_prop:s0
+vendor.service.nvram_init       u:object_r:vendor_mtk_nvram_prop:s0
+vendor.service.nvram_restore    u:object_r:vendor_mtk_nvram_prop:s0
+ro.vendor.mtk_                  u:object_r:vendor_mtk_radio_config_prop:s0
+ro.vendor.md_                   u:object_r:vendor_mtk_radio_config_prop:s0

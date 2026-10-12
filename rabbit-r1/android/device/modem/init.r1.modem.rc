@@ -1,0 +1,103 @@
+# SPDX-License-Identifier: Apache-2.0
+# MT6765 modem: the mtk-ccci kernel module and the stock MediaTek modem
+# userspace. Service names, users and groups are the stock ones
+# (init.cccimdinit.rc, init.cccirpcd.rc, nvram_daemon.rc,
+# vendor.mediatek.hardware.nvram@1.1-sevice.rc, mtkrild.rc, netdagent.rc),
+# because ccci_mdinit starts and restarts rild by these names.
+#
+# Unlike stock, nothing that can write NV data starts until
+# r1-modem-nvcheck.sh has seen all four NV filesystems mounted read-write.
+# Without them ccci_mdinit and nvram_daemon would rebuild NV data on the
+# /mnt tmpfs, and nvram_daemon could back that up over the nvram partition.
+
+on post-fs
+    # Binding the driver does not boot the modem; ccci_mdinit does.
+    insmod /vendor/lib/modules/mtk-ccci.ko
+
+on post-fs-data
+    # Stock init.cccimdinit.rc
+    mkdir /mnt/vendor/nvdata/md 0770 root system
+    chown radio radio /sys/kernel/ccci/boot
+    mkdir /data/vendor/mdlpm 0770 system radio
+    restorecon /data/vendor/mdlpm
+    mkdir /data/vendor_de/md 0770 system radio
+    restorecon /data/vendor_de/md
+    restorecon_recursive /mnt/vendor/protect_f
+    restorecon_recursive /mnt/vendor/protect_s
+    # Stock mtkrild.rc
+    mkdir /data/vendor/radio 0771 radio radio
+
+    start vendor.r1-modem-nvcheck
+
+on property:vendor.r1.modem.nv_ready=1
+    start nvram_daemon
+    start nvram-hidl-1-1
+    start vendor.ccci_rpcd
+    start ccci_mdinit
+
+service vendor.r1-modem-nvcheck /vendor/bin/r1-modem-nvcheck.sh
+    user root
+    group root
+    oneshot
+    disabled
+
+service nvram_daemon /vendor/bin/nvram_daemon
+    class core
+    user root
+    group system radio wifi audio bluetooth media
+    oneshot
+    disabled
+
+service nvram-hidl-1-1 /vendor/bin/hw/vendor.mediatek.hardware.nvram@1.1-service
+    class hal
+    user root
+    group system bluetooth media audio radio
+    disabled
+
+# MD1. ccci_mdinit also serves the modem's NV files (built-in ccci_fsd) and
+# ctl.starts vendor.ril-daemon-mtk once the modem is ready.
+service ccci_mdinit /vendor/bin/ccci_mdinit 0
+    user system
+    group radio system
+    class core
+    priority -20
+    ioprio rt 4
+    oneshot
+    disabled
+
+service vendor.ccci_rpcd /vendor/bin/ccci_rpcd 0
+    user radio
+    group radio system
+    class core
+    oneshot
+    disabled
+
+service vendor.ril-daemon-mtk /vendor/bin/hw/mtkfusionrild -l libmtk-ril.so
+    class main
+    socket sap_uim_socket1 stream 660 bluetooth bluetooth
+    socket rild-oem stream 660 radio system
+    socket volte_imsvt1 stream 660 root radio
+    socket rild-atci stream 660 root radio
+    user radio
+    group radio net_admin net_raw cache inet misc audio log readproc wakelock sdcard_r sdcard_rw system
+    capabilities BLOCK_SUSPEND NET_ADMIN NET_RAW WAKE_ALARM
+    oneshot
+    disabled
+
+on property:vendor.ril.mtk=1 && property:vendor.r1.modem.nv_ready=1
+    start vendor.ril-daemon-mtk
+
+on property:vendor.ril.mtk.restart=1
+    restart vendor.ril-daemon-mtk
+
+on property:init.svc.zygote=stopped && property:init.svc.vendor.ril-daemon-mtk=running
+    setprop vendor.ril.zygote.state "stopped"
+
+on property:init.svc.zygote=restarting && property:init.svc.vendor.ril-daemon-mtk=running
+    setprop vendor.ril.zygote.state "restarting"
+
+service netdagent /vendor/bin/netdagent
+    class late_start
+    user system
+    group net_admin net_raw system misc
+    capabilities NET_ADMIN NET_RAW

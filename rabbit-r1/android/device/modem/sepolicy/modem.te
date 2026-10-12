@@ -1,0 +1,82 @@
+# MT6765 modem userspace (stock MediaTek blobs). Bring-up policy: the types
+# and transitions are real, the domains are permissive. Stage 4 replaces the
+# permissive lines with rules ported from the stock vendor_sepolicy.cil.
+#
+# File and device types keep their stock names on purpose: the NV ext4
+# filesystems already carry these labels in their xattrs.
+
+# Daemons
+type ccci_mdinit, domain;
+type ccci_mdinit_exec, exec_type, vendor_file_type, file_type;
+init_daemon_domain(ccci_mdinit)
+permissive ccci_mdinit;
+
+type ccci_rpcd, domain;
+type ccci_rpcd_exec, exec_type, vendor_file_type, file_type;
+init_daemon_domain(ccci_rpcd)
+permissive ccci_rpcd;
+
+type nvram_daemon, domain;
+type nvram_daemon_exec, exec_type, vendor_file_type, file_type;
+init_daemon_domain(nvram_daemon)
+permissive nvram_daemon;
+
+type mtk_hal_nvramagent, domain;
+type mtk_hal_nvramagent_exec, exec_type, vendor_file_type, file_type;
+init_daemon_domain(mtk_hal_nvramagent)
+permissive mtk_hal_nvramagent;
+
+type netdagent, domain;
+type netdagent_exec, exec_type, vendor_file_type, file_type;
+init_daemon_domain(netdagent)
+net_domain(netdagent)
+permissive netdagent;
+
+# mtkfusionrild runs in the platform's rild domain (system/sepolicy/vendor/rild.te),
+# as on stock.
+permissive rild;
+
+type r1_modem_nvcheck, domain;
+type r1_modem_nvcheck_exec, exec_type, vendor_file_type, file_type;
+init_daemon_domain(r1_modem_nvcheck)
+allow r1_modem_nvcheck vendor_shell_exec:file rx_file_perms;
+allow r1_modem_nvcheck vendor_toolbox_exec:file rx_file_perms;
+allow r1_modem_nvcheck proc_mounts:file r_file_perms;
+set_prop(r1_modem_nvcheck, vendor_r1_modem_prop)
+
+# Devices
+type ccci_device, dev_type;
+type ccci_monitor_device, dev_type;
+type ccci_aud_device, dev_type;
+type nvram_device, dev_type;
+type nvdata_device, dev_type;
+type nvcfg_block_device, dev_type;
+type protect1_block_device, dev_type;
+type protect2_block_device, dev_type;
+type md_block_device, dev_type;
+
+# NV filesystems (/mnt/vendor/*)
+type nvdata_file, file_type;
+type nvcfg_file, file_type;
+type protect_f_data_file, file_type;
+type protect_s_data_file, file_type;
+
+# /data
+type ccci_data_md1_file, file_type, data_file_type;
+type data_vendor_de_md_file, file_type, data_file_type;
+type mtk_radio_data_file, file_type, data_file_type;
+
+# sysfs
+type sysfs_ccci, fs_type, sysfs_type;
+
+# Properties
+vendor_internal_prop(vendor_r1_modem_prop)
+vendor_internal_prop(vendor_mtk_ril_prop)
+vendor_internal_prop(vendor_mtk_md_prop)
+vendor_internal_prop(vendor_mtk_nvram_prop)
+vendor_restricted_prop(vendor_mtk_radio_config_prop)
+
+# HIDL services
+type mtk_hal_rild_hwservice, hwservice_manager_type;
+type nvram_hwservice, hwservice_manager_type;
+type netdagent_hwservice, hwservice_manager_type;

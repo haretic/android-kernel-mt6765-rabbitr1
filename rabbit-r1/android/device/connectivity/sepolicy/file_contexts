@@ -1,0 +1,2 @@
+/dev/wmtWifi							u:object_r:wmtwifi_device:s0
+/(vendor|system/vendor)/bin/mtk-consys-wifi-on\.sh		u:object_r:mtk_consys_wifi_on_exec:s0

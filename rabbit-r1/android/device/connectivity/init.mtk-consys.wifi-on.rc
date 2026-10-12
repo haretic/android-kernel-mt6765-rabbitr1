@@ -1,0 +1,15 @@
+#
+# SPDX-FileCopyrightText: The LineageOS Project
+# SPDX-License-Identifier: Apache-2.0
+#
+# MTK_CONSYS_WIFI_POWER=boot: power the CONSYS Wi-Fi function on once.
+# This blocks for the WMT handshake and the gen4m probe, so it runs as a
+# service rather than as an init write.
+service vendor.mtk-consys-wifi-on /vendor/bin/mtk-consys-wifi-on.sh
+    user wifi
+    group wifi
+    oneshot
+    disabled
+
+on boot
+    start vendor.mtk-consys-wifi-on

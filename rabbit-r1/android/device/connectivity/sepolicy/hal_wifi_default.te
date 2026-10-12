@@ -1,0 +1,2 @@
+# MTK_CONSYS_WIFI_POWER=hal: libwifi_hal writes 1/0 to /dev/wmtWifi.
+allow hal_wifi_default wmtwifi_device:chr_file rw_file_perms;
