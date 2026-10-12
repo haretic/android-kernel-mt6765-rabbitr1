@@ -1296,8 +1296,7 @@ INT32 osal_wake_lock_count(P_OSAL_WAKE_LOCK pLock)
 		return -1;
 
 	if (pLock->init_flag == 1)
-		/* NULL without CONFIG_PM_SLEEP: nothing can be held then. */
-		count = pLock->wake_lock ? pLock->wake_lock->active : 0;
+		count = pLock->wake_lock->active;
 	else
 		pr_info("%s: wake_lock is not initialized!\n", __func__);
 
