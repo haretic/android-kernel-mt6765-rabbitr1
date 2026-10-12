@@ -86,6 +86,35 @@
 		pinctrl-0 = <&r1_cam_avdd_pins>;
 	};
 
+	/*
+	 * Camera rotation ("rabbit eye"): MS35774 stepper driver. Stock
+	 * step_motor_ms35774 switches the motor supply with GPIO163 and waits
+	 * 10 ms before enabling the outputs; PDN is held low and MS1/MS2 at
+	 * high/low throughout.
+	 */
+	r1_motor_vm: regulator-motor-vm {
+		compatible = "regulator-fixed";
+		regulator-name = "motor-vm";
+		gpio = <&pio 163 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		startup-delay-us = <10000>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&r1_motor_vm_pins>;
+	};
+
+	stepper-motor {
+		compatible = "relmon,ms35774";
+		vm-supply = <&r1_motor_vm>;
+		enable-gpios = <&pio 166 GPIO_ACTIVE_LOW>;
+		dir-gpios = <&pio 167 GPIO_ACTIVE_HIGH>;
+		step-gpios = <&pio 168 GPIO_ACTIVE_HIGH>;
+		powerdown-gpios = <&pio 164 GPIO_ACTIVE_HIGH>;
+		mode-gpios = <&pio 171 GPIO_ACTIVE_HIGH>,
+			     <&pio 170 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&r1_motor_pins>;
+	};
+
 	chosen {
 		stdout-path = "serial0:921600n8";
 		/* Single CPU until the r1's PSCI/firmware behavior is measured. */
@@ -848,6 +877,23 @@
 	r1_cam_avdd_pins: cam-avdd-pins {
 		pins-en {
 			pinmux = <PINMUX_GPIO165__FUNC_GPIO165>;
+		};
+	};
+
+	r1_motor_vm_pins: motor-vm-pins {
+		pins-en {
+			pinmux = <PINMUX_GPIO163__FUNC_GPIO163>;
+		};
+	};
+
+	r1_motor_pins: motor-pins {
+		pins-ctrl {
+			pinmux = <PINMUX_GPIO164__FUNC_GPIO164>,
+				 <PINMUX_GPIO166__FUNC_GPIO166>,
+				 <PINMUX_GPIO167__FUNC_GPIO167>,
+				 <PINMUX_GPIO168__FUNC_GPIO168>,
+				 <PINMUX_GPIO170__FUNC_GPIO170>,
+				 <PINMUX_GPIO171__FUNC_GPIO171>;
 		};
 	};
 
