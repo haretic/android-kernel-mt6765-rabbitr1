@@ -117,8 +117,12 @@
 
 	chosen {
 		stdout-path = "serial0:921600n8";
-		/* Single CPU until the r1's PSCI/firmware behavior is measured. */
-		bootargs = "earlycon=uart8250,mmio32,0x11002000 console=ttyS0,921600n8 maxcpus=1 clk_ignore_unused regulator_ignore_unused";
+		/*
+		 * Single CPU until the r1's PSCI/firmware behavior is measured.
+		 * The stock ATF offers PSCI SYSTEM_SUSPEND, but it runs SPM
+		 * firmware that only the stock kernel hands over: sleep to idle.
+		 */
+		bootargs = "earlycon=uart8250,mmio32,0x11002000 console=ttyS0,921600n8 maxcpus=1 clk_ignore_unused regulator_ignore_unused mem_sleep_default=s2idle";
 	};
 
 	/*
