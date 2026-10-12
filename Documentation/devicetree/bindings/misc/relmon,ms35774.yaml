@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/misc/relmon,ms35774.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Relmon MS35774 stepper motor driver
+
+maintainers:
+  - itskenny0 <0@kenny.cat>
+
+description:
+  The MS35774 is a bipolar stepper motor driver with a STEP/DIR interface,
+  an active low enable input and two microstep selection inputs. It is used
+  to rotate a part over a limited range ending in a mechanical stop.
+
+properties:
+  compatible:
+    const: relmon,ms35774
+
+  vm-supply:
+    description: Motor power supply, only enabled while moving.
+
+  enable-gpios:
+    maxItems: 1
+    description: ENN input. Usually flagged GPIO_ACTIVE_LOW.
+
+  dir-gpios:
+    maxItems: 1
+    description: DIR input. Asserted to move towards larger angles.
+
+  step-gpios:
+    maxItems: 1
+    description: STEP input. Must not be on a sleeping GPIO controller.
+
+  powerdown-gpios:
+    maxItems: 1
+    description: Power down input, kept deasserted.
+
+  mode-gpios:
+    items:
+      - description: MS1 microstep selection input
+      - description: MS2 microstep selection input
+
+required:
+  - compatible
+  - vm-supply
+  - enable-gpios
+  - dir-gpios
+  - step-gpios
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+    stepper-motor {
+        compatible = "relmon,ms35774";
+        vm-supply = <&motor_vm>;
+        enable-gpios = <&pio 166 GPIO_ACTIVE_LOW>;
+        dir-gpios = <&pio 167 GPIO_ACTIVE_HIGH>;
+        step-gpios = <&pio 168 GPIO_ACTIVE_HIGH>;
+        powerdown-gpios = <&pio 164 GPIO_ACTIVE_HIGH>;
+        mode-gpios = <&pio 171 GPIO_ACTIVE_HIGH>,
+                     <&pio 170 GPIO_ACTIVE_HIGH>;
+    };
