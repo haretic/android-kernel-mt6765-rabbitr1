@@ -14,7 +14,9 @@
  *            core stays parked: its boot vector is not enabled.
  *   stage=2  also prepare the CCIF hardware and the shared memory ring
  *            buffers, release the modem and wait for its first handshake
- *            (HS1, MD_INIT_START_BOOT on the control channel).
+ *            (HS1, MD_INIT_START_BOOT plus the modem's runtime feature
+ *            query, which a gen93 modem writes into the CCIF SRAM and
+ *            signals on CCIF channel 15, D2H_SRAM).
  *
  * The modem image is not loaded here: LK has loaded, verified and
  * protected it before Linux starts. Every wait is bounded. Nothing but SoC
@@ -115,7 +117,9 @@ MODULE_PARM_DESC(keep_on_fail, "Leave the modem running when no HS1 arrives (def
 #define APCCIF_CHDATA			0x100
 #define CCIF_SRAM_SIZE			512
 #define CCIF_BOOT_TRACE_LEN		60
-#define CCIF_RX_EXCEPTION_INIT		16
+/* MT6765 channel map, eccci/mt6765/ccif_hif_platform.h */
+#define CCIF_RX_SRAM			15	/* D2H_SRAM */
+#define CCIF_RX_EXCEPTION_INIT		16	/* D2H_EXCEPTION_INIT */
 
 /* LK handoff */
 #define LK_INFO_MAX_SIZE		0x10000
@@ -179,6 +183,18 @@ static const u32 rbf_exp_tx_size[CCIF_QUEUE_NUM] = {
 #define CCCI_CONTROL_RX			0
 #define MD_INIT_START_BOOT		0x0
 #define MD_INIT_CHK_ID			0x5555ffff
+
+/*
+ * struct ccif_sram_layout (hif/ccci_hif_ccif.h) at APCCIF_CHDATA: the
+ * modem's HS1 header, then its struct md_query_ap_feature (inc/ccci_modem.h,
+ * gen93: head, 64 feature bytes, tail, 152 reserved), then the AP's reply
+ * area for HS2.
+ */
+#define MD_FEATURE_COUNT		64
+#define MD_FEATURE_QUERY_PATTERN	0x49434343	/* "CCCI" */
+#define MD_RT_DATA_LEN			(4 + MD_FEATURE_COUNT + 4 + 152)
+#define SRAM_HS1_LEN			(CCCI_HEADER_LEN + MD_RT_DATA_LEN)
+#define CCCI_FEATURE_MUST_SUPPORT	2
 
 static const char * const r1md_clk_names[] = {
 	"cldma-bclk", "ccif-ap", "ccif-md", "ccif1-ap", "ccif1-md",
@@ -293,6 +309,43 @@ static u32 r1md_rd(struct regmap *map, unsigned int reg)
  * Stage 0: LK handoff and status, read only
  */
 
+/*
+ * md_mpu_inf is LK's table, not the kernel's 20 byte struct _mpu_cfg
+ * (mt-plat/mtk_ccci_common.h), which the stock kernel copies blindly and
+ * never looks at. The r1 LK fills 24 byte entries: u32 start, end;
+ * s32 region; u32 apc[2] (3 bit permission per EMI domain, domains 0-7 in
+ * apc[0] with the lock in bit 31, 8-15 in apc[1]); u32 unused. A region of
+ * -1 ends the table.
+ */
+#define LK_MPU_ENTRY_LEN		24
+
+static void r1md_decode_mpu(const u8 *d, u32 size)
+{
+	char perm[17];
+	u32 i, apc0, apc1;
+	s32 region;
+	int dom;
+
+	for (i = 0; i + LK_MPU_ENTRY_LEN <= size; i += LK_MPU_ENTRY_LEN) {
+		region = get_unaligned_le32(d + i + 8);
+		if (region == -1)
+			break;
+		apc0 = get_unaligned_le32(d + i + 12);
+		apc1 = get_unaligned_le32(d + i + 16);
+		for (dom = 0; dom < 16; dom++)
+			perm[dom] = '0' + (((dom < 8 ? apc0 : apc1) >> (3 * (dom % 8))) & 7);
+		perm[16] = '\0';
+		pr_info("  md_mpu_inf: region %d %#010x-%#010x apc %#010x %#010x domains[0..15] %s%s (+20 %#x)\n",
+			region, get_unaligned_le32(d + i),
+			get_unaligned_le32(d + i + 4), apc0, apc1, perm,
+			apc0 & BIT(31) ? " locked" : "",
+			get_unaligned_le32(d + i + 20));
+	}
+	if (size % LK_MPU_ENTRY_LEN)
+		pr_warn("  md_mpu_inf: %u bytes is not a whole number of %u byte entries\n",
+			size, LK_MPU_ENTRY_LEN);
+}
+
 static void r1md_decode_tag(const char *name, const u8 *d, u32 size)
 {
 	u32 i, n;
@@ -333,14 +386,7 @@ static void r1md_decode_tag(const char *name, const u8 *d, u32 size)
 		pr_info("  ccb_info: data %#llx size %#x\n",
 			(u64)handoff.c_smem_base, handoff.c_smem_size);
 	} else if (!strcmp(name, "md_mpu_inf")) {
-		/* struct _mpu_cfg: u32 start, end; s32 region; u32 perm; s32 relate */
-		for (i = 0; i + 20 <= size; i += 20)
-			pr_info("  md_mpu_inf: region %d %#010x-%#010x permission %#x relate %d\n",
-				(s32)get_unaligned_le32(d + i + 8),
-				get_unaligned_le32(d + i),
-				get_unaligned_le32(d + i + 4),
-				get_unaligned_le32(d + i + 12),
-				(s32)get_unaligned_le32(d + i + 16));
+		r1md_decode_mpu(d, size);
 	} else if (!strcmp(name, "md1_chk") && size >= 192) {
 		/* struct md_check_header_v5/v6 common prefix */
 		pr_info("  md1_chk: magic %.12s ver %u product %u type %u platform %.16s\n",
@@ -918,7 +964,80 @@ static u32 r1md_boot_sta(struct r1md *md, unsigned int idx)
 	return readl(md->boot_sta + 4 * idx);
 }
 
-/* one packet from queue 0's AP RX ring, eccci ccci_ringbuf_readable/read */
+/*
+ * How the stock HS1 failure report (fsm/mdee_dumper_v3.c md_HS1_Fail_dump)
+ * classifies MD boot status 0 for a pre-gen95 modem.
+ */
+static const char *r1md_boot_sta_desc(u32 s0)
+{
+	if (!s0)
+		return "not started";
+	if (s0 == 0x54430007 || (s0 >= 0x53310000 && s0 <= 0x533100ff))
+		return "past the MD boot ROM";
+	return "MD boot ROM failure range";
+}
+
+/*
+ * HS1 on a gen93 modem: md_ccif_isr() sees D2H_SRAM, acks it and
+ * md_ccif_sram_rx_work() copies the ccci_header and md_query_ap_feature
+ * out of the CCIF SRAM, 32 bits at a time, into the control port, where
+ * ccci_fsm_recv_control_packet() turns it into CCCI_EVENT_HS1.
+ */
+static void r1md_read_hs1(struct r1md *md, unsigned int elapsed)
+{
+	u8 buf[SRAM_HS1_LEN];
+	const u8 *feat = buf + CCCI_HEADER_LEN + 4;
+	u32 data0, data1, chseq, reserved, head, tail;
+	u64 must = 0;
+	unsigned int i;
+
+	for (i = 0; i < SRAM_HS1_LEN; i += 4)
+		put_unaligned_le32(readl(md->ap_ccif + APCCIF_CHDATA + i), buf + i);
+
+	data0 = get_unaligned_le32(buf);
+	data1 = get_unaligned_le32(buf + 4);
+	chseq = get_unaligned_le32(buf + 8);
+	reserved = get_unaligned_le32(buf + 12);
+	head = get_unaligned_le32(buf + CCCI_HEADER_LEN);
+	tail = get_unaligned_le32(buf + CCCI_HEADER_LEN + 4 + MD_FEATURE_COUNT);
+
+	pr_info("[%u ms] CCIF SRAM ccci_header data0 %#x data1 %#x channel %u seq %u reserved %#x\n",
+		elapsed, data0, data1, chseq & 0xffff, (chseq >> 16) & 0x7fff,
+		reserved);
+
+	if ((chseq & 0xffff) != CCCI_CONTROL_RX || data1 != MD_INIT_START_BOOT ||
+	    reserved != MD_INIT_CHK_ID) {
+		pr_warn("[%u ms] CCIF SRAM message is not HS1\n", elapsed);
+		return;
+	}
+
+	md->hs1 = true;
+	pr_info("[%u ms] HS1 (MD_INIT_START_BOOT) received from the modem in the CCIF SRAM\n",
+		elapsed);
+
+	/* what ccci_md_prepare_runtime_data() checks first */
+	if (head != MD_FEATURE_QUERY_PATTERN || tail != MD_FEATURE_QUERY_PATTERN) {
+		pr_warn("[%u ms] HS1 feature query pattern wrong: head %#x tail %#x\n",
+			elapsed, head, tail);
+		return;
+	}
+	for (i = 0; i < MD_FEATURE_COUNT; i++)
+		if ((feat[i] & 0xf) == CCCI_FEATURE_MUST_SUPPORT)
+			must |= BIT_ULL(i);
+	/* one byte per feature id: support_mask in bits 0-3, version in 4-7 */
+	pr_info("[%u ms] HS1 feature query 0-31:  %*ph\n", elapsed, 32, feat);
+	pr_info("[%u ms] HS1 feature query 32-63: %*ph\n", elapsed, 32, feat + 32);
+	pr_info("[%u ms] HS1 features the modem requires (mask 2): %#llx\n",
+		elapsed, must);
+}
+
+/*
+ * One packet from queue 0's AP RX ring, eccci ccci_ringbuf_readable/read.
+ * Diagnostic only: HS1 does not come this way (it is in the CCIF SRAM).
+ * A gen93 MD1 carries its control and AT traffic here (MD1_NORMAL_HIF is
+ * CCIF, inc/ccci_hif.h), but only after it has learnt where the rings are
+ * from the runtime data the AP sends in answer to HS1.
+ */
 static void r1md_check_rx_q0(struct r1md *md, unsigned int elapsed)
 {
 	u8 *rb = md->nc_smem.va + SMEM_CCISM_MCU_OFF;
@@ -959,18 +1078,10 @@ static void r1md_check_rx_q0(struct r1md *md, unsigned int elapsed)
 	pr_info("[%u ms] q0 rx: ccci_header data0 %#x data1 %#x channel %u seq %u reserved %#x\n",
 		elapsed, hd[0], hd[1], hd[2] & 0xffff, (hd[2] >> 16) & 0x7fff, hd[3]);
 
-	/* payload after the header: md_query_ap_feature for HS1 */
 	words = min_t(u32, (hdr[1] - CCCI_HEADER_LEN) / 4, 8);
 	for (i = 0; i < words; i++)
 		pr_info("[%u ms] q0 rx: payload[%u] %#010x\n", elapsed, i,
 			READ_ONCE(*(u32 *)(buf + (pos + CCCI_HEADER_LEN + 4 * i) % len)));
-
-	if ((hd[2] & 0xffff) == CCCI_CONTROL_RX && hd[1] == MD_INIT_START_BOOT &&
-	    hd[3] == MD_INIT_CHK_ID) {
-		md->hs1 = true;
-		pr_info("[%u ms] HS1 (MD_INIT_START_BOOT, %u bytes) received from the modem\n",
-			elapsed, hdr[1]);
-	}
 
 	/* finish reading the package before handing the space back */
 	mb();
@@ -997,7 +1108,8 @@ static int r1md_wait_hs1(struct r1md *md)
 		s0 = r1md_boot_sta(md, 0);
 		s1 = r1md_boot_sta(md, 1);
 		if (s0 != sta0 || s1 != sta1) {
-			pr_info("[%u ms] MD boot status %#010x %#010x\n", elapsed, s0, s1);
+			pr_info("[%u ms] MD boot status %#010x %#010x (%s)\n", elapsed,
+				s0, s1, r1md_boot_sta_desc(s0));
 			sta0 = s0;
 			sta1 = s1;
 		}
@@ -1016,8 +1128,13 @@ static int r1md_wait_hs1(struct r1md *md)
 				pr_info("[%u ms] CCIF RCHNUM %#x (new %#x)\n", elapsed,
 					rch, rch & ~seen);
 			seen |= rch;
-			/* only the low 16 channels are acked by the AP */
+			/*
+			 * md_ccif_isr(): ack first, only the low 16 channels;
+			 * the SRAM content stays until the AP answers.
+			 */
 			writel(rch & 0xffff, md->ap_ccif + APCCIF_ACK);
+			if (rch & BIT(CCIF_RX_SRAM))
+				r1md_read_hs1(md, elapsed);
 			if (rch & BIT(CCIF_RX_EXCEPTION_INIT)) {
 				pr_err("[%u ms] modem raised D2H_EXCEPTION_INIT: it hit an exception\n",
 				       elapsed);
