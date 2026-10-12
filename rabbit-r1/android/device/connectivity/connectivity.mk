@@ -14,7 +14,7 @@
 # optional/prebuilt_kernel copies them to /vendor/lib/modules.
 #
 
-MTK_CONSYS_PATH := device/mainline/common/optional/connectivity
+MTK_CONSYS_PATH := device/rabbit/r1/connectivity
 
 # Proprietary CONSYS firmware, copied unmodified from the stock
 # /vendor/firmware. WMT requests the soc1_0_* patches and WMT_SOC.cfg,

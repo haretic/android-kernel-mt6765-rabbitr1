@@ -104,7 +104,5 @@ PRODUCT_VENDOR_PROPERTIES += ro.sf.lcd_density=140
 # MT6765 AFE + MT6357 codec + AW87390 speaker amplifier.
 $(call inherit-product, $(LOCAL_PATH)/audio/audio.mk)
 
-# CONSYS (Wi-Fi/BT) firmware, unmodified from stock /vendor/firmware. The
-# modules are still loaded by hand during bring-up.
-PRODUCT_COPY_FILES += \
-    $(foreach f,$(wildcard vendor/rabbit/r1-consys/proprietary/firmware/*),$(f):$(TARGET_COPY_OUT_VENDOR)/firmware/$(notdir $(f)))
+# CONSYS Wi-Fi/BT: stock firmware, module loading, Wi-Fi powered at boot.
+$(call inherit-product, $(LOCAL_PATH)/connectivity/connectivity.mk)
