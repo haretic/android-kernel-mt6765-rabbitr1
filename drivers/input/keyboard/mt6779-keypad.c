@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/property.h>
 #include <linux/platform_device.h>
+#include <linux/pm_wakeirq.h>
 #include <linux/regmap.h>
 
 #define MTK_KPD_NAME		"mt6779-keypad"
@@ -235,6 +236,14 @@ static int mt6779_keypad_pdrv_probe(struct platform_device *pdev)
 	if (error)
 		dev_warn(&pdev->dev, "device_init_wakeup() failed: %d\n",
 			 error);
+
+	/* Let the PM core arm the key IRQ for wakeup while suspended. */
+	if (wakeup) {
+		error = devm_pm_set_wake_irq(&pdev->dev, irq);
+		if (error)
+			dev_warn(&pdev->dev, "Failed to set wake IRQ: %d\n",
+				 error);
+	}
 
 	return 0;
 }
