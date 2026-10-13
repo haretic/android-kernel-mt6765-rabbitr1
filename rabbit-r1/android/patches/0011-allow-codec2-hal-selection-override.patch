@@ -1,0 +1,20 @@
+From: itskenny0 <0@kenny.cat>
+Subject: [PATCH] Let devices override the Codec2 HAL selection
+
+Default media.c2.hal.selection to aidl instead of forcing it, so a device
+whose vendor Codec2 HAL is HIDL-only can select hidl without a duplicate
+property assignment.
+
+---
+diff --git a/properties/vendor.prop b/properties/vendor.prop
+index 0004f13..3ba74fd 100644
+--- a/properties/vendor.prop
++++ b/properties/vendor.prop
+@@ -11,6 +11,6 @@ ro.incremental.enable=1
+ vendor.light.backlight.disable?=true
+ 
+ # Media
+-media.c2.hal.selection=aidl
++media.c2.hal.selection?=aidl
+ debug.c2.use_dmabufheaps=1
+ debug.stagefright.c2inputsurface=-1
