@@ -18,9 +18,18 @@
  * The page allocator follows drivers/dma-buf/heaps/system_heap.c, with the
  * legacy ION_FLAG_CACHED semantic added back: buffers without the flag are
  * flushed once at allocation and mapped write-combined for the CPU.
+ *
+ * Some blobs (the video codec libraries) program DMA addresses into their
+ * hardware themselves. Stock hands them M4U addresses: a buffer is tagged
+ * with the M4U port of its engine (ION_MM_CONFIG_BUFFER) and ION_SYS_GET_PHYS
+ * or ION_MM_GET_IOVA then return its address in that engine's IOMMU space.
+ * Drivers for such engines register the stock port ids they serve with their
+ * IOMMU-attached device, and buffers tagged for those ports are mapped
+ * through it.
  */
 
 #include <linux/compat.h>
+#include <linux/device.h>
 #include <linux/device/faux.h>
 #include <linux/dma-buf.h>
 #include <linux/dma-mapping.h>
@@ -40,6 +49,7 @@
 #include <uapi/linux/dma-buf.h>
 
 #include "mtk_ion_abi.h"
+#include "mtk_ion_compat.h"
 
 #define MIC_EXP_NAME	"mtk_ion_compat"
 
@@ -109,6 +119,8 @@ struct mic_buffer {
 	unsigned int coherent;
 	char dbg_name[ION_MM_DBG_NAME_LEN];
 	unsigned int dbg_value[4];
+
+	struct list_head iova_maps;	/* mic_iova_lock */
 };
 
 struct mic_attachment {
@@ -117,6 +129,28 @@ struct mic_attachment {
 	struct list_head list;
 	bool mapped;
 };
+
+/* An engine serving a range of stock M4U ports, see mtk_ion_compat.h. */
+struct mic_iova_dev {
+	struct list_head list;
+	struct device *dev;
+	int first_port;
+	int last_port;
+	struct list_head maps;
+};
+
+/* A buffer mapped through an iova device, for the lifetime of either. */
+struct mic_iova_map {
+	struct list_head dev_node;
+	struct list_head buf_node;
+	struct mic_iova_dev *idev;
+	struct mic_buffer *buffer;
+	struct sg_table table;
+};
+
+/* The iova devices and the maps of every buffer. */
+static DEFINE_MUTEX(mic_iova_lock);
+static LIST_HEAD(mic_iova_devs);
 
 struct mic_handle {
 	struct dma_buf *dmabuf;
@@ -137,10 +171,6 @@ static bool mic_is_ours(struct dma_buf *dmabuf)
 	return dmabuf->ops == &mic_dmabuf_ops;
 }
 
-/* ------------------------------------------------------------------------
- * DMA-BUF exporter
- */
-
 static int mic_dup_sg_table(struct sg_table *from, struct sg_table *to)
 {
 	struct scatterlist *sg, *new_sg;
@@ -158,6 +188,167 @@ static int mic_dup_sg_table(struct sg_table *from, struct sg_table *to)
 
 	return 0;
 }
+
+/* ------------------------------------------------------------------------
+ * Device addresses for engines programmed by the blobs
+ */
+
+static struct mic_iova_dev *mic_iova_dev_find(int port)
+{
+	struct mic_iova_dev *idev;
+
+	lockdep_assert_held(&mic_iova_lock);
+
+	list_for_each_entry(idev, &mic_iova_devs, list) {
+		if (port >= idev->first_port && port <= idev->last_port)
+			return idev;
+	}
+	return NULL;
+}
+
+static void mic_iova_unmap(struct mic_iova_map *map)
+{
+	struct mic_buffer *buffer = map->buffer;
+	unsigned long attrs = buffer->cached ? 0 : DMA_ATTR_SKIP_CPU_SYNC;
+
+	lockdep_assert_held(&mic_iova_lock);
+
+	dma_unmap_sgtable(map->idev->dev, &map->table, DMA_BIDIRECTIONAL,
+			  attrs);
+	sg_free_table(&map->table);
+	list_del(&map->dev_node);
+	list_del(&map->buf_node);
+	kfree(map);
+}
+
+/*
+ * Address of @buffer for the engine behind stock M4U port @port. The first
+ * request maps the buffer through the engine's device; the mapping is kept
+ * until the buffer is freed, as stock keeps its M4U mappings.
+ */
+static int mic_buffer_iova(struct mic_buffer *buffer, int port, u64 *iova)
+{
+	unsigned long attrs = buffer->cached ? 0 : DMA_ATTR_SKIP_CPU_SYNC;
+	struct mic_iova_dev *idev;
+	struct mic_iova_map *map;
+	struct scatterlist *sg;
+	dma_addr_t start, next;
+	int i, ret;
+
+	mutex_lock(&mic_iova_lock);
+
+	idev = mic_iova_dev_find(port);
+	if (!idev) {
+		ret = -ENODEV;
+		goto out_unlock;
+	}
+
+	/* One mapping per device, whichever of its port ranges asked first. */
+	list_for_each_entry(map, &buffer->iova_maps, buf_node) {
+		if (map->idev->dev == idev->dev)
+			goto out_found;
+	}
+
+	map = kzalloc_obj(*map);
+	if (!map) {
+		ret = -ENOMEM;
+		goto out_unlock;
+	}
+
+	ret = mic_dup_sg_table(&buffer->sgt, &map->table);
+	if (ret)
+		goto err_free_map;
+
+	ret = dma_map_sgtable(idev->dev, &map->table, DMA_BIDIRECTIONAL, attrs);
+	if (ret)
+		goto err_free_table;
+
+	/* The engines take one base address per buffer. */
+	start = sg_dma_address(map->table.sgl);
+	next = start;
+	for_each_sgtable_dma_sg(&map->table, sg, i) {
+		if (sg_dma_address(sg) != next)
+			break;
+		next += sg_dma_len(sg);
+	}
+	if (next - start != buffer->len) {
+		dev_warn(idev->dev, "buffer of %zu bytes is not contiguous in IOVA space\n",
+			 buffer->len);
+		ret = -EFAULT;
+		goto err_unmap;
+	}
+
+	map->idev = idev;
+	map->buffer = buffer;
+	list_add(&map->dev_node, &idev->maps);
+	list_add(&map->buf_node, &buffer->iova_maps);
+
+out_found:
+	*iova = sg_dma_address(map->table.sgl);
+	ret = 0;
+out_unlock:
+	mutex_unlock(&mic_iova_lock);
+	return ret;
+
+err_unmap:
+	dma_unmap_sgtable(idev->dev, &map->table, DMA_BIDIRECTIONAL, attrs);
+err_free_table:
+	sg_free_table(&map->table);
+err_free_map:
+	kfree(map);
+	goto out_unlock;
+}
+
+static void mic_iova_remove_device(void *data)
+{
+	struct mic_iova_dev *idev = data;
+	struct mic_iova_map *map, *tmp;
+
+	mutex_lock(&mic_iova_lock);
+	list_for_each_entry_safe(map, tmp, &idev->maps, dev_node)
+		mic_iova_unmap(map);
+	list_del(&idev->list);
+	mutex_unlock(&mic_iova_lock);
+
+	kfree(idev);
+}
+
+int devm_mtk_ion_compat_add_iova_device(struct device *dev, int first_port,
+					int last_port)
+{
+	struct mic_iova_dev *idev;
+	int port;
+
+	if (first_port < 0 || first_port > last_port)
+		return -EINVAL;
+
+	idev = kzalloc_obj(*idev);
+	if (!idev)
+		return -ENOMEM;
+
+	idev->dev = dev;
+	idev->first_port = first_port;
+	idev->last_port = last_port;
+	INIT_LIST_HEAD(&idev->maps);
+
+	mutex_lock(&mic_iova_lock);
+	for (port = first_port; port <= last_port; port++) {
+		if (mic_iova_dev_find(port)) {
+			mutex_unlock(&mic_iova_lock);
+			kfree(idev);
+			return -EBUSY;
+		}
+	}
+	list_add(&idev->list, &mic_iova_devs);
+	mutex_unlock(&mic_iova_lock);
+
+	return devm_add_action_or_reset(dev, mic_iova_remove_device, idev);
+}
+EXPORT_SYMBOL_GPL(devm_mtk_ion_compat_add_iova_device);
+
+/* ------------------------------------------------------------------------
+ * DMA-BUF exporter
+ */
 
 static int mic_attach(struct dma_buf *dmabuf, struct dma_buf_attachment *att)
 {
@@ -231,6 +422,7 @@ static int mic_begin_cpu_access(struct dma_buf *dmabuf,
 				enum dma_data_direction dir)
 {
 	struct mic_buffer *buffer = dmabuf->priv;
+	struct mic_iova_map *map;
 	struct mic_attachment *a;
 
 	/* Uncached buffers are only ever mapped write-combined. */
@@ -244,6 +436,10 @@ static int mic_begin_cpu_access(struct dma_buf *dmabuf,
 		if (a->mapped)
 			dma_sync_sgtable_for_cpu(a->dev, &a->table, dir);
 	}
+	mutex_lock(&mic_iova_lock);
+	list_for_each_entry(map, &buffer->iova_maps, buf_node)
+		dma_sync_sgtable_for_cpu(map->idev->dev, &map->table, dir);
+	mutex_unlock(&mic_iova_lock);
 	mutex_unlock(&buffer->lock);
 
 	return 0;
@@ -253,6 +449,7 @@ static int mic_end_cpu_access(struct dma_buf *dmabuf,
 			      enum dma_data_direction dir)
 {
 	struct mic_buffer *buffer = dmabuf->priv;
+	struct mic_iova_map *map;
 	struct mic_attachment *a;
 
 	if (!buffer->cached)
@@ -265,6 +462,10 @@ static int mic_end_cpu_access(struct dma_buf *dmabuf,
 		if (a->mapped)
 			dma_sync_sgtable_for_device(a->dev, &a->table, dir);
 	}
+	mutex_lock(&mic_iova_lock);
+	list_for_each_entry(map, &buffer->iova_maps, buf_node)
+		dma_sync_sgtable_for_device(map->idev->dev, &map->table, dir);
+	mutex_unlock(&mic_iova_lock);
 	mutex_unlock(&buffer->lock);
 
 	return 0;
@@ -391,6 +592,12 @@ static void mic_free_pages(struct mic_buffer *buffer)
 static void mic_release(struct dma_buf *dmabuf)
 {
 	struct mic_buffer *buffer = dmabuf->priv;
+	struct mic_iova_map *map, *tmp;
+
+	mutex_lock(&mic_iova_lock);
+	list_for_each_entry_safe(map, tmp, &buffer->iova_maps, buf_node)
+		mic_iova_unmap(map);
+	mutex_unlock(&mic_iova_lock);
 
 	mic_free_pages(buffer);
 	kfree(buffer);
@@ -547,6 +754,7 @@ static struct dma_buf *mic_buffer_alloc(size_t len, unsigned int heap_id_mask,
 		return ERR_PTR(-ENOMEM);
 
 	INIT_LIST_HEAD(&buffer->attachments);
+	INIT_LIST_HEAD(&buffer->iova_maps);
 	mutex_init(&buffer->lock);
 	buffer->len = len;
 	buffer->cached = flags & ION_FLAG_CACHED;
@@ -839,19 +1047,34 @@ static int mic_cache_sync(struct dma_buf *dmabuf, unsigned int sync_type)
 	return ret;
 }
 
-/* Physical address of a buffer, if it is one contiguous chunk. */
+/*
+ * ION_SYS_GET_PHYS: as on stock, the device address for the M4U port the
+ * buffer was configured for. Otherwise the physical address, if the buffer
+ * is one contiguous chunk.
+ */
 static int mic_buffer_phys(struct dma_buf *dmabuf, u64 *phys, u64 *len)
 {
 	struct mic_buffer *buffer;
+	int module_id, ret;
 
 	if (!mic_is_ours(dmabuf))
 		return -EFAULT;
 	buffer = dmabuf->priv;
+
+	mutex_lock(&buffer->lock);
+	module_id = buffer->module_id;
+	mutex_unlock(&buffer->lock);
+
+	*len = buffer->len;
+	if (module_id >= 0) {
+		ret = mic_buffer_iova(buffer, module_id, phys);
+		if (ret != -ENODEV)
+			return ret;
+	}
+
 	if (buffer->sgt.orig_nents != 1)
 		return -EFAULT;
-
 	*phys = sg_phys(buffer->sgt.sgl);
-	*len = buffer->len;
 	return 0;
 }
 
@@ -879,8 +1102,8 @@ static long mic_sys_do(struct mic_client *client, struct ion_sys_data *p)
 		ret = mic_buffer_phys(dmabuf, &phys, &len);
 		dma_buf_put(dmabuf);
 		if (ret) {
-			pr_debug("mtk_ion_compat: %s: GET_PHYS on a scattered buffer\n",
-				 client->name);
+			pr_debug("mtk_ion_compat: %s: no address for GET_PHYS: %ld\n",
+				 client->name, ret);
 			p->get_phys_param.phy_addr = 0;
 			p->get_phys_param.len = 0;
 			return ret;
@@ -911,7 +1134,9 @@ static long mic_mm_do(struct mic_client *client, struct ion_mm_data *p)
 {
 	struct mic_buffer *buffer;
 	struct dma_buf *dmabuf;
+	size_t len = 0;
 	long ret = 0;
+	u64 iova;
 
 	switch (p->mm_cmd) {
 	case ION_MM_CONFIG_BUFFER:
@@ -992,17 +1217,32 @@ static long mic_mm_do(struct mic_client *client, struct ion_mm_data *p)
 
 	case ION_MM_GET_IOVA:
 	case ION_MM_GET_IOVA_EXT:
-		/*
-		 * IOVAs belong to the vendor M4U driver, which does not exist
-		 * here; devices get their addresses by attaching the dma-buf.
-		 */
 		if (!p->get_phys_param.handle)
 			return -EFAULT;
-		pr_debug("mtk_ion_compat: %s: GET_IOVA is not supported\n",
-			 client->name);
-		p->get_phys_param.phy_addr = 0;
-		p->get_phys_param.len = 0;
-		return -EFAULT;
+		dmabuf = mic_handle_get_dmabuf(client,
+					       p->get_phys_param.handle);
+		if (IS_ERR(dmabuf))
+			return -EINVAL;
+		ret = -EFAULT;
+		if (mic_is_ours(dmabuf)) {
+			buffer = dmabuf->priv;
+			len = buffer->len;
+			ret = mic_buffer_iova(buffer,
+					      p->get_phys_param.module_id,
+					      &iova);
+		}
+		dma_buf_put(dmabuf);
+		if (ret) {
+			pr_debug("mtk_ion_compat: %s: no address for GET_IOVA, port %d: %ld\n",
+				 client->name, p->get_phys_param.module_id,
+				 ret);
+			p->get_phys_param.phy_addr = 0;
+			p->get_phys_param.len = 0;
+			return -EFAULT;
+		}
+		p->get_phys_param.phy_addr = iova;
+		p->get_phys_param.len = len;
+		return 0;
 
 	default:
 		/* SET/GET_SF_BUF_INFO and unknown commands: as stock, -EFAULT. */
@@ -1228,6 +1468,11 @@ static long mic_mm_ioctl(struct mic_client *client, void __user *uarg,
 		break;
 	case ION_MM_QRY_CACHE_POOL:
 		c.pool_info_param.ret = p.pool_info_param.ret;
+		break;
+	case ION_MM_GET_IOVA:
+	case ION_MM_GET_IOVA_EXT:
+		c.get_phys_param.phy_addr = p.get_phys_param.phy_addr;
+		c.get_phys_param.len = p.get_phys_param.len;
 		break;
 	}
 	return copy_to_user(uarg, &c, sizeof(c)) ? -EFAULT : 0;

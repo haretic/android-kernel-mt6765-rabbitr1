@@ -751,6 +751,10 @@
 	status = "okay";
 };
 
+&vcodec {
+	status = "okay";
+};
+
 /*
  * MD1 core rail. The stock modem driver sets it to 0.8 V before every
  * modem power on and never switches it off; do the same from boot.
