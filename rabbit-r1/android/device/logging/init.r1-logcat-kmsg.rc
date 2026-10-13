@@ -4,7 +4,9 @@ service r1-logcat-kmsg /system_ext/bin/r1-logcat-kmsg.sh
     group log
     disabled
 
-on post-fs-data
+# It costs most of a core while boot is CPU bound and wraps the kernel log, so
+# it is opt-in: adb shell setprop persist.debug.r1.logcat_kmsg 1, then reboot.
+on load_persist_props_action && property:persist.debug.r1.logcat_kmsg=1
     start r1-logcat-kmsg
 
 # The mirror is for boot debugging; it costs most of a core afterwards.
