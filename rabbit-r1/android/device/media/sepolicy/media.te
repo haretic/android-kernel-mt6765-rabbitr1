@@ -29,3 +29,10 @@ set_prop(vendor_init, vendor_mtk_media_prop)
 # IMtkPerf boost service, which this build does not have.
 dontaudit mediacodec default_prop:file read;
 dontaudit mediacodec default_android_hwservice:hwservice_manager find;
+
+# Apps that run MediaCodec in their own process (browsers, galleries) hand the
+# HAL memfds they created: the output surface's sync memory and BufferPool's
+# message queues. Android 17 labels those with the app's domain; without this
+# setOutputSurface fails and every input buffer is refused. AOSP grants
+# mediaswcodec the same.
+allow mediacodec appdomain:memfd_file { getattr map read write };
