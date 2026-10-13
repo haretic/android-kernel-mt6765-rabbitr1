@@ -62,7 +62,7 @@ services, because `ro.vendor.api_level` is below 202404 and
 | `shim/` | `libr1_codec2_shim.so` (32-bit) provides the five Android 12 symbols the blobs import and Android 17 lacks. See "Linking" below. |
 | `init.r1.media.rc` | The HAL service: user `mediacodec`, stock groups without the network ones. |
 | `ueventd.r1-media.rc` | `/dev/Vcodec 0660 media system`, as stock. |
-| `media_codecs_c2_encode.xml` | Stage 1 codec list: `c2.mtk.avc.encoder` only. |
+| `media_codecs_c2_encode.xml` | Stage 1 codec list: `c2.mtk.avc.encoder` only. Installed as `/vendor/etc/media_codecs.xml` (the optional FFmpeg HAL owns `media_codecs_c2.xml`). |
 | `media_codecs_c2.xml` | Stage 2 codec list: adds `c2.mtk.avc.decoder` and `c2.mtk.hevc.decoder`. |
 | `manifest-media.xml` | HIDL `android.hardware.media.c2@1.2::IComponentStore/default`. |
 | `sepolicy/` | The HAL runs in the platform `mediacodec` domain. Adds `/dev/Vcodec` (`r1_vcodec_device`), `/dev/ion` and GED for that domain. |
@@ -123,6 +123,29 @@ templates. Two of these are worth knowing about:
 
    Check each patched library with `readelf -d`: it should list
    `libr1_codec2_shim.so` as `NEEDED`.
+
+   Then move the Android 12 libraries whose names AOSP modules own into
+   `lib/r1-c2/` and give every ELF a runpath to it (see `blobs.txt`):
+
+   ```sh
+   cd vendor/rabbit/r1-media/proprietary
+   mkdir -p lib/r1-c2
+   for f in android.hardware.media.c2@1.0.so android.hardware.media.c2@1.1.so \
+            android.hardware.media.c2@1.2.so libavservices_minijail_vendor.so \
+            libcodec2_hidl@1.0.so libcodec2_hidl@1.1.so libcodec2_hidl@1.2.so \
+            libcodec2_hidl_plugin.so libcodec2_soft_common.so libcodec2_vndk.so \
+            libhwbinder.so libsfplugin_ccodec_utils.so libstagefright_bufferpool@2.0.1.so; do
+       mv lib/$f lib/r1-c2/$f
+   done
+   for f in $(find bin lib -type f); do
+       head -c4 $f | grep -q ELF && patchelf --set-rpath /vendor/lib/r1-c2 $f
+   done
+   ```
+
+   Installed under their own names in `/vendor/lib`, they would clash at build
+   time with the AOSP modules of the same name ("overriding commands for
+   target"). Bionic searches the caller's `DT_RUNPATH` for both `DT_NEEDED`
+   and `dlopen()`, so the HAL finds them there.
 3. **`device.mk`**: `$(call inherit-product, $(LOCAL_PATH)/media/media.mk)`.
    It requires `R1_GPU=pvr`, because buffers are mapped with the stock 32-bit
    PowerVR gralloc mapper.
