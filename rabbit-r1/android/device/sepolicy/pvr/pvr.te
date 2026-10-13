@@ -1,10 +1,10 @@
 # MediaTek GED (/proc/ged): the PowerVR userspace and gralloc_extra issue bridge ioctls in-process.
 type proc_ged, fs_type, proc_type;
-allow { appdomain coredomain hal_graphics_allocator_server hal_graphics_composer_server } proc_ged:file { r_file_perms ioctl };
+allow { appdomain coredomain hal_camera_server hal_graphics_allocator_server hal_graphics_composer_server } proc_ged:file { r_file_perms ioctl };
 # gralloc.rogue allocates through the legacy ION compatibility device.
 allow { hal_graphics_allocator_server hal_graphics_composer_server } ion_device:chr_file rw_file_perms;
 # GED bridge commands are _IO('g', n); the platform restricts ioctls by command.
-allowxperm { appdomain coredomain hal_graphics_allocator_server hal_graphics_composer_server } proc_ged:file ioctl { 0x6700-0x67ff };
+allowxperm { appdomain coredomain hal_camera_server hal_graphics_allocator_server hal_graphics_composer_server } proc_ged:file ioctl { 0x6700-0x67ff };
 # The mapper imports buffers through the same device in every process that maps
 # one. Android 12's platform policy let apps do this; the current one does not.
 allow { appdomain coredomain hal_camera_server } ion_device:chr_file r_file_perms;

@@ -108,6 +108,8 @@ allow ccci_mdinit kmsg_device:chr_file w_file_perms;
 set_prop(ccci_mdinit, vendor_mtk_md_prop)
 set_prop(ccci_mdinit, vendor_mtk_ril_prop)
 set_prop(ccci_mdinit, vendor_mtk_ctl_modem_prop)
+# The modem loggers (emdlogger*) are stock system apps this port does not ship.
+dontaudit ccci_mdinit ctl_start_prop:property_service set;
 get_prop(ccci_mdinit, vendor_mtk_nvram_prop)
 get_prop(ccci_mdinit, vendor_mtk_radio_config_prop)
 
@@ -129,6 +131,8 @@ get_prop(gsm0710muxd, radio_control_prop)
 get_prop(gsm0710muxd, vendor_mtk_radio_config_prop)
 set_prop(gsm0710muxd, vendor_mtk_ril_prop)
 set_prop(gsm0710muxd, vendor_mtk_ctl_modem_prop)
+# It also stops the platform's ril-daemon, which does not exist here.
+dontaudit gsm0710muxd ctl_stop_prop:property_service set;
 
 # nvram_daemon and the NVRAM HAL: NV data and the nvram/proinfo partitions.
 read_fstab(nvram_daemon)
