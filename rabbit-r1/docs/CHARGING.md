@@ -38,8 +38,10 @@ It combines the requested cap with these independent constraints:
 Input isolation is requested before shutdown, suspend, invalid telemetry or a
 failed transaction. Target changes inhibit charging, program limits, check that
 measurements are less than 1.5 seconds old and that the USB budget has not changed,
-then enable charging last. A failed operation attempts isolation and preserves
-its error. Failed bus writes may have taken effect; an error is not proof that
+then enable charging last. A supply event that arrives while the inputs are being
+read reruns the pass before anything is written, keeping the applied limits; the
+lease below bounds how long that can last. A failed operation attempts isolation
+and preserves its error. Failed bus writes may have taken effect; an error is not proof that
 charging stopped.
 
 The r1 carries an MT6371 (`DEV_INFO` 0xf4 in the stock loader log). Like stock, it
