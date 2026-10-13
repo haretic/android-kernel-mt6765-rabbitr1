@@ -5,7 +5,7 @@
  * Minimal driver for a MS35774 that rotates a part over a limited range,
  * e.g. the camera of the Rabbit R1. The position is exposed in degrees
  * through the "orientation" sysfs attribute. The part is homed at probe
- * time by driving it past the full range into its mechanical end stop.
+ * time by driving it into its mechanical end stop at 0 degrees.
  */
 
 #include <linux/bitmap.h>
@@ -24,6 +24,13 @@
 
 #define MS35774_MAX_DEGREES		180
 #define MS35774_PARK_DEGREES		90
+/*
+ * Homing assumes the park position, where shutdown leaves the part, and
+ * drives this far past it into the end stop. After a crash past park plus
+ * margin, the part stays ahead of its position until it reaches the far end
+ * stop or a later homing starts within range.
+ */
+#define MS35774_HOME_MARGIN_DEGREES	10
 /* Full steps per degree in the microstep mode selected below. */
 #define MS35774_STEPS_PER_DEGREE	6
 /*
@@ -118,9 +125,9 @@ static void ms35774_work(struct work_struct *work)
 	mutex_lock(&priv->lock);
 
 	if (!priv->homed) {
-		/* Assume the far end, so the move ends up in the end stop. */
 		mutex_unlock(&priv->lock);
-		if (ms35774_move(priv, MS35774_MAX_DEGREES, 0))
+		if (ms35774_move(priv, MS35774_PARK_DEGREES +
+				 MS35774_HOME_MARGIN_DEGREES, 0))
 			return;
 		mutex_lock(&priv->lock);
 		priv->position = 0;
