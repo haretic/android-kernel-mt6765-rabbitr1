@@ -13,3 +13,8 @@ ctl.vendor.gsm0710muxd          u:object_r:vendor_mtk_ctl_modem_prop:s0
 ctl.vendor.ril-daemon-mtk       u:object_r:vendor_mtk_ctl_modem_prop:s0
 ctl.vendor.ccci_rpcd            u:object_r:vendor_mtk_ctl_modem_prop:s0
 vendor.sms.                     u:object_r:vendor_mtk_ril_prop:s0
+vendor.cdma.                    u:object_r:vendor_mtk_ril_prop:s0
+vendor.ims.                     u:object_r:vendor_mtk_ril_prop:s0
+persist.vendor.mtk.vilte.       u:object_r:vendor_mtk_ril_prop:s0
+persist.vendor.mtk.volte.       u:object_r:vendor_mtk_ril_prop:s0
+persist.vendor.ss.              u:object_r:vendor_mtk_ril_prop:s0
