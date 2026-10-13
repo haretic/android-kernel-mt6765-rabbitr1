@@ -30,7 +30,7 @@
 
 namespace {
 
-enum class Layout { RGB, I420, YV12, NV12, NV21, YUYV, UYVY };
+enum class Layout { RGB, I420, YV12, NV12, NV21, YUYV, UYVY, BLK };
 
 struct Format {
     DP_COLOR_ENUM color;
@@ -45,7 +45,7 @@ constexpr Format kFormats[] = {
         {DP_COLOR_ABGR8888, Layout::RGB, 4}, {DP_COLOR_UYVY, Layout::UYVY, 2},
         {DP_COLOR_YUYV, Layout::YUYV, 2},    {DP_COLOR_I420, Layout::I420, 1},
         {DP_COLOR_YV12, Layout::YV12, 1},    {DP_COLOR_NV12, Layout::NV12, 1},
-        {DP_COLOR_NV21, Layout::NV21, 1},
+        {DP_COLOR_NV21, Layout::NV21, 1},    {DP_COLOR_420_BLK, Layout::BLK, 1},
 };
 
 const Format* findFormat(DP_COLOR_ENUM color) {
@@ -63,7 +63,19 @@ bool isSemiPlanar(const Format* f) {
 }
 
 int planeCount(const Format* f) {
-    return isPlanar(f) ? 3 : isSemiPlanar(f) ? 2 : 1;
+    return isPlanar(f) ? 3 : isSemiPlanar(f) || f->layout == Layout::BLK ? 2 : 1;
+}
+
+int alignUp(int v, int a) {
+    return (v + a - 1) & ~(a - 1);
+}
+
+// Rows of plane i in memory: block formats fill their last row of tiles,
+// 32 rows of luma and 16 of chroma.
+int planeRows(const Format* f, int plane, int height) {
+    const int rows = plane ? (height + 1) / 2 : height;
+    if (f->layout == Layout::BLK) return alignUp(rows, plane ? 16 : 32);
+    return rows;
 }
 
 // Plane 1 is always U (or interleaved chroma), plane 2 V.
@@ -131,7 +143,6 @@ DP_STATUS_ENUM mapPort(const Port& port, bool write, std::unique_ptr<Mapping>* m
                        Planes* planes) {
     if (port.fd < 0 || !port.format) return DP_STATUS_INVALID_STATE;
     const int n = planeCount(port.format);
-    const int chromaRows = (port.height + 1) / 2;
     size_t offset[3] = {0, 0, 0};
     size_t end[3] = {0, 0, 0};
     const int32_t pitch[3] = {port.yPitch, port.chromaPitch(), port.chromaPitch()};
@@ -141,7 +152,7 @@ DP_STATUS_ENUM mapPort(const Port& port, bool write, std::unique_ptr<Mapping>* m
             offset[i] = port.planeNumber >= static_cast<uint32_t>(n)
                                 ? offset[i - 1] + port.sizes[i - 1]
                                 : end[i - 1];
-        end[i] = offset[i] + static_cast<size_t>(pitch[i]) * (i ? chromaRows : port.height);
+        end[i] = offset[i] + static_cast<size_t>(pitch[i]) * planeRows(port.format, i, port.height);
     }
     for (uint32_t i = 0; i < port.planeNumber && i < 3; i++) length += port.sizes[i];
     if (length < end[n - 1]) {
@@ -390,6 +401,7 @@ int yuvToI420(const Planes& s, const Format* f, const Planes& d, int w, int h) {
             return libyuv::UYVYToI420(s.p[0], s.stride[0], d.p[0], d.stride[0], d.p[1],
                                       d.stride[1], d.p[2], d.stride[2], w, h);
         case Layout::RGB:
+        case Layout::BLK:
             break;
     }
     return -1;
@@ -432,6 +444,7 @@ struct DpAsyncBlitStream::Impl {
     // Kept from job to job: allocating and clearing them each frame costs
     // as much as some of the conversions.
     std::vector<uint8_t> srcCopy;
+    std::vector<uint8_t> detiled;
     std::vector<uint8_t> argb;
     std::vector<uint8_t> scaled;
     std::vector<uint16_t> rows;
@@ -512,8 +525,27 @@ DP_STATUS_ENUM DpAsyncBlitStream::Impl::convert() {
     if (status != DP_STATUS_RETURN_SUCCESS) return status;
     status = mapPort(dst, true, &dstMap, &dp);
     if (status != DP_STATUS_RETURN_SUCCESS) return status;
-    sp = offsetPlanes(sp, sf, crop.x, crop.y);
-    sp = copyToCached(sp, sf, crop.w, crop.h, &srcCopy);
+    if (sf->layout == Layout::BLK) {
+        // Tiles do not crop: detile down to the crop's bottom right corner
+        // into linear NV12, which is in cached memory then.
+        const int w = crop.x + crop.w, h = alignUp(crop.y + crop.h, 2);
+        const int stride = alignUp(w, 2);
+        detiled.resize(static_cast<size_t>(stride) * h * 3 / 2);
+        Planes lin;
+        lin.p[0] = detiled.data();
+        lin.p[1] = lin.p[0] + static_cast<size_t>(stride) * h;
+        lin.stride[0] = lin.stride[1] = stride;
+        if (libyuv::MM21ToNV12(sp.p[0], sp.stride[0], sp.p[1], sp.stride[1], lin.p[0],
+                               lin.stride[0], lin.p[1], lin.stride[1], w, h)) {
+            ALOGE("detiling %dx%d failed", w, h);
+            return DP_STATUS_INVALID_FORMAT;
+        }
+        sf = findFormat(DP_COLOR_NV12);
+        sp = offsetPlanes(lin, sf, crop.x, crop.y);
+    } else {
+        sp = offsetPlanes(sp, sf, crop.x, crop.y);
+        sp = copyToCached(sp, sf, crop.w, crop.h, &srcCopy);
+    }
     dp = offsetPlanes(dp, df, roi.x, roi.y);
 
     // Into I420 of sw x sh: straight into the destination when it is planar
@@ -637,6 +669,10 @@ DP_STATUS_ENUM DpAsyncBlitStream::setSrcConfig(int32_t width, int32_t height, in
     if (secure != DP_SECURE_NONE) return DP_STATUS_INVALID_BUFFER;
     if (width <= 0) return DP_STATUS_INVALID_WIDTH;
     if (height <= 0 || yPitch < width * f->bpp) return DP_STATUS_INVALID_HEIGHT;
+    if (f->layout == Layout::BLK && (yPitch % 16 || (uvPitch && uvPitch != yPitch))) {
+        ALOGE("block format at pitch %d/%d", yPitch, uvPitch);
+        return DP_STATUS_INVALID_PARAX;
+    }
     std::lock_guard<std::mutex> guard(mImpl->lock);
     Port& p = mImpl->src;
     p.width = width;

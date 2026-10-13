@@ -102,6 +102,9 @@ typedef enum DP_COLOR_ENUM : int {
     DP_COLOR_YV12 = DP_COLORFMT_PACK(0, 0, 0, 0, 3, 1, 1, 8, 1, 1, 8),
     DP_COLOR_NV12 = DP_COLORFMT_PACK(0, 0, 0, 0, 2, 1, 1, 8, 1, 0, 12),
     DP_COLOR_NV21 = DP_COLORFMT_PACK(0, 0, 0, 0, 2, 1, 1, 8, 1, 1, 12),
+    // The video decoder's block format (V4L2's MM21): NV12 in tiles of 16x32
+    // luma and 16x16 interleaved chroma, each tile contiguous, tiles in rows.
+    DP_COLOR_420_BLK = DP_COLORFMT_PACK(0, 0, 0, 1, 2, 1, 1, 256, 1, 0, 12),
 } DP_COLOR_ENUM;
 
 #endif  // R1_DP_DATA_TYPE_H
