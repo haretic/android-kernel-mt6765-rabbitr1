@@ -1,1 +1,2 @@
 ro.vendor.r1.expdb.enabled u:object_r:vendor_r1_expdb_prop:s0 exact bool
+ro.vendor.drmfb.backlight_min u:object_r:vendor_drmfb_prop:s0 exact uint

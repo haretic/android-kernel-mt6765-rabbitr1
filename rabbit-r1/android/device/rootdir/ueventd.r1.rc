@@ -1,3 +1,12 @@
+# Coldboot relabels all of /sys (55k files at ~0.6 ms each here), which took
+# ~32 s on one thread and held up every node apexd and init waited for. Spread
+# it over the cores; listing a directory queues each of its subdirectories.
+parallel_restorecon enabled
+parallel_restorecon_dir /sys
+parallel_restorecon_dir /sys/devices
+parallel_restorecon_dir /sys/devices/platform
+parallel_restorecon_dir /sys/devices/platform/soc
+
 # PowerVR sync device: opened by every EGL/Vulkan client.
 /dev/pvr_sync             0666   system     graphics
 

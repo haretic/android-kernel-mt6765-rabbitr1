@@ -1,15 +1,4 @@
 # SPDX-License-Identifier: Apache-2.0
-# LK passes maxcpus=1. Secondary cores come up fine over PSCI; online them
-# here, after the hardware watchdog is armed, rather than in early boot.
-on early-init
-    write /sys/devices/system/cpu/cpu1/online 1
-    write /sys/devices/system/cpu/cpu2/online 1
-    write /sys/devices/system/cpu/cpu3/online 1
-    write /sys/devices/system/cpu/cpu4/online 1
-    write /sys/devices/system/cpu/cpu5/online 1
-    write /sys/devices/system/cpu/cpu6/online 1
-    write /sys/devices/system/cpu/cpu7/online 1
-
 on fs
     mount_all /vendor/etc/fstab.r1 --early
 
