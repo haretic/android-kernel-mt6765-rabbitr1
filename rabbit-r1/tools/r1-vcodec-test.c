@@ -57,6 +57,8 @@ _Static_assert(sizeof(isr_t) == 96, "isr");
 #define PORT_JPGENC_RDMA	13
 #define HEAP_MM_MASK		(1u << MTK_ION_HEAP_MULTIMEDIA)
 #define BUF_LEN			(256 * 1024 + 4096)
+/* MT6765 DRAM starts here; M4U addresses for these ports sit below it. */
+#define DRAM_BASE		0x40000000UL
 
 static int failures;
 
@@ -322,7 +324,7 @@ static void test_iova(void)
 	struct ion_allocation_data alloc = {
 		.len = BUF_LEN, .align = 4096, .heap_id_mask = HEAP_MM_MASK,
 	};
-	unsigned long addr, again, len;
+	unsigned long addr, again, len, unserved;
 	struct ion_mm_data mm;
 	int ion, ret;
 
@@ -335,14 +337,21 @@ static void test_iova(void)
 	if (ret)
 		goto out;
 
+	/*
+	 * A port no driver serves gets no M4U mapping: GET_PHYS fails for a
+	 * scattered buffer and returns the physical address of a contiguous one
+	 * (the MM heap allocates contiguously when it can). Either way it must
+	 * not be the larb1 IOVA checked below.
+	 */
+	unserved = 0;
 	CHECK(ion_config(ion, alloc.handle, PORT_JPGENC_RDMA) == 0 &&
-	      ion_phys(ion, alloc.handle, &addr, &len) < 0,
-	      "no address for a port no driver serves (scattered buffer)");
+	      (ion_phys(ion, alloc.handle, &unserved, &len) < 0 || unserved >= DRAM_BASE),
+	      "no M4U address for a port no driver serves (%#lx)", unserved);
 
 	CHECK(ion_config(ion, alloc.handle, PORT_VENC_RCPU) == 0, "ION_MM_CONFIG_BUFFER VENC_RCPU");
 	ret = ion_phys(ion, alloc.handle, &addr, &len);
 	CHECK(ret == 0 && addr && !(addr & 0xfff) && (uint64_t)addr + len <= 1ULL << 32 &&
-	      len == BUF_LEN, "ION_SYS_GET_PHYS -> %d, IOVA %#lx + %#lx", ret, addr, len);
+	      len == BUF_LEN && addr != unserved, "ION_SYS_GET_PHYS -> %d, IOVA %#lx + %#lx", ret, addr, len);
 	ret = ion_phys(ion, alloc.handle, &again, &len);
 	CHECK(ret == 0 && again == addr, "same IOVA on the next query (%#lx)", again);
 

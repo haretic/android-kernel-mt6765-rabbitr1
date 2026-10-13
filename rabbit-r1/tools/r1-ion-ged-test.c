@@ -63,6 +63,8 @@ static int failures;
 #define HEAP_CAMERA_MASK	(1u << MTK_ION_HEAP_MULTIMEDIA_FOR_CAMERA)
 #define HEAP_CONTIG_MASK	(1u << MTK_ION_HEAP_SYSTEM_CONTIG)
 #define BUF_LEN			(256 * 1024 + 4096)
+/* MT6765 DRAM starts here; M4U addresses for these ports sit below it. */
+#define DRAM_BASE		0x40000000UL
 
 static int ion_alloc(int fd, size_t len, unsigned int mask, unsigned int flags, int *handle)
 {
@@ -245,7 +247,12 @@ static void test_ion(int *shared_fd_out)
 	memset(&sys, 0, sizeof(sys));
 	sys.sys_cmd = ION_SYS_GET_PHYS;
 	sys.get_phys_param.handle = h;
-	CHECK(ion_custom(ion, ION_CMD_SYSTEM, &sys) < 0, "ION_SYS_GET_PHYS fails on a scattered buffer");
+	/* Without a port there is no M4U address: an error for a scattered buffer,
+	 * the physical address for a contiguous one (the default when it can be had). */
+	ret = ion_custom(ion, ION_CMD_SYSTEM, &sys);
+	CHECK(ret < 0 || sys.get_phys_param.phy_addr >= DRAM_BASE,
+	      "ION_SYS_GET_PHYS: no M4U address without a port (%d, %#llx)", ret,
+	      (unsigned long long)sys.get_phys_param.phy_addr);
 
 	{
 		struct ion_fd_data d = { .fd = fd };
