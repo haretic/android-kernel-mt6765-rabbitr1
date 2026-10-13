@@ -26,6 +26,12 @@
  * Drivers for such engines register the stock port ids they serve with their
  * IOMMU-attached device, and buffers tagged for those ports are mapped
  * through it.
+ *
+ * The blobs also ask for the addresses of dma-bufs other exporters made, such
+ * as the DMA heaps Codec2 allocates from. Those are imported as attachments
+ * of the engine's device. Their port and mappings are kept in a record that
+ * holds a reference to the buffer until it is the only one left: stock keeps
+ * an M4U mapping for as long as its buffer lives.
  */
 
 #include <linux/compat.h>
@@ -34,6 +40,7 @@
 #include <linux/dma-buf.h>
 #include <linux/dma-mapping.h>
 #include <linux/err.h>
+#include <linux/fs.h>
 #include <linux/highmem.h>
 #include <linux/miscdevice.h>
 #include <linux/mm.h>
@@ -45,6 +52,7 @@
 #include <linux/string.h>
 #include <linux/uaccess.h>
 #include <linux/vmalloc.h>
+#include <linux/workqueue.h>
 #include <linux/xarray.h>
 #include <uapi/linux/dma-buf.h>
 
@@ -139,18 +147,41 @@ struct mic_iova_dev {
 	struct list_head maps;
 };
 
-/* A buffer mapped through an iova device, for the lifetime of either. */
+/*
+ * A buffer mapped through an iova device, for the lifetime of either. Our
+ * buffers are mapped from a copy of their table (@buffer, @table), other
+ * exporters' through an attachment (@att, @att_sgt).
+ */
 struct mic_iova_map {
 	struct list_head dev_node;
 	struct list_head buf_node;
 	struct mic_iova_dev *idev;
 	struct mic_buffer *buffer;
 	struct sg_table table;
+	struct dma_buf_attachment *att;
+	struct sg_table *att_sgt;
 };
 
-/* The iova devices and the maps of every buffer. */
+/* Another exporter's dma-buf the blobs configured or asked an address for. */
+struct mic_foreign {
+	struct list_head node;		/* mic_foreigns */
+	struct dma_buf *dmabuf;		/* our reference */
+	int module_id;
+	unsigned int security;
+	unsigned int coherent;
+	struct list_head iova_maps;
+};
+
+/* The iova devices, the foreign buffers and the maps of every buffer. */
 static DEFINE_MUTEX(mic_iova_lock);
 static LIST_HEAD(mic_iova_devs);
+static LIST_HEAD(mic_foreigns);
+
+/* How often foreign buffers nobody else holds any more are let go. */
+#define MIC_FOREIGN_GC_DELAY	HZ
+
+static void mic_foreign_gc(struct work_struct *work);
+static DECLARE_DELAYED_WORK(mic_foreign_gc_work, mic_foreign_gc);
 
 struct mic_handle {
 	struct dma_buf *dmabuf;
@@ -209,16 +240,45 @@ static struct mic_iova_dev *mic_iova_dev_find(int port)
 static void mic_iova_unmap(struct mic_iova_map *map)
 {
 	struct mic_buffer *buffer = map->buffer;
-	unsigned long attrs = buffer->cached ? 0 : DMA_ATTR_SKIP_CPU_SYNC;
 
 	lockdep_assert_held(&mic_iova_lock);
 
-	dma_unmap_sgtable(map->idev->dev, &map->table, DMA_BIDIRECTIONAL,
-			  attrs);
-	sg_free_table(&map->table);
+	if (map->att) {
+		dma_buf_unmap_attachment_unlocked(map->att, map->att_sgt,
+						  DMA_BIDIRECTIONAL);
+		dma_buf_detach(map->att->dmabuf, map->att);
+	} else {
+		dma_unmap_sgtable(map->idev->dev, &map->table,
+				  DMA_BIDIRECTIONAL,
+				  buffer->cached ? 0 : DMA_ATTR_SKIP_CPU_SYNC);
+		sg_free_table(&map->table);
+	}
 	list_del(&map->dev_node);
 	list_del(&map->buf_node);
 	kfree(map);
+}
+
+/* The engines take one base address per buffer. */
+static int mic_iova_check_contig(struct mic_iova_dev *idev,
+				 struct sg_table *table, size_t len)
+{
+	struct scatterlist *sg;
+	dma_addr_t start, next;
+	int i;
+
+	start = sg_dma_address(table->sgl);
+	next = start;
+	for_each_sgtable_dma_sg(table, sg, i) {
+		if (sg_dma_address(sg) != next)
+			break;
+		next += sg_dma_len(sg);
+	}
+	if (next - start != len) {
+		dev_warn(idev->dev, "buffer of %zu bytes is not contiguous in IOVA space\n",
+			 len);
+		return -EFAULT;
+	}
+	return 0;
 }
 
 /*
@@ -231,9 +291,7 @@ static int mic_buffer_iova(struct mic_buffer *buffer, int port, u64 *iova)
 	unsigned long attrs = buffer->cached ? 0 : DMA_ATTR_SKIP_CPU_SYNC;
 	struct mic_iova_dev *idev;
 	struct mic_iova_map *map;
-	struct scatterlist *sg;
-	dma_addr_t start, next;
-	int i, ret;
+	int ret;
 
 	mutex_lock(&mic_iova_lock);
 
@@ -263,20 +321,9 @@ static int mic_buffer_iova(struct mic_buffer *buffer, int port, u64 *iova)
 	if (ret)
 		goto err_free_table;
 
-	/* The engines take one base address per buffer. */
-	start = sg_dma_address(map->table.sgl);
-	next = start;
-	for_each_sgtable_dma_sg(&map->table, sg, i) {
-		if (sg_dma_address(sg) != next)
-			break;
-		next += sg_dma_len(sg);
-	}
-	if (next - start != buffer->len) {
-		dev_warn(idev->dev, "buffer of %zu bytes is not contiguous in IOVA space\n",
-			 buffer->len);
-		ret = -EFAULT;
+	ret = mic_iova_check_contig(idev, &map->table, buffer->len);
+	if (ret)
 		goto err_unmap;
-	}
 
 	map->idev = idev;
 	map->buffer = buffer;
@@ -297,6 +344,151 @@ err_free_table:
 err_free_map:
 	kfree(map);
 	goto out_unlock;
+}
+
+static struct mic_foreign *mic_foreign_find(struct dma_buf *dmabuf)
+{
+	struct mic_foreign *fb;
+
+	lockdep_assert_held(&mic_iova_lock);
+
+	list_for_each_entry(fb, &mic_foreigns, node) {
+		if (fb->dmabuf == dmabuf)
+			return fb;
+	}
+	return NULL;
+}
+
+/* The record of @dmabuf, created with a reference to it if there is none. */
+static struct mic_foreign *mic_foreign_get(struct dma_buf *dmabuf)
+{
+	struct mic_foreign *fb;
+
+	lockdep_assert_held(&mic_iova_lock);
+
+	fb = mic_foreign_find(dmabuf);
+	if (fb)
+		return fb;
+
+	fb = kzalloc_obj(*fb);
+	if (!fb)
+		return NULL;
+	get_dma_buf(dmabuf);
+	fb->dmabuf = dmabuf;
+	fb->module_id = -1;
+	INIT_LIST_HEAD(&fb->iova_maps);
+	list_add(&fb->node, &mic_foreigns);
+	schedule_delayed_work(&mic_foreign_gc_work, MIC_FOREIGN_GC_DELAY);
+	return fb;
+}
+
+/* As mic_buffer_iova(), for another exporter's buffer. */
+static int mic_foreign_iova(struct mic_foreign *fb, int port, u64 *iova)
+{
+	struct dma_buf_attachment *att;
+	struct mic_iova_dev *idev;
+	struct mic_iova_map *map;
+	struct sg_table *sgt;
+	int ret;
+
+	lockdep_assert_held(&mic_iova_lock);
+
+	idev = mic_iova_dev_find(port);
+	if (!idev)
+		return -ENODEV;
+
+	list_for_each_entry(map, &fb->iova_maps, buf_node) {
+		if (map->idev->dev == idev->dev)
+			goto out_found;
+	}
+
+	map = kzalloc_obj(*map);
+	if (!map)
+		return -ENOMEM;
+
+	att = dma_buf_attach(fb->dmabuf, idev->dev);
+	if (IS_ERR(att)) {
+		ret = PTR_ERR(att);
+		goto err_free_map;
+	}
+
+	sgt = dma_buf_map_attachment_unlocked(att, DMA_BIDIRECTIONAL);
+	if (IS_ERR(sgt)) {
+		ret = PTR_ERR(sgt);
+		goto err_detach;
+	}
+
+	ret = mic_iova_check_contig(idev, sgt, fb->dmabuf->size);
+	if (ret)
+		goto err_unmap;
+
+	map->idev = idev;
+	map->att = att;
+	map->att_sgt = sgt;
+	list_add(&map->dev_node, &idev->maps);
+	list_add(&map->buf_node, &fb->iova_maps);
+
+out_found:
+	*iova = sg_dma_address(map->att_sgt->sgl);
+	return 0;
+
+err_unmap:
+	dma_buf_unmap_attachment_unlocked(att, sgt, DMA_BIDIRECTIONAL);
+err_detach:
+	dma_buf_detach(fb->dmabuf, att);
+err_free_map:
+	kfree(map);
+	return ret;
+}
+
+static int mic_foreign_buffer_iova(struct dma_buf *dmabuf, int port, u64 *iova)
+{
+	struct mic_foreign *fb;
+	int ret = -ENOMEM;
+
+	mutex_lock(&mic_iova_lock);
+	fb = mic_foreign_get(dmabuf);
+	if (fb)
+		ret = mic_foreign_iova(fb, port, iova);
+	mutex_unlock(&mic_iova_lock);
+	return ret;
+}
+
+/*
+ * Lets go of the foreign buffers that only their record still holds (all of
+ * them if @all): every fd, mapping and handle of such a buffer is gone, so
+ * nobody can hand it to an engine again.
+ */
+static void mic_foreign_sweep(bool all)
+{
+	struct mic_iova_map *map, *tmp_map;
+	struct mic_foreign *fb, *tmp;
+	LIST_HEAD(dead);
+	bool more;
+
+	mutex_lock(&mic_iova_lock);
+	list_for_each_entry_safe(fb, tmp, &mic_foreigns, node) {
+		if (!all && file_count(fb->dmabuf->file) > 1)
+			continue;
+		list_for_each_entry_safe(map, tmp_map, &fb->iova_maps, buf_node)
+			mic_iova_unmap(map);
+		list_move(&fb->node, &dead);
+	}
+	more = !list_empty(&mic_foreigns);
+	mutex_unlock(&mic_iova_lock);
+
+	list_for_each_entry_safe(fb, tmp, &dead, node) {
+		dma_buf_put(fb->dmabuf);
+		kfree(fb);
+	}
+
+	if (more)
+		schedule_delayed_work(&mic_foreign_gc_work, MIC_FOREIGN_GC_DELAY);
+}
+
+static void mic_foreign_gc(struct work_struct *work)
+{
+	mic_foreign_sweep(false);
 }
 
 static void mic_iova_remove_device(void *data)
@@ -1055,10 +1247,23 @@ static int mic_cache_sync(struct dma_buf *dmabuf, unsigned int sync_type)
 static int mic_buffer_phys(struct dma_buf *dmabuf, u64 *phys, u64 *len)
 {
 	struct mic_buffer *buffer;
+	struct mic_foreign *fb;
 	int module_id, ret;
 
-	if (!mic_is_ours(dmabuf))
-		return -EFAULT;
+	/* Another exporter's buffer: only the configured port's address. */
+	if (!mic_is_ours(dmabuf)) {
+		ret = -EFAULT;
+		mutex_lock(&mic_iova_lock);
+		fb = mic_foreign_find(dmabuf);
+		if (fb && fb->module_id >= 0) {
+			ret = mic_foreign_iova(fb, fb->module_id, phys);
+			if (ret == -ENODEV)
+				ret = -EFAULT;
+		}
+		mutex_unlock(&mic_iova_lock);
+		*len = dmabuf->size;
+		return ret;
+	}
 	buffer = dmabuf->priv;
 
 	mutex_lock(&buffer->lock);
@@ -1133,6 +1338,7 @@ static long mic_sys_do(struct mic_client *client, struct ion_sys_data *p)
 static long mic_mm_do(struct mic_client *client, struct ion_mm_data *p)
 {
 	struct mic_buffer *buffer;
+	struct mic_foreign *fb;
 	struct dma_buf *dmabuf;
 	size_t len = 0;
 	long ret = 0;
@@ -1154,9 +1360,20 @@ static long mic_mm_do(struct mic_client *client, struct ion_mm_data *p)
 			buffer->security = p->config_buffer_param.security;
 			buffer->coherent = p->config_buffer_param.coherent;
 			mutex_unlock(&buffer->lock);
+		} else {
+			mutex_lock(&mic_iova_lock);
+			fb = mic_foreign_get(dmabuf);
+			if (fb) {
+				fb->module_id = p->config_buffer_param.module_id;
+				fb->security = p->config_buffer_param.security;
+				fb->coherent = p->config_buffer_param.coherent;
+			} else {
+				ret = -ENOMEM;
+			}
+			mutex_unlock(&mic_iova_lock);
 		}
 		dma_buf_put(dmabuf);
-		return 0;
+		return ret;
 
 	case ION_MM_SET_DEBUG_INFO:
 		if (!p->buf_debug_info_param.handle)
@@ -1223,13 +1440,17 @@ static long mic_mm_do(struct mic_client *client, struct ion_mm_data *p)
 					       p->get_phys_param.handle);
 		if (IS_ERR(dmabuf))
 			return -EINVAL;
-		ret = -EFAULT;
 		if (mic_is_ours(dmabuf)) {
 			buffer = dmabuf->priv;
 			len = buffer->len;
 			ret = mic_buffer_iova(buffer,
 					      p->get_phys_param.module_id,
 					      &iova);
+		} else {
+			len = dmabuf->size;
+			ret = mic_foreign_buffer_iova(dmabuf,
+						      p->get_phys_param.module_id,
+						      &iova);
 		}
 		dma_buf_put(dmabuf);
 		if (ret) {
@@ -1728,6 +1949,9 @@ err_destroy:
 static void __exit mic_exit(void)
 {
 	misc_deregister(&mic_misc);
+	cancel_delayed_work_sync(&mic_foreign_gc_work);
+	mic_foreign_sweep(true);
+	cancel_delayed_work_sync(&mic_foreign_gc_work);
 	faux_device_destroy(mic_fdev);
 }
 
