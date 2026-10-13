@@ -1,0 +1,84 @@
+From: itskenny0 <0@kenny.cat>
+Subject: [PATCH] Add the kernel 7.1 requirements
+
+Devices may run Linux 7.1 at the 202604 kernel FCM level. As for 6.18,
+no config options are required.
+
+---
+diff --git a/c/android-7.1/Android.bp b/c/android-7.1/Android.bp
+new file mode 100644
+index 0000000..3f60168
+--- /dev/null
++++ b/c/android-7.1/Android.bp
+@@ -0,0 +1,51 @@
++// Copyright (C) 2025 The Android Open Source Project
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++// See the License for the specific language governing permissions and
++// limitations under the License.
++
++package {
++    // See: http://go/android-license-faq
++    default_applicable_licenses: ["Android-Apache-2.0"],
++}
++
++kernel_config {
++    name: "kernel_config_c_7.1",
++    srcs: [":kernel_base_config_c_7.1"],
++    meta: ":kernel_meta_c_7.1",
++}
++
++filegroup {
++    name: "kernel_base_config_c_7.1",
++    srcs: select(soong_config_variable("google_tv", "using_tv_gki"), {
++        "true": [
++            ":tv_kernel_base_config_c_7.1",
++        ],
++        default: [
++            "android-base.config",
++        ],
++    }),
++}
++
++genrule {
++    name: "tv_kernel_base_config_c_7.1",
++    srcs: ["android-tv-base.config"],
++    out: ["android-base.config"],
++    cmd: "cp $(in) $(out)",
++}
++
++filegroup {
++    name: "kernel_meta_c_7.1",
++    srcs: select(soong_config_variable("google_tv", "using_tv_gki"), {
++        "true": ["android-tv-base-conditional.xml"],
++        default: ["android-base-conditional.xml"],
++    }),
++}
+diff --git a/c/android-7.1/android-base-conditional.xml b/c/android-7.1/android-base-conditional.xml
+new file mode 100644
+index 0000000..4c36eef
+--- /dev/null
++++ b/c/android-7.1/android-base-conditional.xml
+@@ -0,0 +1 @@
++<kernel minlts="7.1.0" />
+diff --git a/c/android-7.1/android-base.config b/c/android-7.1/android-base.config
+new file mode 100644
+index 0000000..e69de29
+diff --git a/c/android-7.1/android-tv-base-conditional.xml b/c/android-7.1/android-tv-base-conditional.xml
+new file mode 100644
+index 0000000..4c36eef
+--- /dev/null
++++ b/c/android-7.1/android-tv-base-conditional.xml
+@@ -0,0 +1 @@
++<kernel minlts="7.1.0" />
+diff --git a/c/android-7.1/android-tv-base.config b/c/android-7.1/android-tv-base.config
+new file mode 100644
+index 0000000..e69de29
