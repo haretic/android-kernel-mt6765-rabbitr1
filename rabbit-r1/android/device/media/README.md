@@ -219,6 +219,14 @@ components.
      `CONFIG_BUFFER` port, maps them through the engine's device with
      `dma_buf_attach()`, and keeps the mapping for as long as the buffer
      lives, as stock keeps its M4U mappings.
+   - **DMA heap names.** The framework makes the vendor store the
+     preferred one for every Codec2 allocator, `media.swcodec` and
+     `mediaserver` included, and MediaTek's store answers `mtk_mm` or
+     `mtk_mm-uncached`. Once the store's parameters worked
+     (`GetBaseOffset`), the software codecs failed every allocation
+     (`fetch linear block err = 14`). `mtk-ion-compat` now registers both
+     heaps (`ion_mm_heap` buffers, cached and not); `sepolicy/` and
+     `ueventd.r1-media.rc` open them as the system heap.
    - **Colour conversion.** Aperture's frames reach the encoder as RGBA (its
      CameraX pipeline renders through GL). `C2MtkVencExt` converts them with
      `libdpframework`. The stock one needs `/dev/mdp_sync` and
@@ -235,7 +243,7 @@ components.
      `CPU_READ`: the gralloc then allocates `ION_FLAG_CACHED`, and
      `DMA_BUF_IOCTL_SYNC` invalidates before the conversion reads.
 2. **H.264/HEVC decode** (`R1_MEDIA_HW_DECODE=true`). The store sets the
-   `mtk_mm` DMA heap for decoder buffers, and this kernel has no such heap.
+   `mtk_mm` DMA heap for decoder buffers; `mtk-ion-compat` registers it.
    `mtk_platform_codecs_config.xml` sets `alwaysColorConvertChecker` and
    `ForceCCWhenSW`, so decoder output may be converted with `libdpframework`.
    `dpframework/` does not take the MediaTek block formats yet

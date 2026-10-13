@@ -2,3 +2,6 @@
 /vendor/bin/hw/android\.hardware\.media\.c2@1\.2-mediatek u:object_r:mediacodec_exec:s0
 # Video codec core (drivers/staging/mtk-vcodec-compat).
 /dev/Vcodec u:object_r:r1_vcodec_device:s0
+# The DMA heaps MediaTek's Codec2 store names for every Codec2 client
+# (mtk-ion-compat): open to all, as the system heap.
+/dev/dma_heap/mtk_mm(-uncached)?    u:object_r:dmabuf_system_heap_device:s0
