@@ -1080,7 +1080,12 @@ static int mt6370_chg_set_property(struct power_supply *psy,
 		return -EINVAL;
 
 	switch (psp) {
-	case POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR:
+	case POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR: {
+		int before, after;
+		bool known;
+
+		/* The policy renews its lease every 2 s; only report changes. */
+		known = !mt6370_chg_get_behaviour(priv, &before);
 		ret = mt6370_chg_set_behaviour(priv, val->intval);
 		if (!ret && priv->managed_charging &&
 		    val->intval == POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO) {
@@ -1090,9 +1095,11 @@ static int mt6370_chg_set_property(struct power_supply *psy,
 		}
 		if (priv->charge_control &&
 		    (val->intval == POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO ||
-		     val->intval == POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE))
+		     val->intval == POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE) &&
+		    (ret || !known || mt6370_chg_get_behaviour(priv, &after) || after != before))
 			power_supply_changed(psy);
 		return ret;
+	}
 	case POWER_SUPPLY_PROP_ONLINE:
 		if (val->intval > 1)
 			return -EINVAL;
