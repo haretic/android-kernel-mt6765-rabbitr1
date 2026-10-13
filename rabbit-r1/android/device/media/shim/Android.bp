@@ -27,6 +27,7 @@ cc_library_shared {
         "libhidlbase",
         "liblog",
         "libnativewindow",
+        "libsync",
         "libstagefright_bufferqueue_helper",
         "libui",
         "libutils",

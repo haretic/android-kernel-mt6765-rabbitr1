@@ -115,6 +115,14 @@ Android 12 class layouts in an Android 17 process:
   that copy is the one loaded. The process's Android 17
   `libstagefright_bufferqueue_helper` then uses it too. Its handlers only add
   to the end of the Android 12 layout, and only Android 12 code reads them.
+- **`Fence`** (`libui`). Android 17 made `getSignalTime()` and the
+  destructor virtual, so the object grew a vtable pointer: 12 bytes against
+  Android 12's 8. `libcodec2_vndk` allocates the dequeue fences of
+  `C2BufferQueueBlockPool` itself, so the Android 17 constructor wrote past
+  them and `wait()` read the fd from beyond them ("sync_file_info returned
+  NULL for fd 0"); decoding to a surface crashed the HAL with heap
+  corruption. Its three `Fence` imports are renamed to `r1compt::Fence`,
+  which the shim implements with the Android 12 layout (`blobs.txt`).
 - **`C2InterfaceHelper::GetBaseOffset`** (Android 12 `libcodec2_vndk`) maps
   the offset of a flexible array element to element 0, then keeps searching
   and returns "not found". `F(values[i])` for `i > 0` therefore gets a null
@@ -302,24 +310,21 @@ no `DpBlitStream`/cmdq errors.
 
 ## Open points
 
-- **Hardware behaviour is inferred, not observed.** The driver follows the
-  stock driver's sequences: `VCODEC_SEL`, deblock and VDEC bits, DRAM drain,
-  break and reset, level-low interrupts. Probe, power and the first lock are
-  the first things to watch.
+- **Hardware behaviour is inferred from the stock driver.** `VCODEC_SEL`,
+  deblock and VDEC bits, DRAM drain, break and reset, level-low interrupts
+  follow its sequences. H.264 encode and decode run correctly on them.
 - **No EMI bandwidth or DVFS backend.** `SET_FRAME_INFO` and the EMI and CPU
   hints are accepted and ignored, so `mm_sel` stays at its boot rate. If 720p
   encode falls short of 30 fps, raise that clock first.
 - **Android 12 C++ in an Android 17 process.** The symbol check is clean
-  with the shim, but class layouts are not covered by it. `AHandler` and
-  `C2InterfaceHelper` were wrong ("Linking"). `GraphicBufferMapper` and the
-  `libstagefright_bufferqueue_helper` classes still cross the boundary.
+  with the shim, but class layouts are not covered by it. `AHandler`,
+  `C2InterfaceHelper` and `Fence` were wrong ("Linking"). `GraphicBufferMapper`
+  and the `libstagefright_bufferqueue_helper` classes still cross the boundary.
 - **`libmtk_drvb`** scrambles its state when
   `/proc/device-tree/chosen/atag,devinfo` is missing. LK is expected to inject
-  it into the mainline DT.
-- **Colour conversion (MDP/CMDQ)** is missing. It blocks RGBA encoder input
-  (stage 1, above), and blocks stage 2 if the decoders insist on it.
-- **Not supported:** secure video (`secure_inst`), the JPEG encoder (its
-  locks are refused), and buffers from DMA heaps rather than `/dev/ion`
-  (stage 1, above).
-- **sepolicy** covers the device nodes. Property reads of `vendor.mtk.*` will
-  show up as denials in permissive mode; add them from the log.
+  it into the mainline DT. The codec HAL reads it under its own label
+  (`sepolicy/`); without it the decoders stop at 720p.
+- **Colour conversion** runs on the CPU (`dpframework/`), not on the MDP.
+  10-bit and compressed (UFO) block formats are not taken.
+- **Not supported:** secure video (`secure_inst`) and the JPEG encoder (its
+  locks are refused).

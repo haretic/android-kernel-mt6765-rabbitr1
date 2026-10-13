@@ -11,3 +11,13 @@ allow mediacodec ion_device:chr_file r_file_perms;
 # clients do (sepolicy/pvr/pvr.te).
 allow mediacodec proc_ged:file r_file_perms;
 allowxperm mediacodec proc_ged:file ioctl { 0x6700-0x67ff };
+
+# libmtk_drvb reads the chip's eFuse words from /chosen/atag,devinfo, which LK
+# fills, for the codec limits; without them the decoders stop at 720p.
+type sysfs_r1_devinfo, fs_type, sysfs_type;
+allow mediacodec sysfs_r1_devinfo:file r_file_perms;
+
+# Secure video path and TEE flags of libvcodecdrv: unset here, and
+# labelled apart from the modem's ro.vendor.mtk_ prefix.
+vendor_internal_prop(vendor_mtk_media_prop)
+get_prop(mediacodec, vendor_mtk_media_prop)

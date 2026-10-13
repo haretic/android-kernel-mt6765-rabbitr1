@@ -1,0 +1,1 @@
+genfscon sysfs /firmware/devicetree/base/chosen/atag,devinfo u:object_r:sysfs_r1_devinfo:s0

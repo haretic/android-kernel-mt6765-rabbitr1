@@ -24,6 +24,12 @@
 # lib/r1-c2/libcodec2_vndk.so also gets a 2-byte code fix (README.md, "Linking"):
 #   at file offset 0x5096e, bytes e6 e7 (b 0x5193e) become 0e e0 (b 0x5198e),
 #   after checking that d4 19 (adds r4, r2, r7) precedes them.
+# lib/r1-c2/libcodec2_vndk.so imports android::Fence(int), wait(int) and
+#   getSignalTime() const as r1compt::Fence's, which the shim defines with the
+#   Android 12 layout (README.md, "Linking"): in .dynstr, "7android" becomes
+#   "7r1compt" in _ZN7android5FenceC1Ei at file offset 0xad6a0,
+#   _ZNK7android5Fence13getSignalTimeEv at 0xacb84 and _ZN7android5Fence4waitEi
+#   at 0xac82a, after checking each is a whole string of its own.
 # lib/libcodec2_mtk_venc.so gets its input usage set to C2MemoryUsage::CPU_READ
 #   (README.md, "Stages"): the C2StreamUsageTuning::input defaults of the two
 #   encoder interfaces, 32 bytes each at file offsets 0x3e516 and 0x52282, from
