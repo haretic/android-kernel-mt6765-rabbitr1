@@ -172,10 +172,13 @@ static int r1_panel_enable(struct drm_panel *panel)
 }
 
 static const struct drm_display_mode r1_panel_mode = {
-	/* 130 MHz vendor PLL * 2 * 2 lanes / 24 bits, rounded to kHz.
-	 * This preserves the link-rate request; refresh needs measurement.
+	/*
+	 * 85 Hz. Stock ran 58.8 Hz (130 MHz vendor PLL * 2 * 2 lanes / 24
+	 * bits). The Diium D-28S drives the same ST7701S panel module at
+	 * 85 Hz; keep the r1 porches and raise only the pixel clock
+	 * (DSI ~376 Mbit/s per lane).
 	 */
-	.clock = 21667,
+	.clock = 31305,
 	.hdisplay = 480,
 	.hsync_start = 480 + 20,
 	.hsync_end = 480 + 20 + 20,
