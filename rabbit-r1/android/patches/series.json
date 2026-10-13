@@ -716,8 +716,8 @@
   {
     "project": "hardware/interfaces",
     "base_commit": "1b92b77fe1f2f2c820c51b0b1e366c17d6b9911b",
-    "patch": "0009-include-audio-scheduler-header-and-health-prime.patch",
-    "sha256": "ed67323848b520e3105777161c29ada086c2ce075a4fa0c20aace20a69793314",
+    "patch": "0009-include-audio-scheduler-header-health-prime-and-kernel-7.1.patch",
+    "sha256": "dcdca40393cebe6bb36a759d67935d9dadcaaac323429c1f77ffd0b329231d61",
     "files": [
       {
         "path": "audio/aidl/default/include/core-impl/ChildInterface.h",
@@ -733,6 +733,11 @@
         "path": "health/aidl/default/include/health-impl/Health.h",
         "before_sha256": "5cb21c83f4dab63e52123703892c51a7039b78e9303715623424e12126f0fa6e",
         "after_sha256": "15559c1c6b9bac35ab5342822bf822500a88ada39baafc6468ce82e43d295e4c"
+      },
+      {
+        "path": "compatibility_matrices/Android.bp",
+        "before_sha256": "648d30be0f0703b02bbc7a867b90d749df4e115ce37e09948c207ffb5bf958cb",
+        "after_sha256": "3ebf5be198cdedbf1d03cf9ade4beba0f0e6aaeac221143c70c0f3846bba3beb"
       }
     ]
   },
@@ -769,6 +774,39 @@
         "path": "properties/vendor.prop",
         "before_sha256": "520551b54e5b98d24d94d47931e47298c10f15ea97d9be1aae609f9ebcd71196",
         "after_sha256": "489c39677d920b1eb0195954b6c1833a0c5de1fa8687f923646933b6609ebac4"
+      }
+    ]
+  },
+  {
+    "project": "kernel/configs",
+    "base_commit": "200b3987b78fc25015bf826b281f0c3851daf146",
+    "patch": "0012-add-kernel-7.1-configs.patch",
+    "sha256": "3f5a437765c15faec914ba8d9f630accad54fd7552654bb0a4b4cf692bf9c3d3",
+    "files": [
+      {
+        "path": "c/android-7.1/Android.bp",
+        "before_sha256": null,
+        "after_sha256": "8467ecd34028cb30e2d0e7ce606d3df556416d204b7d46aa47e4d42239bc3d53"
+      },
+      {
+        "path": "c/android-7.1/android-base-conditional.xml",
+        "before_sha256": null,
+        "after_sha256": "7ae15f26e530dcf28d193231dbff09a8f338a2dc2f403f1d313221867bea1fe3"
+      },
+      {
+        "path": "c/android-7.1/android-base.config",
+        "before_sha256": null,
+        "after_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "c/android-7.1/android-tv-base-conditional.xml",
+        "before_sha256": null,
+        "after_sha256": "7ae15f26e530dcf28d193231dbff09a8f338a2dc2f403f1d313221867bea1fe3"
+      },
+      {
+        "path": "c/android-7.1/android-tv-base.config",
+        "before_sha256": null,
+        "after_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
       }
     ]
   }

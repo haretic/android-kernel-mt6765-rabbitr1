@@ -1,0 +1,67 @@
+diff --git a/audio/aidl/default/include/core-impl/ChildInterface.h b/audio/aidl/default/include/core-impl/ChildInterface.h
+index 161f6db6c02192c5764cdf338dbbc6d7456fc65b..9caa91e24d2ae8d2cf85725baddadaf437820de2 100644
+--- a/audio/aidl/default/include/core-impl/ChildInterface.h
++++ b/audio/aidl/default/include/core-impl/ChildInterface.h
+@@ -16,6 +16,8 @@
+ 
+ #pragma once
+ 
++#include <sched.h>
++
+ #include <memory>
+ #include <utility>
+ 
+diff --git a/compatibility_matrices/Android.bp b/compatibility_matrices/Android.bp
+index a429ab0179a3eb043c3765321c1452f17916392a..12d53325398470856503ad85515d82e880a4aeca 100644
+--- a/compatibility_matrices/Android.bp
++++ b/compatibility_matrices/Android.bp
+@@ -135,12 +135,18 @@ vintf_compatibility_matrix {
+     name: "framework_compatibility_matrix.202604.xml",
+     stem: "compatibility_matrix.202604.xml",
+     srcs: ["compatibility_matrix.202604.xml"],
+-    kernel_configs: ["kernel_config_c_6.18"],
++    kernel_configs: [
++        "kernel_config_c_6.18",
++        "kernel_config_c_7.1",
++    ],
+ }
+ 
+ vintf_compatibility_matrix {
+     name: "framework_compatibility_matrix.202704.xml",
+     stem: "compatibility_matrix.202704.xml",
+     srcs: ["compatibility_matrix.202704.xml"],
+-    kernel_configs: ["kernel_config_c_6.18"],
++    kernel_configs: [
++        "kernel_config_c_6.18",
++        "kernel_config_c_7.1",
++    ],
+ }
+diff --git a/health/aidl/default/Health.cpp b/health/aidl/default/Health.cpp
+index d1c61213817ee17a93f5fcea19ee12af8aa49892..7fee37ab9a6268bee3d5fb46d8d2dc55241f8699 100644
+--- a/health/aidl/default/Health.cpp
++++ b/health/aidl/default/Health.cpp
+@@ -68,6 +68,10 @@ Health::Health(std::string_view instance_name, std::unique_ptr<struct healthd_co
+ 
+ Health::~Health() {}
+ 
++::android::status_t Health::PrimeBatteryLevel() {
++    return battery_monitor_.primeBatteryLevel();
++}
++
+ static inline ndk::ScopedAStatus TranslateStatus(::android::status_t err) {
+     switch (err) {
+         case ::android::OK:
+diff --git a/health/aidl/default/include/health-impl/Health.h b/health/aidl/default/include/health-impl/Health.h
+index b5c7a4a28c749cef59289412b0984e556ac04b14..3c0652ad9535d4ae1b67d5a3aaa70776d498b8db 100644
+--- a/health/aidl/default/include/health-impl/Health.h
++++ b/health/aidl/default/include/health-impl/Health.h
+@@ -46,6 +46,9 @@ class Health : public BnHealth, public HalHealthLoopCallback {
+     Health(std::string_view instance_name, std::unique_ptr<struct healthd_config>&& config);
+     virtual ~Health();
+ 
++    // Internal startup hook; not a new AIDL method. Call before StartLoop().
++    ::android::status_t PrimeBatteryLevel();
++
+     ndk::ScopedAStatus registerCallback(
+             const std::shared_ptr<IHealthInfoCallback>& callback) override;
+     ndk::ScopedAStatus unregisterCallback(

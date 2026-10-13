@@ -24,6 +24,7 @@ TARGET_NO_BOOTLOADER := true
 
 TARGET_PREBUILT_KERNEL := $(DEVICE_PATH)/prebuilt/Image.gz
 TARGET_KERNEL_MIXED_MODE := false
+DEVICE_MANIFEST_FILE += $(DEVICE_PATH)/manifest-kernel.xml
 include $(MAINLINE_COMMON_PATH)/BoardConfigMainlineCommon.mk
 include $(DEVICE_PATH)/charging/board.mk
 BOARD_VENDOR_SEPOLICY_DIRS += $(DEVICE_PATH)/sepolicy
