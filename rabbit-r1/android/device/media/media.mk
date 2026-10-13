@@ -128,11 +128,11 @@ PRODUCT_COPY_FILES += \
     $(R1_MEDIA_PATH)/ueventd.r1-media.rc:$(TARGET_COPY_OUT_VENDOR)/etc/ueventd.r1-media.rc
 
 # The framework only lists HAL components named in a codec list. Stage 1
-# lists the hardware H.264 encoder; stage 2 adds the H.264 and HEVC decoders,
-# which stay off until the kernel can serve them (README.md, "Stages"). With
-# no list the HAL runs but the c2.android software codecs do all the work.
+# lists the hardware H.264 encoder; stage 2 adds the H.264 and HEVC decoders
+# (README.md, "Stages"). With no list the HAL runs but the c2.android
+# software codecs do all the work.
 R1_MEDIA_HW_ENCODE ?= true
-R1_MEDIA_HW_DECODE ?= false
+R1_MEDIA_HW_DECODE ?= true
 ifeq ($(R1_MEDIA_HW_DECODE),true)
 PRODUCT_COPY_FILES += \
     $(R1_MEDIA_PATH)/media_codecs_c2.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs.xml

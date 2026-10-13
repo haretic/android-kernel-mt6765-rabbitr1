@@ -122,7 +122,9 @@ Android 12 class layouts in an Android 17 process:
   them and `wait()` read the fd from beyond them ("sync_file_info returned
   NULL for fd 0"); decoding to a surface crashed the HAL with heap
   corruption. Its three `Fence` imports are renamed to `r1compt::Fence`,
-  which the shim implements with the Android 12 layout (`blobs.txt`).
+  which the shim implements with the Android 12 layout (`blobs.txt`). The
+  fd is a `unique_fd`, as in Android 12: the inline destructor closes it with
+  that `unique_fd`'s fdsan tag.
 - **`GraphicBuffer`** (`libui`). Android 17 appended a `DependencyMonitor`:
   the class went from 0xa0 to 0x6f8 bytes. `C2BufferQueueBlockPool` in
   `libcodec2_vndk` allocates the buffers it dequeues from a surface with
@@ -212,10 +214,10 @@ templates. Two of these are worth knowing about:
    and `android.hardware.media.c2@1.x` are the Android 12 copies the blobs
    were built against.
 
-`R1_MEDIA_HW_ENCODE` (default `true`) installs the stage 1 list,
-`R1_MEDIA_HW_DECODE := true` the stage 2 one; set them before `media.mk` is
-inherited. With neither, the HAL runs but the framework lists none of its
-components.
+`R1_MEDIA_HW_DECODE` (default `true`) installs the stage 2 list;
+`R1_MEDIA_HW_DECODE := false` with `R1_MEDIA_HW_ENCODE` (default `true`) the
+stage 1 one. Set them before `media.mk` is inherited. With neither, the HAL
+runs but the framework lists none of its components.
 
 ## Stages
 
@@ -262,13 +264,27 @@ components.
      50 MB/s, 9 fps at 720p. `blobs.txt` patches its default input usage to
      `CPU_READ`: the gralloc then allocates `ION_FLAG_CACHED`, and
      `DMA_BUF_IOCTL_SYNC` invalidates before the conversion reads.
-2. **H.264/HEVC decode** (`R1_MEDIA_HW_DECODE=true`). The store sets the
-   `mtk_mm` DMA heap for decoder buffers; `mtk-ion-compat` registers it.
-   `mtk_platform_codecs_config.xml` sets `alwaysColorConvertChecker` and
-   `ForceCCWhenSW`, so decoder output may be converted with `libdpframework`.
-   `dpframework/` does not take the MediaTek block formats yet
-   (`MDP_COLOR_420_BLK*`): `queryHWSupport` says no, so the decoder has to
-   hand out linear output or detile itself.
+2. **H.264/HEVC decode** (`R1_MEDIA_HW_DECODE`, on). The decoders write
+   MediaTek's block format (NV12 in 16x32 tiles, V4L2's MM21), which
+   `dpframework/` detiles with libyuv and converts. Output is bit-identical
+   to ffmpeg's, from buffers and from surfaces (`rabbit-r1/tools/r1-vdec-test`).
+   On screen, 1080p HEVC plays at 30 fps for one core of HAL time, against
+   2.5 for `c2.android.hevc.decoder`. It took:
+   - **The `mtk_mm` heaps** (stage 1) for the decoders' buffers.
+   - **`DpRect`** is eight ints (each of x, y, w and h with a sub-pixel
+     part), not four; with four, `dpframework/` read the height as 0 and
+     scaled every frame.
+   - **The chip check.** The HAL limits the decoders to 720p unless it can
+     read `atag,devinfo` (`sepolicy/`).
+   - **`Fence` and `GraphicBuffer`** in `libcodec2_vndk` (above) for surface
+     output.
+   - **Converted surface output.** The decoders hand block-format buffers
+     (`HAL_PIXEL_FORMAT_NV12_BLK`) to surfaces, where the stock display
+     hardware scans them out. The PowerVR cannot sample them, and
+     SurfaceFlinger aborts ("Failed to create a valid texture").
+     `vendor.mtk.c2.vdec.force.output.cc=1` (`media.mk`) makes the decoders
+     convert surface output to YV12 too, as they already do for other
+     consumers.
 
 ## Hardware test plan
 
@@ -318,7 +334,9 @@ recording.
 
 Stage 2: play a 720p H.264 and a 1080p HEVC file. `media.metrics` should name
 `c2.mtk.avc.decoder` and `c2.mtk.hevc.decoder`, and the logcat should show
-no `DpBlitStream`/cmdq errors.
+no `DpBlitStream`/cmdq errors. `r1-vdec-test` compares each decoder with
+ffmpeg, from buffers and from a surface (expect `PSNR ... inf`), and its
+`display` mode plays a clip on screen at its frame rate.
 
 ## Open points
 
@@ -339,6 +357,8 @@ no `DpBlitStream`/cmdq errors.
   it into the mainline DT. The codec HAL reads it under its own label
   (`sepolicy/`); without it the decoders stop at 720p.
 - **Colour conversion** runs on the CPU (`dpframework/`), not on the MDP.
-  10-bit and compressed (UFO) block formats are not taken.
+  10-bit and compressed (UFO) block formats are not taken. Surface output
+  is detiled and converted in two passes; one would save about half the
+  decoder HAL's CPU time.
 - **Not supported:** secure video (`secure_inst`) and the JPEG encoder (its
   locks are refused).

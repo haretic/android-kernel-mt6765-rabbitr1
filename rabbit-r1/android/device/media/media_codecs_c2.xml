@@ -3,7 +3,7 @@
 <!--
     Stage 2: the MT6765 hardware H.264 encoder and H.264/HEVC decoders,
     served by the stock MediaTek Codec2 HAL (IComponentStore/default).
-    Installed as /vendor/etc/media_codecs_c2.xml when R1_MEDIA_HW_DECODE is
+    Installed as /vendor/etc/media_codecs.xml when R1_MEDIA_HW_DECODE is
     true; the HAL's other components stay hidden because the framework only
     lists components named here.
 
