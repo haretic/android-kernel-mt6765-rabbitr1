@@ -61,7 +61,8 @@ services, because `ro.vendor.api_level` is below 202404 and
 |------|---------|
 | `media.mk` | Product side: blobs, shim, 32-bit `.vendor` platform libraries, rc, ueventd, codec list, VINTF fragment. |
 | `BoardConfigMedia.mk` | Board side: sepolicy dir, `BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES`. |
-| `blobs.txt` | The 57 files to import from `out/stock-vendor/tree`: 3 configs and 54 32-bit ELFs. |
+| `blobs.txt` | The 53 files to import from `out/stock-vendor/tree`: 2 configs and 51 32-bit ELFs. |
+| `dpframework/` | `libdpframework.so` (32-bit) in place of the stock one: the `DpAsyncBlitStream` calls of the encoder and decoder, done with libyuv on the CPU. The stock library drives the MDP through `/dev/mtk_cmdq` and `/dev/mdp_sync`. |
 | `shim/` | `libr1_codec2_shim.so` (32-bit) provides the five Android 12 symbols the blobs import and Android 17 lacks. See "Linking" below. |
 | `init.r1.media.rc` | The HAL service: user `mediacodec`, stock groups without the network ones. |
 | `ueventd.r1-media.rc` | `/dev/Vcodec 0660 media system`, as stock. |
@@ -216,14 +217,21 @@ either, the HAL runs but the framework lists none of its components.
      lives, as stock keeps its M4U mappings.
    - **Colour conversion.** Aperture's frames reach the encoder as RGBA (its
      CameraX pipeline renders through GL). `C2MtkVencExt` converts them with
-     `libdpframework`, which needs `/dev/mdp_sync` and `/dev/mtk_cmdq`. Every
-     frame fails with `DpSync: createFence error` / `ConvertFrame err = 14`.
+     `libdpframework`. The stock one needs `/dev/mdp_sync` and
+     `/dev/mtk_cmdq`, and every frame failed with `DpSync: createFence error`
+     / `ConvertFrame err = 14`. `dpframework/` replaces it: RGB, YUYV, I420,
+     YV12, NV12 and NV21 in, I420, YV12, NV12 and NV21 out, with crop,
+     bilinear scaling and rotation, BT.601, BT.709 or full-range BT.601. A
+     job converts in `invalidate()`; `createJob` returns a signalled
+     sync_file exported from an idle dma-buf. Colour values use the kernel's
+     `MDP_COLOR` layout, as the stock libraries do (I420 is 0x6c0848).
 2. **H.264/HEVC decode** (`R1_MEDIA_HW_DECODE=true`). The store sets the
    `mtk_mm` DMA heap for decoder buffers, and this kernel has no such heap.
    `mtk_platform_codecs_config.xml` sets `alwaysColorConvertChecker` and
    `ForceCCWhenSW`, so decoder output may be converted with `libdpframework`.
-   That needs the MediaTek MDP and CMDQ devices (`/dev/mtk_cmdq`,
-   `/dev/mdp_sync`), which this kernel does not have.
+   `dpframework/` does not take the MediaTek block formats yet
+   (`MDP_COLOR_420_BLK*`): `queryHWSupport` says no, so the decoder has to
+   hand out linear output or detile itself.
 
 ## Hardware test plan
 
