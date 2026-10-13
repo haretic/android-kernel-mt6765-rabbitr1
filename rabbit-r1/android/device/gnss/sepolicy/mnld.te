@@ -63,7 +63,3 @@ allow mnld self:global_capability2_class_set wake_alarm;
 
 # libfs_mgr reads the default fstab (cmdline, bootconfig, DT); stock allows it.
 read_fstab(mnld)
-
-# init.r1.gnss.rc waits for the node; without getattr the wait always ran
-# out its 5 s.
-allow vendor_init stpgps_device:chr_file getattr;
