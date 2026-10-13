@@ -46,15 +46,31 @@ enum DpSecure {
 };
 
 // Passed by value, which for this class (user-provided copy constructor and
-// destructor) means by reference in the ABI; keep it non-trivial.
+// destructor) means by reference in the ABI; keep it non-trivial. Eight ints,
+// as libcodec2_mtk_vdec builds them: each of x, y, w and h with a sub-pixel
+// part after it.
 class DpRect {
   public:
-    DpRect() : x(0), sub_x(0), y(0), sub_y(0), w(0), h(0) {}
+    DpRect() : x(0), sub_x(0), y(0), sub_y(0), w(0), sub_w(0), h(0), sub_h(0) {}
     DpRect(int32_t in_x, int32_t in_y, int32_t in_w, int32_t in_h, int32_t in_sub_x = 0,
-           int32_t in_sub_y = 0)
-        : x(in_x), sub_x(in_sub_x), y(in_y), sub_y(in_sub_y), w(in_w), h(in_h) {}
+           int32_t in_sub_y = 0, int32_t in_sub_w = 0, int32_t in_sub_h = 0)
+        : x(in_x),
+          sub_x(in_sub_x),
+          y(in_y),
+          sub_y(in_sub_y),
+          w(in_w),
+          sub_w(in_sub_w),
+          h(in_h),
+          sub_h(in_sub_h) {}
     DpRect(const DpRect& rt)
-        : x(rt.x), sub_x(rt.sub_x), y(rt.y), sub_y(rt.sub_y), w(rt.w), h(rt.h) {}
+        : x(rt.x),
+          sub_x(rt.sub_x),
+          y(rt.y),
+          sub_y(rt.sub_y),
+          w(rt.w),
+          sub_w(rt.sub_w),
+          h(rt.h),
+          sub_h(rt.sub_h) {}
     ~DpRect() {}
     DpRect& operator=(const DpRect& rt) {
         x = rt.x;
@@ -62,7 +78,9 @@ class DpRect {
         y = rt.y;
         sub_y = rt.sub_y;
         w = rt.w;
+        sub_w = rt.sub_w;
         h = rt.h;
+        sub_h = rt.sub_h;
         return *this;
     }
 
@@ -71,8 +89,11 @@ class DpRect {
     int32_t y;
     int32_t sub_y;
     int32_t w;
+    int32_t sub_w;
     int32_t h;
+    int32_t sub_h;
 };
+static_assert(sizeof(DpRect) == 32, "DpRect layout");
 
 // Only passed by pointer; the contents are not used.
 struct DpPqParam;
