@@ -36,11 +36,10 @@ on property:init.svc.adbd=running
     start watchdogd
 
 # PowerVR GE8320 (ported DDK 1.13). rgx.fw comes from /vendor/firmware on first use.
+# ueventd sets /dev/pvr_sync's owner and mode (ueventd.r1.rc). Its node can
+# appear seconds after the probe, so waiting here only delayed boot.
 on post-fs
     exec u:r:vendor_modprobe:s0 -- /vendor/bin/modprobe -a -d /vendor/lib/modules pvrsrvkm
-    wait /dev/pvr_sync 5
-    chown system graphics /dev/pvr_sync
-    chmod 0666 /dev/pvr_sync
 
 # drmfb (system) dims and blanks the panel through the MT6370 backlight.
 on boot
