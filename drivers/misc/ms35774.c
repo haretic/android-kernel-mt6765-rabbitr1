@@ -9,9 +9,11 @@
  */
 
 #include <linux/bitmap.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/gpio/consumer.h>
+#include <linux/hrtimer.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
@@ -24,6 +26,10 @@
 #define MS35774_PARK_DEGREES		90
 /* Full steps per degree in the microstep mode selected below. */
 #define MS35774_STEPS_PER_DEGREE	6
+/*
+ * The stock driver's pulse, which it times with udelay(). Uneven steps make
+ * the motor rasp, so a hard-IRQ timer times them here.
+ */
 #define MS35774_STEP_HIGH_US		50
 #define MS35774_STEP_LOW_US		360
 /* MS1 high, MS2 low */
@@ -38,11 +44,38 @@ struct ms35774 {
 	struct gpio_desc *powerdown;
 	struct gpio_descs *mode;
 	struct work_struct work;
+	struct hrtimer timer;
+	struct completion moved;
+	unsigned int steps;		/* left to start, owned by the timer */
+	bool step_high;
 	struct mutex lock;		/* protects position, target, homed */
 	unsigned int position;
 	unsigned int target;
 	bool homed;
 };
+
+static enum hrtimer_restart ms35774_step(struct hrtimer *timer)
+{
+	struct ms35774 *priv = container_of(timer, struct ms35774, timer);
+
+	if (priv->step_high) {
+		gpiod_set_value(priv->step, 0);
+		priv->step_high = false;
+		hrtimer_forward_now(timer, us_to_ktime(MS35774_STEP_LOW_US));
+		return HRTIMER_RESTART;
+	}
+
+	if (!priv->steps) {
+		complete(&priv->moved);
+		return HRTIMER_NORESTART;
+	}
+
+	gpiod_set_value(priv->step, 1);
+	priv->step_high = true;
+	priv->steps--;
+	hrtimer_forward_now(timer, us_to_ktime(MS35774_STEP_HIGH_US));
+	return HRTIMER_RESTART;
+}
 
 static int ms35774_move(struct ms35774 *priv, unsigned int from,
 			unsigned int to)
@@ -64,12 +97,11 @@ static int ms35774_move(struct ms35774 *priv, unsigned int from,
 	gpiod_set_value_cansleep(priv->dir, to > from);
 	gpiod_set_value_cansleep(priv->enable, 1);
 
-	while (steps--) {
-		gpiod_set_value(priv->step, 1);
-		udelay(MS35774_STEP_HIGH_US);
-		gpiod_set_value(priv->step, 0);
-		usleep_range(MS35774_STEP_LOW_US, MS35774_STEP_LOW_US + 40);
-	}
+	priv->steps = steps;
+	priv->step_high = false;
+	reinit_completion(&priv->moved);
+	hrtimer_start(&priv->timer, 0, HRTIMER_MODE_REL_HARD);
+	wait_for_completion(&priv->moved);
 
 	udelay(MS35774_STEP_HIGH_US);
 	gpiod_set_value_cansleep(priv->enable, 0);
@@ -225,6 +257,9 @@ static int ms35774_probe(struct platform_device *pdev)
 			return ret;
 	}
 
+	init_completion(&priv->moved);
+	hrtimer_setup(&priv->timer, ms35774_step, CLOCK_MONOTONIC,
+		      HRTIMER_MODE_REL_HARD);
 	INIT_WORK(&priv->work, ms35774_work);
 	ret = devm_add_action_or_reset(dev, ms35774_cancel_work, priv);
 	if (ret)
@@ -254,8 +289,8 @@ static int ms35774_suspend(struct device *dev)
 	struct ms35774 *priv = dev_get_drvdata(dev);
 
 	/*
-	 * A move sleeps between steps, and its timers stop while the system
-	 * sleeps: finish it rather than sleep with the coils energised.
+	 * A move's step timer stops while the system sleeps: finish the move
+	 * rather than sleep with the coils energised.
 	 */
 	flush_work(&priv->work);
 
