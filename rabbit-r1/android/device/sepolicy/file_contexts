@@ -27,5 +27,6 @@
 # Wakeup sources under devices named with PLATFORM_DEVID_AUTO numbers, which
 # change between kernels (genfs_contexts has the others). ueventd restorecons
 # each device's sysfs directory as it reports it.
-/sys/devices/platform/soc/11016000\.i2c/i2c-5/5-0034/mt6370-charger\.[0-9]+\.auto(/power_supply/mt6370-charger)?/wakeup(/.*)? u:object_r:sysfs_wakeup:s0
+/sys/devices/platform/soc/11016000\.i2c/i2c-5/5-0034/mt6370-charger\.[0-9]+\.auto/wakeup(/.*)? u:object_r:sysfs_wakeup:s0
+/sys/devices/platform/soc/11016000\.i2c/i2c-5/5-0034/mt6370-charger\.[0-9]+\.auto/power_supply/mt6370-charger/wakeup[0-9]+(/.*)? u:object_r:sysfs_wakeup:s0
 /sys/devices/platform/soc/1000d000\.pwrap/1000d000\.pwrap:pmic/mt6357-rtc/rtc/rtc[0-9]+/alarmtimer\.[0-9]+\.auto/wakeup(/.*)? u:object_r:sysfs_wakeup:s0
