@@ -7,7 +7,7 @@
 # init.mtk-consys.rc sets this once wmt_drv is loaded, as wmt_loader does
 # on stock; gps_drv uses its exports.
 on property:vendor.connsys.driver.ready=yes
-    insmod /vendor/lib/modules/gps_drv.ko
+    exec u:r:vendor_modprobe:s0 -- /vendor/bin/modprobe -a -d /vendor/lib/modules gps_drv
     # ueventd creates the node asynchronously; mnld opens it at start.
     wait /dev/stpgps 5
 
