@@ -224,6 +224,16 @@ config NVMEM_MTK_EFUSE
 	  This is a driver to access hardware related data like sensor
 	  calibration, HDMI impedance etc.
 
+config NVMEM_MTK_DEVINFO
+	tristate "MediaTek eFuse words from the bootloader's devinfo"
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	depends on OF
+	help
+	  Serves the eFuse cells (sensor calibration, chip binning) from the
+	  copy of the fuse words that MediaTek's bootloader passes in the
+	  "atag,devinfo" property of /chosen, for SoCs such as the MT6765
+	  whose eFuse controller is not readable from the normal world.
+
 	  This driver can also be built as a module. If so, the module
 	  will be called efuse-mtk.
 

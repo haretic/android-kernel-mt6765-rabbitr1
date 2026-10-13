@@ -58,6 +58,10 @@ properties:
           - const: mediatek,efuse
       - const: mediatek,mt8173-efuse
         deprecated: true
+      - const: mediatek,mt6765-devinfo
+        description: The eFuse block reads as zero from the normal world;
+          the cells are served from the copy of the fuse words the bootloader
+          passes in the "atag,devinfo" property of /chosen.
 
   reg:
     maxItems: 1
