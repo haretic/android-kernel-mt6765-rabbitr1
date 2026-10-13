@@ -668,11 +668,17 @@ DP_STATUS_ENUM DpAsyncBlitStream::setSrcConfig(int32_t width, int32_t height, in
     }
     if (secure != DP_SECURE_NONE) return DP_STATUS_INVALID_BUFFER;
     if (width <= 0) return DP_STATUS_INVALID_WIDTH;
-    if (height <= 0 || yPitch < width * f->bpp) return DP_STATUS_INVALID_HEIGHT;
-    if (f->layout == Layout::BLK && (yPitch % 16 || (uvPitch && uvPitch != yPitch))) {
-        ALOGE("block format at pitch %d/%d", yPitch, uvPitch);
-        return DP_STATUS_INVALID_PARAX;
+    if (f->layout == Layout::BLK) {
+        // Block format pitches are the bytes of a row of tiles: 32 lines of
+        // luma, 16 of chroma. Lines are whole tiles wide.
+        if (yPitch % (16 * 32) || (uvPitch && uvPitch * 2 != yPitch)) {
+            ALOGE("block format at pitch %d/%d", yPitch, uvPitch);
+            return DP_STATUS_INVALID_PARAX;
+        }
+        yPitch /= 32;
+        uvPitch = yPitch;
     }
+    if (height <= 0 || yPitch < width * f->bpp) return DP_STATUS_INVALID_HEIGHT;
     std::lock_guard<std::mutex> guard(mImpl->lock);
     Port& p = mImpl->src;
     p.width = width;
