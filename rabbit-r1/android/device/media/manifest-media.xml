@@ -3,7 +3,7 @@
     The stock MediaTek Codec2 HAL, as the stock vendor manifest declared it.
     compatibility_matrix.7.xml in Android 17 accepts HIDL IComponentStore
     1.0-2 as default[0-9]*, and with ro.vendor.api_level below 202404 the
-    framework uses the HIDL Codec2 services (media.c2.hal.selection unset),
+    framework uses the HIDL Codec2 services (media.c2.hal.selection=hidl),
     next to the HIDL IComponentStore/software of the swcodec APEX.
 -->
 <manifest version="1.0" type="device">

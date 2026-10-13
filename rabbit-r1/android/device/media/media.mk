@@ -128,3 +128,8 @@ PRODUCT_COPY_FILES += \
 endif
 
 DEVICE_MANIFEST_FILE += $(R1_MEDIA_PATH)/manifest-media.xml
+
+# The stock HAL is HIDL only. mainline common defaults the Codec2 HAL
+# selection to aidl, which would hide it (the swcodec APEX serves both).
+PRODUCT_VENDOR_PROPERTIES += \
+    media.c2.hal.selection=hidl

@@ -758,5 +758,18 @@
         "after_sha256": "96013734457cd32ff202b9f507aa3285b95c0e1ac5426a16285be4b4897b1180"
       }
     ]
+  },
+  {
+    "project": "device/mainline/common",
+    "base_commit": "1cd4a6850df2ce31d4e5c77a41210e2c590325ab",
+    "patch": "0011-allow-codec2-hal-selection-override.patch",
+    "sha256": "ec09cd83dfdd1004e7cc1026f52da9cd576dc7dcadbe0be411570698a5a715d7",
+    "files": [
+      {
+        "path": "properties/vendor.prop",
+        "before_sha256": "520551b54e5b98d24d94d47931e47298c10f15ea97d9be1aae609f9ebcd71196",
+        "after_sha256": "489c39677d920b1eb0195954b6c1833a0c5de1fa8687f923646933b6609ebac4"
+      }
+    ]
   }
 ]

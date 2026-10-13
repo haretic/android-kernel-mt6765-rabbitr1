@@ -49,7 +49,7 @@ Android runs the stock `android.hardware.media.c2@1.2-mediatek` (HIDL
 on `libvcodecdrv`, because `mtk_platform_codecs_config.xml` says
 `driverIntf="proprietary"`. On this device the framework uses HIDL Codec2
 services, because `ro.vendor.api_level` is below 202404 and
-`media.c2.hal.selection` is unset. They sit next to the swcodec APEX's HIDL
+`media.c2.hal.selection` is `hidl` (media.mk). They sit next to the swcodec APEX's HIDL
 `IComponentStore/software`.
 
 ## Files
@@ -151,8 +151,9 @@ templates. Two of these are worth knowing about:
    PowerVR gralloc mapper.
 4. **`BoardConfig.mk`**: `include $(DEVICE_PATH)/media/BoardConfigMedia.mk`.
 5. **`rootdir/ueventd.r1.rc`**: `import /vendor/etc/ueventd.r1-media.rc`.
-6. Keep `media.c2.hal.selection` unset (or `hidl`). Setting it to `aidl` hides
-   this HAL.
+6. `media.mk` sets `media.c2.hal.selection=hidl`: `aidl` hides this HAL.
+   mainline common sets `aidl` as an overridable default (android patch
+   0011).
 7. Do not add `.vendor:32` packages for the names `blobs.txt` ships.
    `libcodec2_vndk`, `libcodec2_hidl@1.x`, `libsfplugin_ccodec_utils`,
    `libstagefright_bufferpool@2.0.1`, `libcodec2_soft_common`, `libhwbinder`
