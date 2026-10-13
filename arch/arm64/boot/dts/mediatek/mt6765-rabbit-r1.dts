@@ -516,6 +516,14 @@
 	status = "okay";
 };
 
+/*
+ * The eFuse controller reads as zero once the secure boot chain has run;
+ * serve the cells (thermal calibration, socinfo) from LK's devinfo copy.
+ */
+&efuse {
+	compatible = "mediatek,mt6765-devinfo";
+};
+
 &uart0 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&r1_uart0_pins>;
