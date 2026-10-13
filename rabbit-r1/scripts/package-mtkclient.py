@@ -128,7 +128,7 @@ def main():
         table.write_bytes(dt_table(dtb.read_bytes()))
         cmdline = ('bootopt=64S3,32N2,64N2 buildvariant=userdebug '
                    'earlycon=uart8250,mmio32,0x11002000 console=ttyS0,921600n8 '
-                   'maxcpus=1 clk_ignore_unused regulator_ignore_unused '
+                   'clk_ignore_unused regulator_ignore_unused '
                    'mem_sleep_default=s2idle '
                    'rdinit=/init loglevel=8 ignore_loglevel r1.usb=1 '
                    f'r1.expdb={int(profile == "expdb")}')
