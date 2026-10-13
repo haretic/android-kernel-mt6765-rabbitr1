@@ -4,3 +4,5 @@ genfscon sysfs /devices/platform/soc/1000d000.pwrap/1000d000.pwrap:pmic/mt6357-g
 # Legacy genfs lookup matches literal prefixes, including this final dot.
 # Keep this confined to the MT6370 charger child, not the whole I2C controller.
 genfscon sysfs /devices/platform/soc/11016000.i2c/i2c-5/5-0034/mt6370-charger. u:object_r:sysfs_batteryinfo:s0
+# The USB gadget's power supply (VBUS present).
+genfscon sysfs /devices/platform/soc/11200000.usb/power_supply u:object_r:sysfs_batteryinfo:s0

@@ -144,11 +144,13 @@ allow nvram_daemon kmsg_device:chr_file w_file_perms;
 set_prop(nvram_daemon, vendor_mtk_nvram_prop)
 get_prop(mtk_hal_nvramagent, vendor_mtk_radio_config_prop)
 hwbinder_use(mtk_hal_nvramagent)
+get_prop(mtk_hal_nvramagent, hwservicemanager_prop)
 add_hwservice(mtk_hal_nvramagent, nvram_hwservice)
 
 # netdagent: data-path firewall rules through the platform's netutils
 # wrappers, plus an AT channel to the modem (/dev/radio/pttycmd4).
 hwbinder_use(netdagent)
+get_prop(netdagent, hwservicemanager_prop)
 add_hwservice(netdagent, netdagent_hwservice)
 allow netdagent mtk_radio_device:dir search;
 allow netdagent mtk_radio_device:lnk_file read;
