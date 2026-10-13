@@ -1,9 +1,12 @@
 # MT6765 hardware video codec
 
 Hardware H.264 encode, then H.264/HEVC decode, through the stock MediaTek
-Codec2 HAL running on the mainline kernel. Nothing here has run on an r1 yet.
-The kernel side builds. The Android side is files and instructions only: it
-has not been through an Android build.
+Codec2 HAL running on the mainline kernel.
+
+Status: the HAL runs enforcing and creates `c2.mtk.avc.encoder`, and the
+encoder core runs (VENC interrupts) under Aperture. Its output is still empty,
+for the two kernel gaps in "Stages", so the codec lists are off by default
+and the `c2.android` software codecs do the work.
 
 ## How it fits together
 
@@ -64,6 +67,7 @@ services, because `ro.vendor.api_level` is below 202404 and
 | `ueventd.r1-media.rc` | `/dev/Vcodec 0660 media system`, as stock. |
 | `media_codecs_c2_encode.xml` | Stage 1 codec list: `c2.mtk.avc.encoder` only. Installed as `/vendor/etc/media_codecs.xml` (the optional FFmpeg HAL owns `media_codecs_c2.xml`). |
 | `media_codecs_c2.xml` | Stage 2 codec list: adds `c2.mtk.avc.decoder` and `c2.mtk.hevc.decoder`. |
+| `seccomp_policy/` | The stock extended seccomp policy plus the crash handler's syscalls ("Linking"). |
 | `manifest-media.xml` | HIDL `android.hardware.media.c2@1.2::IComponentStore/default`. |
 | `sepolicy/` | The HAL runs in the platform `mediacodec` domain. Adds `/dev/Vcodec` (`r1_vcodec_device`), `/dev/ion` and GED for that domain. |
 
@@ -91,8 +95,35 @@ The shim was compiled with the tree's clang and the 32-bit
 exactly these mangled names. Its own imports all exist in the 32-bit vendor
 `libui` and `libbase`.
 
-The stock seccomp policies ship unchanged. Their syscall set is a superset of
-Android 17's own `android.hardware.media.c2-default-arm.policy`.
+The stock seccomp policies are a superset of Android 17's own
+`android.hardware.media.c2-default-arm.policy`. The device ships its own copy
+of the extended one, `seccomp_policy/`, with `getppid`, `sysinfo` and `uname`
+added from `crash_dump.arm.policy`. The in-process crash handler makes these
+calls, so without them any crash in the HAL ends in `SIGSYS` with no
+tombstone. The whole file cannot be `@include`d: it filters `mmap2` and
+`mprotect` too, and this minijail rejects a second filter for a syscall
+("duplicate label").
+
+Android 12 class layouts in an Android 17 process:
+
+- **`AHandler`** (`libstagefright_foundation`). Android 17 appended `mLock`
+  and the delivery status. The blobs' handler subclasses keep their own fields
+  there, so Android 17's `deliverMessage()` locks garbage and the encoder
+  thread spins. The HAL loads the Android 12 build from `prebuilts/vndk/v31`
+  in `r1-c2/`. `r1-c2/libcodec2_vndk.so` is the first library to need it, so
+  that copy is the one loaded. The process's Android 17
+  `libstagefright_bufferqueue_helper` then uses it too. Its handlers only add
+  to the end of the Android 12 layout, and only Android 12 code reads them.
+- **`C2InterfaceHelper::GetBaseOffset`** (Android 12 `libcodec2_vndk`) maps
+  the offset of a flexible array element to element 0, then keeps searching
+  and returns "not found". `F(values[i])` for `i > 0` therefore gets a null
+  field helper. Android 17 (all launch levels from T) sends
+  `output.subscribed-indices` with several entries, and the stock
+  `NonStrictValuesWithNoDeps` setter walks them, so `config()` crashed with a
+  null dereference. AOSP T sidestepped this with a no-op setter
+  (`SubscribedParamIndicesSetter`), and the framework only subscribes on
+  T-launch devices. The fix here is in the function itself: a 2-byte branch
+  change makes the primitive case return the reduced offset (`blobs.txt`).
 
 The blobs also define some symbols that platform libraries define too:
 compiler-rt helpers, libc++ template instantiations and HIDL passthrough
@@ -160,17 +191,35 @@ templates. Two of these are worth knowing about:
    and `android.hardware.media.c2@1.x` are the Android 12 copies the blobs
    were built against.
 
-Set `R1_MEDIA_HW_DECODE := true` (before `media.mk` is inherited) to install the
-stage 2 list.
+Set `R1_MEDIA_HW_ENCODE := true` or `R1_MEDIA_HW_DECODE := true` (before
+`media.mk` is inherited) to install the stage 1 or stage 2 list. Without
+either, the HAL runs but the framework lists none of its components.
 
 ## Stages
 
 0. **Kernel.** `/dev/Vcodec`, core locking and power, interrupts, register
    windows, M4U addresses. Test with `rabbit-r1/tools/r1-vcodec-test.c`.
-1. **H.264 encode** (default). Camera recording goes through the encoder input
-   surface: gralloc buffers from `/dev/ion` are imported by the component and
-   given larb1 addresses. Input that is already YUV 4:2:0 needs no conversion.
-2. **H.264/HEVC decode** (`R1_MEDIA_HW_DECODE=true`).
+   Done; both tests pass.
+1. **H.264 encode** (`R1_MEDIA_HW_ENCODE=true`). Camera recording goes
+   through the encoder input surface. Blocked by two kernel gaps:
+   - **Linear buffers come from DMA heaps.** mainline common sets
+     `debug.c2.use_dmabufheaps=1`. The Android 12 `C2Store` reads it too, so
+     the component's bitstream and working buffers come from
+     `/dev/dma_heap/system`. `libmemory_c2` then asks `/dev/ion` for their M4U
+     address (`ION_IOC_CUSTOM`), and `mtk-ion-compat` refuses buffers it did
+     not export (`EFAULT`). The encoder ends up writing to IOVA 0: larb1
+     port 2 write faults and empty access units. Setting the property to 0
+     would move every Android 17 Codec2 user to `/dev/ion` as well.
+     `mtk-ion-compat` needs to take foreign dma-bufs: keep their
+     `CONFIG_BUFFER` port, map them through the engine's device with
+     `dma_buf_attach()`, and keep the mapping for as long as the buffer
+     lives, as stock keeps its M4U mappings.
+   - **Colour conversion.** Aperture's frames reach the encoder as RGBA (its
+     CameraX pipeline renders through GL). `C2MtkVencExt` converts them with
+     `libdpframework`, which needs `/dev/mdp_sync` and `/dev/mtk_cmdq`. Every
+     frame fails with `DpSync: createFence error` / `ConvertFrame err = 14`.
+2. **H.264/HEVC decode** (`R1_MEDIA_HW_DECODE=true`). The store sets the
+   `mtk_mm` DMA heap for decoder buffers, and this kernel has no such heap.
    `mtk_platform_codecs_config.xml` sets `alwaysColorConvertChecker` and
    `ForceCCWhenSW`, so decoder output may be converted with `libdpframework`.
    That needs the MediaTek MDP and CMDQ devices (`/dev/mtk_cmdq`,
@@ -200,7 +249,7 @@ grep vcodec /proc/interrupts
 - release when the owner dies
 - larb1 IOVAs for a scattered ION buffer tagged `VENC_RCPU` and `VENC_CUR_LUMA`
 
-Android, stage 1:
+Android, stage 1 (built with `R1_MEDIA_HW_ENCODE=true`):
 
 ```sh
 lshal | grep media.c2                                  # @1.2::IComponentStore/default and /software
@@ -236,14 +285,16 @@ no `DpBlitStream`/cmdq errors.
   hints are accepted and ignored, so `mm_sel` stays at its boot rate. If 720p
   encode falls short of 30 fps, raise that clock first.
 - **Android 12 C++ in an Android 17 process.** The symbol check is clean
-  with the shim, but class layouts are not covered by it.
-  `GraphicBufferMapper` and `AMessage`/`ABuffer` cross the boundary.
+  with the shim, but class layouts are not covered by it. `AHandler` and
+  `C2InterfaceHelper` were wrong ("Linking"). `GraphicBufferMapper` and the
+  `libstagefright_bufferqueue_helper` classes still cross the boundary.
 - **`libmtk_drvb`** scrambles its state when
   `/proc/device-tree/chosen/atag,devinfo` is missing. LK is expected to inject
   it into the mainline DT.
-- **Colour conversion (MDP/CMDQ)** is missing. It blocks stage 2 if the
-  decoders insist on it, and blocks encoder input that is not YUV 4:2:0.
+- **Colour conversion (MDP/CMDQ)** is missing. It blocks RGBA encoder input
+  (stage 1, above), and blocks stage 2 if the decoders insist on it.
 - **Not supported:** secure video (`secure_inst`), the JPEG encoder (its
-  locks are refused), and buffers from DMA heaps rather than `/dev/ion`.
+  locks are refused), and buffers from DMA heaps rather than `/dev/ion`
+  (stage 1, above).
 - **sepolicy** covers the device nodes. Property reads of `vendor.mtk.*` will
   show up as denials in permissive mode; add them from the log.

@@ -19,7 +19,7 @@ R1_MEDIA_BLOBS := vendor/rabbit/r1-media/proprietary
 # Generated from blobs.txt; keep the two in sync.
 PRODUCT_COPY_FILES += \
     $(R1_MEDIA_BLOBS)/etc/mtk_platform_codecs_config.xml:$(TARGET_COPY_OUT_VENDOR)/etc/mtk_platform_codecs_config.xml \
-    $(R1_MEDIA_BLOBS)/etc/seccomp_policy/android.hardware.media.c2@1.2-extended-seccomp-policy:$(TARGET_COPY_OUT_VENDOR)/etc/seccomp_policy/android.hardware.media.c2@1.2-extended-seccomp-policy \
+    $(R1_MEDIA_PATH)/seccomp_policy/android.hardware.media.c2@1.2-extended-seccomp-policy:$(TARGET_COPY_OUT_VENDOR)/etc/seccomp_policy/android.hardware.media.c2@1.2-extended-seccomp-policy \
     $(R1_MEDIA_BLOBS)/etc/seccomp_policy/android.hardware.media.c2@1.2-mediatek-seccomp-policy:$(TARGET_COPY_OUT_VENDOR)/etc/seccomp_policy/android.hardware.media.c2@1.2-mediatek-seccomp-policy \
     $(R1_MEDIA_BLOBS)/bin/hw/android.hardware.media.c2@1.2-mediatek:$(TARGET_COPY_OUT_VENDOR)/bin/hw/android.hardware.media.c2@1.2-mediatek \
     $(R1_MEDIA_BLOBS)/lib/r1-c2/android.hardware.media.c2@1.0.so:$(TARGET_COPY_OUT_VENDOR)/lib/r1-c2/android.hardware.media.c2@1.0.so \
@@ -111,18 +111,31 @@ PRODUCT_PACKAGES += \
     libutils.vendor:32 \
     libutilscallstack.vendor:32
 
+# The blobs' handlers subclass AHandler with the Android 12 layout. Android 17
+# appended members (mLock and the delivery status) that the subclasses'
+# fields overlay, so the Android 17 library locks garbage and spins. The
+# HAL gets the Android 12 build (VNDK v31) through its runpath; the
+# libraries are loaded once per name, so the Android 17 vendor libraries in
+# the process share it. Their AHandler only appends to the Android 12
+# prefix, which the Android 12 code alone touches.
+PRODUCT_COPY_FILES += \
+    prebuilts/vndk/v31/arm/arch-arm-armv7-a-neon/shared/vndk-core/libstagefright_foundation.so:$(TARGET_COPY_OUT_VENDOR)/lib/r1-c2/libstagefright_foundation.so
+
 # HAL service, device node, codec list.
 PRODUCT_COPY_FILES += \
     $(R1_MEDIA_PATH)/init.r1.media.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/init.r1.media.rc \
     $(R1_MEDIA_PATH)/ueventd.r1-media.rc:$(TARGET_COPY_OUT_VENDOR)/etc/ueventd.r1-media.rc
 
-# Stage 1 lists the hardware H.264 encoder only; stage 2 adds the H.264 and
-# HEVC decoders, whose output conversion still needs testing (README.md).
+# The framework only lists HAL components named in a codec list. Stage 1
+# lists the hardware H.264 encoder; stage 2 adds the H.264 and HEVC decoders.
+# Both stay off until the kernel can serve them (README.md, "Stages"): with
+# no list the HAL runs but the c2.android software codecs do all the work.
+R1_MEDIA_HW_ENCODE ?= false
 R1_MEDIA_HW_DECODE ?= false
 ifeq ($(R1_MEDIA_HW_DECODE),true)
 PRODUCT_COPY_FILES += \
     $(R1_MEDIA_PATH)/media_codecs_c2.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs.xml
-else
+else ifeq ($(R1_MEDIA_HW_ENCODE),true)
 PRODUCT_COPY_FILES += \
     $(R1_MEDIA_PATH)/media_codecs_c2_encode.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs.xml
 endif
