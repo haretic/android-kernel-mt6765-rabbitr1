@@ -7,4 +7,9 @@
     <!-- The r1 has no Back or Home keys (only the side button and the scroll wheel).
          Without a navigation bar SystemUI also never attaches the back gesture. -->
     <bool name="config_showNavigationBar">true</bool>
+
+    <!-- The panel runs at 85 Hz (panel-rabbit-r1); the 60 Hz default made the
+         framework render at 85 / 2 = 42.5 Hz. -->
+    <integer name="config_defaultRefreshRate">85</integer>
+    <integer name="config_defaultPeakRefreshRate">85</integer>
 </resources>
