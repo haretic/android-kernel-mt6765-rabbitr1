@@ -1,7 +1,8 @@
 /*
  * r1-vcodec-test: exercise the MT6765 /dev/Vcodec driver (mtk-vcodec-compat) the way the stock
  * codec libraries do: libvcodec_utility's eValInit/eVideoLockHW/eVideoWaitHWDone/eHalInit mmaps,
- * and eVideoMemAlloc's M4U addresses through /dev/ion (ION_MM_CONFIG_BUFFER + ION_SYS_GET_PHYS).
+ * and eVideoMemAlloc's M4U addresses through /dev/ion (ION_MM_CONFIG_BUFFER + ION_SYS_GET_PHYS),
+ * for ION buffers and for the DMA heap buffers Codec2 hands the libraries.
  *
  * Build from the kernel tree root, static, for both ABIs (the codec libraries are 32-bit, so
  * r1-vcodec-test32 is the one that matches them):
@@ -22,6 +23,7 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -59,6 +61,15 @@ _Static_assert(sizeof(isr_t) == 96, "isr");
 #define BUF_LEN			(256 * 1024 + 4096)
 /* MT6765 DRAM starts here; M4U addresses for these ports sit below it. */
 #define DRAM_BASE		0x40000000UL
+
+/* <linux/dma-heap.h> */
+struct dma_heap_allocation_data {
+	uint64_t len;
+	uint32_t fd;
+	uint32_t fd_flags;
+	uint64_t heap_flags;
+};
+#define DMA_HEAP_IOCTL_ALLOC	_IOWR('H', 0x0, struct dma_heap_allocation_data)
 
 static int failures;
 
@@ -373,6 +384,110 @@ out:
 	close(ion);
 }
 
+/*
+ * Whether debugfs lists a dma-buf with inode @ino: 1 or 0, or -1 if it cannot
+ * be read (dma_buf_debug_show prints the inode as the sixth field, "%08lu").
+ */
+static int dmabuf_listed(unsigned long ino)
+{
+	char line[512], needle[32];
+	FILE *f = fopen("/sys/kernel/debug/dma_buf/bufinfo", "r");
+	int found = 0;
+
+	if (!f)
+		return -1;
+	snprintf(needle, sizeof(needle), "\t%08lu\t", ino);
+	while (fgets(line, sizeof(line), f))
+		if (strstr(line, needle))
+			found = 1;
+	fclose(f);
+	return found;
+}
+
+/*
+ * Codec2 allocates the codec's linear buffers from /dev/dma_heap/system, and
+ * libmemory_c2 asks /dev/ion for their M4U addresses as for ION buffers. As
+ * on stock, the mapping lives as long as the buffer, not the handle.
+ */
+static void test_foreign_iova(void)
+{
+	struct dma_heap_allocation_data heap = {
+		.len = BUF_LEN, .fd_flags = O_RDWR | O_CLOEXEC,
+	};
+	struct ion_fd_data imp;
+	struct ion_handle_data hd;
+	unsigned long addr = 0, again, len;
+	struct ion_mm_data mm;
+	int ion, heapfd, ret, listed;
+	struct stat st;
+
+	heapfd = open("/dev/dma_heap/system", O_RDONLY | O_CLOEXEC);
+	CHECK(heapfd >= 0, "open /dev/dma_heap/system");
+	if (heapfd < 0)
+		return;
+	ret = xioctl(heapfd, DMA_HEAP_IOCTL_ALLOC, &heap);
+	close(heapfd);
+	CHECK(ret == 0, "DMA_HEAP_IOCTL_ALLOC %d bytes -> %d", BUF_LEN, ret);
+	if (ret)
+		return;
+	fstat(heap.fd, &st);
+
+	ion = open("/dev/ion", O_RDONLY | O_CLOEXEC);
+	CHECK(ion >= 0, "open /dev/ion");
+	if (ion < 0)
+		goto out_buf;
+
+	memset(&imp, 0, sizeof(imp));
+	imp.fd = heap.fd;
+	ret = xioctl(ion, ION_IOC_IMPORT, &imp);
+	CHECK(ret == 0 && imp.handle > 0, "ION_IOC_IMPORT of a DMA heap buffer -> %d", ret);
+	if (ret)
+		goto out_ion;
+
+	ret = ion_phys(ion, imp.handle, &again, &len);
+	CHECK(ret < 0, "no address before ION_MM_CONFIG_BUFFER (%d)", ret);
+
+	CHECK(ion_config(ion, imp.handle, PORT_VENC_RCPU) == 0, "ION_MM_CONFIG_BUFFER VENC_RCPU");
+	ret = ion_phys(ion, imp.handle, &addr, &len);
+	CHECK(ret == 0 && addr && !(addr & 0xfff) && (uint64_t)addr + len <= 1ULL << 32 &&
+	      len == BUF_LEN, "ION_SYS_GET_PHYS -> %d, IOVA %#lx + %#lx", ret, addr, len);
+	ret = ion_phys(ion, imp.handle, &again, &len);
+	CHECK(ret == 0 && again == addr, "same IOVA on the next query (%#lx)", again);
+
+	memset(&mm, 0, sizeof(mm));
+	mm.mm_cmd = ION_MM_GET_IOVA;
+	mm.get_phys_param.handle = imp.handle;
+	mm.get_phys_param.module_id = PORT_VENC_CUR_LUMA;
+	ret = ion_custom(ion, ION_CMD_MULTIMEDIA, &mm);
+	CHECK(ret == 0 && mm.get_phys_param.phy_addr == addr && mm.get_phys_param.len == BUF_LEN,
+	      "ION_MM_GET_IOVA VENC_CUR_LUMA -> %d, the same mapping (%#llx)", ret,
+	      (unsigned long long)mm.get_phys_param.phy_addr);
+
+	/* The buffer outlives its handle: a new import finds port and mapping. */
+	hd.handle = imp.handle;
+	CHECK(xioctl(ion, ION_IOC_FREE, &hd) == 0, "ION_IOC_FREE");
+	ret = xioctl(ion, ION_IOC_IMPORT, &imp);
+	CHECK(ret == 0, "ION_IOC_IMPORT again -> %d", ret);
+	if (!ret) {
+		ret = ion_phys(ion, imp.handle, &again, &len);
+		CHECK(ret == 0 && again == addr, "same IOVA without a new CONFIG_BUFFER (%#lx)", again);
+		hd.handle = imp.handle;
+		xioctl(ion, ION_IOC_FREE, &hd);
+	}
+out_ion:
+	close(ion);
+out_buf:
+	close(heap.fd);
+
+	/* Released once nothing but the mapping holds it (swept every second). */
+	usleep(2500 * 1000);
+	listed = dmabuf_listed(st.st_ino);
+	if (listed < 0)
+		printf("SKIP buffer released after its last fd (no debugfs)\n");
+	else
+		CHECK(!listed, "buffer released after its last fd");
+}
+
 int main(void)
 {
 	int a = open("/dev/Vcodec", O_RDWR | O_CLOEXEC);
@@ -390,6 +505,7 @@ int main(void)
 	test_contention(a, VAL_DRIVER_TYPE_H264_ENC);
 	test_abandon(a);
 	test_iova();
+	test_foreign_iova();
 
 	close(b);
 	close(a);
