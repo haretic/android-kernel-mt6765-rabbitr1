@@ -181,6 +181,36 @@ Planes offsetPlanes(const Planes& in, const Format* f, int x, int y) {
     return out;
 }
 
+// Copies w x h of the source at its planes into cached memory. Buffers
+// allocated without ION_FLAG_CACHED, as the PowerVR gralloc's render targets
+// are, have write-combined CPU mappings, where the narrow loads of the
+// conversion routines run at tens of MB/s; memcpy's wide loads do much better.
+Planes copyToCached(const Planes& in, const Format* f, int w, int h,
+                    std::vector<uint8_t>* store) {
+    const int cw = (w + 1) / 2, ch = (h + 1) / 2;
+    int rowBytes[3] = {w * f->bpp, 0, 0};
+    int rows[3] = {h, 0, 0};
+    if (isPlanar(f)) {
+        rowBytes[1] = rowBytes[2] = cw;
+        rows[1] = rows[2] = ch;
+    } else if (isSemiPlanar(f)) {
+        rowBytes[1] = cw * 2;
+        rows[1] = ch;
+    }
+    size_t total = 0;
+    for (int i = 0; i < 3; i++) total += static_cast<size_t>(rowBytes[i]) * rows[i];
+    store->resize(total);
+    Planes out;
+    uint8_t* dst = store->data();
+    for (int i = 0; i < 3 && rows[i]; i++) {
+        out.p[i] = dst;
+        out.stride[i] = rowBytes[i];
+        for (int y = 0; y < rows[i]; y++, dst += rowBytes[i])
+            memcpy(dst, in.p[i] + static_cast<size_t>(y) * in.stride[i], rowBytes[i]);
+    }
+    return out;
+}
+
 // An I420 image in memory of its own.
 struct I420Buffer {
     std::vector<uint8_t> data;
@@ -198,39 +228,53 @@ struct I420Buffer {
 };
 
 // libyuv's ARGB, B G R A in memory, to I420 with a matrix libyuv has no
-// entry point for: BT.709, limited range.
-void argbToI420Bt709(const uint8_t* argb, int argbStride, const Planes& dst, int w, int h) {
-    // Q16 coefficients: Y = 16 + 219/255 (Kr R + Kg G + Kb B), U and V
-    // 128 + 224/255 of (B - Y') / (2 (1 - Kb)) and (R - Y') / (2 (1 - Kr)).
-    constexpr double kr = 0.2126, kb = 0.0722, kg = 1 - kr - kb;
-    constexpr double ys = 219.0 / 255, cs = 224.0 / 255;
-    constexpr int s = 1 << 16;
-    constexpr int yr = kr * ys * s + 0.5, yg = kg * ys * s + 0.5, yb = kb * ys * s + 0.5;
-    constexpr double ud = 2 * (1 - kb), vd = 2 * (1 - kr);
-    constexpr int ur = -kr / ud * cs * s - 0.5, ug = -kg / ud * cs * s - 0.5;
-    constexpr int ub = (1 - kb) / ud * cs * s + 0.5;
-    constexpr int vr = (1 - kr) / vd * cs * s + 0.5, vg = -kg / vd * cs * s - 0.5;
-    constexpr int vb = -kb / vd * cs * s - 0.5;
+// entry point for: BT.709, limited range. 8-bit coefficients in 16-bit sums,
+// as libyuv's own rows, in loops the compiler vectorises: Y = 16 + 219/255
+// (Kr R + Kg G + Kb B); U, V = 128 + 224/255 of (B - Y') / (2 (1 - Kb)) and
+// (R - Y') / (2 (1 - Kr)), on 2x2 averages. The chroma sums wrap modulo 2^16
+// on the way, but end in 0..255 after the 0x8080 bias.
+void argbToI420Bt709(const uint8_t* argb, int argbStride, const Planes& dst, int w, int h,
+                     std::vector<uint16_t>* scratch) {
+    constexpr uint16_t yr = 47, yg = 157, yb = 16;
+    constexpr uint16_t ur = 26, ug = 86, ub = 112;  // U = ub B - ur R - ug G
+    constexpr uint16_t vr = 112, vg = 102, vb = 10;  // V = vr R - vg G - vb B
 
     for (int y = 0; y < h; y++) {
         const uint8_t* px = argb + y * argbStride;
         uint8_t* out = dst.p[0] + y * dst.stride[0];
-        for (int x = 0; x < w; x++, px += 4)
-            out[x] = ((16 << 16 | 1 << 15) + yr * px[2] + yg * px[1] + yb * px[0]) >> 16;
+        for (int x = 0; x < w; x++)
+            out[x] = static_cast<uint16_t>(yr * px[4 * x + 2] + yg * px[4 * x + 1] +
+                                           yb * px[4 * x] + 0x1080) >> 8;
     }
+
+    // Per row pair: the vertical sums of each channel, then the horizontal
+    // pairs of those.
+    const int cw = (w + 1) / 2;
+    scratch->resize(3 * 2 * cw);
+    uint16_t* sb = scratch->data();
+    uint16_t* sg = sb + 2 * cw;
+    uint16_t* sr = sg + 2 * cw;
     for (int y = 0; y < h; y += 2) {
         const uint8_t* r0 = argb + y * argbStride;
         const uint8_t* r1 = y + 1 < h ? r0 + argbStride : r0;
+        for (int x = 0; x < w; x++) {
+            sb[x] = r0[4 * x] + r1[4 * x];
+            sg[x] = r0[4 * x + 1] + r1[4 * x + 1];
+            sr[x] = r0[4 * x + 2] + r1[4 * x + 2];
+        }
+        if (w & 1) {
+            sb[w] = sb[w - 1];
+            sg[w] = sg[w - 1];
+            sr[w] = sr[w - 1];
+        }
         uint8_t* u = dst.p[1] + y / 2 * dst.stride[1];
         uint8_t* v = dst.p[2] + y / 2 * dst.stride[2];
-        for (int x = 0; x < w; x += 2) {
-            const int x1 = x + 1 < w ? x + 1 : x;
-            int c[3];
-            for (int k = 0; k < 3; k++)
-                c[k] = r0[4 * x + k] + r0[4 * x1 + k] + r1[4 * x + k] + r1[4 * x1 + k];
-            // c holds 4 x B, G, R.
-            u[x / 2] = ((128 << 18 | 1 << 17) + ur * c[2] + ug * c[1] + ub * c[0]) >> 18;
-            v[x / 2] = ((128 << 18 | 1 << 17) + vr * c[2] + vg * c[1] + vb * c[0]) >> 18;
+        for (int i = 0; i < cw; i++) {
+            const uint16_t b = (sb[2 * i] + sb[2 * i + 1] + 2) >> 2;
+            const uint16_t g = (sg[2 * i] + sg[2 * i + 1] + 2) >> 2;
+            const uint16_t r = (sr[2 * i] + sr[2 * i + 1] + 2) >> 2;
+            u[i] = static_cast<uint16_t>(ub * b - ur * r - ug * g + 0x8080) >> 8;
+            v[i] = static_cast<uint16_t>(vr * r - vg * g - vb * b + 0x8080) >> 8;
         }
     }
 }
@@ -261,7 +305,7 @@ int rgbToArgb(const Planes& src, DP_COLOR_ENUM color, uint8_t* argb, int argbStr
 }
 
 int argbToI420(const uint8_t* argb, int argbStride, const Planes& dst, int w, int h,
-               DP_PROFILE_ENUM profile) {
+               DP_PROFILE_ENUM profile, std::vector<uint16_t>* scratch) {
     const Planes& d = dst;
     switch (profile) {
         case DP_PROFILE_BT601:
@@ -271,7 +315,7 @@ int argbToI420(const uint8_t* argb, int argbStride, const Planes& dst, int w, in
             return libyuv::ARGBToJ420(argb, argbStride, d.p[0], d.stride[0], d.p[1], d.stride[1],
                                       d.p[2], d.stride[2], w, h);
         case DP_PROFILE_BT709:
-            argbToI420Bt709(argb, argbStride, dst, w, h);
+            argbToI420Bt709(argb, argbStride, dst, w, h, scratch);
             return 0;
     }
     ALOGE("unknown profile %d", profile);
@@ -339,6 +383,16 @@ struct DpAsyncBlitStream::Impl {
     Port dst;
     uint32_t nextJob = 1;
     int idleBuf = -1;  // a dma-buf no one fences, for signalled sync_files
+
+    // Kept from job to job: allocating and clearing them each frame costs
+    // as much as some of the conversions.
+    std::vector<uint8_t> srcCopy;
+    std::vector<uint8_t> argb;
+    std::vector<uint8_t> scaled;
+    std::vector<uint16_t> rows;
+    I420Buffer stageBuf;
+    I420Buffer unscaled;
+    I420Buffer rotated;
 
     Impl() {
         int heap = open("/dev/dma_heap/system", O_RDONLY | O_CLOEXEC);
@@ -414,11 +468,11 @@ DP_STATUS_ENUM DpAsyncBlitStream::Impl::convert() {
     status = mapPort(dst, true, &dstMap, &dp);
     if (status != DP_STATUS_RETURN_SUCCESS) return status;
     sp = offsetPlanes(sp, sf, crop.x, crop.y);
+    sp = copyToCached(sp, sf, crop.w, crop.h, &srcCopy);
     dp = offsetPlanes(dp, df, roi.x, roi.y);
 
     // Into I420 of sw x sh: straight into the destination when it is planar
     // and nothing is rotated.
-    I420Buffer stageBuf;
     Planes stage;
     if (rot == libyuv::kRotate0 && isPlanar(df)) {
         stage = dp;
@@ -429,20 +483,19 @@ DP_STATUS_ENUM DpAsyncBlitStream::Impl::convert() {
 
     int ret;
     if (sf->layout == Layout::RGB) {
-        std::vector<uint8_t> argb(static_cast<size_t>(crop.w) * crop.h * 4);
+        argb.resize(static_cast<size_t>(crop.w) * crop.h * 4);
         ret = rgbToArgb(sp, sf->color, argb.data(), crop.w * 4, crop.w, crop.h);
         if (!ret && scale) {
-            std::vector<uint8_t> scaled(static_cast<size_t>(sw) * sh * 4);
+            scaled.resize(static_cast<size_t>(sw) * sh * 4);
             ret = libyuv::ARGBScale(argb.data(), crop.w * 4, crop.w, crop.h, scaled.data(),
                                     sw * 4, sw, sh, libyuv::kFilterBilinear);
-            argb.swap(scaled);
         }
-        if (!ret) ret = argbToI420(argb.data(), sw * 4, stage, sw, sh, dst.profile);
+        const uint8_t* in = scale ? scaled.data() : argb.data();
+        if (!ret) ret = argbToI420(in, sw * 4, stage, sw, sh, dst.profile, &rows);
     } else if (!scale) {
         ret = yuvToI420(sp, sf, stage, sw, sh);
     } else {
         Planes in = sp;
-        I420Buffer unscaled;
         ret = 0;
         if (!isPlanar(sf)) {
             unscaled.allocate(crop.w, crop.h);
@@ -462,7 +515,6 @@ DP_STATUS_ENUM DpAsyncBlitStream::Impl::convert() {
 
     // Rotate, and interleave the chroma for NV12 and NV21.
     Planes out = stage;
-    I420Buffer rotated;
     if (rot != libyuv::kRotate0) {
         if (isPlanar(df)) {
             out = dp;

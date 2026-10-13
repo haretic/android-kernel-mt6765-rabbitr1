@@ -15,6 +15,9 @@ cc_library_shared {
         "-Werror",
     ],
     static_libs: ["libyuv_static"],
+    // Keep libyuv's symbols to this library: exported, they would resolve
+    // to the copy in the stock libsfplugin_ccodec_utils.
+    ldflags: ["-Wl,--exclude-libs=libyuv_static.a"],
     shared_libs: [
         "liblog",
         "libsync",

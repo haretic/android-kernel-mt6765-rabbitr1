@@ -24,6 +24,16 @@
 # lib/r1-c2/libcodec2_vndk.so also gets a 2-byte code fix (README.md, "Linking"):
 #   at file offset 0x5096e, bytes e6 e7 (b 0x5193e) become 0e e0 (b 0x5198e),
 #   after checking that d4 19 (adds r4, r2, r7) precedes them.
+# lib/libcodec2_mtk_venc.so gets its input usage set to C2MemoryUsage::CPU_READ
+#   (README.md, "Stages"): the C2StreamUsageTuning::input defaults of the two
+#   encoder interfaces, 32 bytes each at file offsets 0x3e516 and 0x52282, from
+#     10204ff0100986f010ef014640f61c004ff0000ac4f20020c1e902aac1e90090
+#     10204ff0100a73f05ae8014640f61c004ff0000bc4f20020c1e902bbc1e900a0
+#   to
+#     1020814686f012ef0146012240f61c004ff0000ac4f20020c1e9022ac1e90090
+#     1020824673f05ce80146012240f61c004ff0000bc4f20020c1e9022bc1e900a0
+#   (mov r9/r10, r0 in place of mov.w #0x10 makes room for movs r2, #1, which
+#   strd stores as the low word of the value; the blx to _Znwj moves 2 bytes up).
 etc/mtk_platform_codecs_config.xml
 # etc/seccomp_policy/android.hardware.media.c2@1.2-extended-seccomp-policy: the
 #   device's copy in seccomp_policy/ (stock plus three crash handler syscalls)
