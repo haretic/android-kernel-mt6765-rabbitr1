@@ -5,4 +5,6 @@ init_daemon_domain(mtk_consys_wifi_on)
 
 allow mtk_consys_wifi_on mtk_consys_wifi_on_exec:file rx_file_perms;
 allow mtk_consys_wifi_on vendor_shell_exec:file rx_file_perms;
-allow mtk_consys_wifi_on wmtwifi_device:chr_file w_file_perms;
+allow mtk_consys_wifi_on vendor_toolbox_exec:file rx_file_perms;
+# The script waits for ueventd to create the node.
+allow mtk_consys_wifi_on wmtwifi_device:chr_file { getattr w_file_perms };

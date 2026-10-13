@@ -11,9 +11,6 @@ on post-fs
     # download) and off again until the Bluetooth HAL opens it.
     exec u:r:vendor_modprobe:s0 -- /vendor/bin/modprobe -a -d /vendor/lib/modules mtk_btif_drv wmt_drv wmt_chrdev_wifi wlan_drv_gen4m btmtk_wmt
 
-    # ueventd creates the node asynchronously; post-fs-data writes to it.
-    wait /dev/wmtWifi 5
-
     # wmt_drv is up: what stock wmt_loader announces. gps_drv.ko loads on
     # this (gnss/init.r1.gnss.rc) and mnld checks it.
     setprop vendor.connsys.driver.ready yes
