@@ -3,20 +3,25 @@
 // I420, so decoder output can be compared with a reference decode:
 //   adb push r1-vdec-test.jar /data/local/tmp/
 //   adb shell CLASSPATH=/data/local/tmp/r1-vdec-test.jar app_process / R1VdecTest \
-//       codec file [buffer|surface]
-// buffer reads the codec's output images; surface has it render into an
-// ImageReader, the path players take (with a display surface instead).
+//       codec file [buffer|surface|display]
+// buffer reads the codec's output images; surface has it render into a YUV
+// ImageReader; display renders into a layer on screen at the clip's frame
+// rate, as players do, and holds the last frame for 5 s (take a screencap).
+// display uses SurfaceControl APIs apps cannot, which app_process can.
 // Writes <file>-<codec>-<mode>.yuv; on the host:
 //   ffmpeg -i file -f rawvideo -pix_fmt yuv420p ref.yuv
 //   ffmpeg -f rawvideo -s WxH -pix_fmt yuv420p -i out.yuv \
 //       -f rawvideo -s WxH -pix_fmt yuv420p -i ref.yuv -lavfi psnr -f null -
 import android.graphics.ImageFormat;
+import android.graphics.Rect;
 import android.media.Image;
 import android.media.ImageReader;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
+import android.view.Surface;
+import android.view.SurfaceControl;
 import java.io.FileOutputStream;
 import java.nio.ByteBuffer;
 
@@ -44,8 +49,9 @@ public class R1VdecTest {
 
     public static void main(String[] args) throws Exception {
         String name = args[0], file = args[1];
-        boolean surface = args.length > 2 && args[2].equals("surface");
-        String outName = file + "-" + name + "-" + (surface ? "surface" : "buffer") + ".yuv";
+        String mode = args.length > 2 ? args[2] : "buffer";
+        boolean surface = mode.equals("surface"), display = mode.equals("display");
+        String outName = file + "-" + name + "-" + mode + ".yuv";
 
         MediaExtractor ex = new MediaExtractor();
         ex.setDataSource(file);
@@ -61,17 +67,29 @@ public class R1VdecTest {
         int w = fmt.getInteger(MediaFormat.KEY_WIDTH), h = fmt.getInteger(MediaFormat.KEY_HEIGHT);
 
         ImageReader reader = null;
+        SurfaceControl layer = null;
+        Surface target = null;
         MediaCodec codec = MediaCodec.createByCodecName(name);
         if (surface) {
             reader = ImageReader.newInstance(w, h, ImageFormat.YUV_420_888, 4);
+            target = reader.getSurface();
+        } else if (display) {
+            layer = new SurfaceControl.Builder().setName("r1-vdec-test").setBufferSize(w, h)
+                    .build();
+            SurfaceControl.Transaction t = new SurfaceControl.Transaction();
+            SurfaceControl.Transaction.class.getMethod("setLayerStack", SurfaceControl.class,
+                    int.class).invoke(t, layer, 0);
+            t.setLayer(layer, Integer.MAX_VALUE).setVisibility(layer, true)
+                    .setGeometry(layer, new Rect(0, 0, w, h), new Rect(0, 0, w, h), 0).apply();
+            target = new Surface(layer);
         } else {
             fmt.setInteger(MediaFormat.KEY_COLOR_FORMAT,
                     MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible);
         }
-        codec.configure(fmt, surface ? reader.getSurface() : null, null, 0);
+        codec.configure(fmt, target, null, 0);
         codec.start();
         System.out.println("codec " + codec.getName() + ", " + fmt.getString(MediaFormat.KEY_MIME)
-                + " " + w + "x" + h + ", " + (surface ? "ImageReader" : "buffer") + " output");
+                + " " + w + "x" + h + ", " + mode + " output");
 
         FileOutputStream out = new FileOutputStream(outName);
         MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
@@ -98,8 +116,15 @@ public class R1VdecTest {
                 System.out.println("output format " + codec.getOutputFormat());
             } else if (idx >= 0) {
                 boolean eos = (info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0;
-                if (info.size > 0 || surface && !eos) {
-                    if (surface) {
+                if (info.size > 0 || (surface || display) && !eos) {
+                    if (display) {
+                        // At the clip's pace from the first frame.
+                        long due = start + info.presentationTimeUs * 1000;
+                        long wait = (due - System.nanoTime()) / 1_000_000;
+                        if (wait > 0)
+                            Thread.sleep(wait);
+                        codec.releaseOutputBuffer(idx, true);
+                    } else if (surface) {
                         codec.releaseOutputBuffer(idx, true);
                         Image img = null;
                         for (int t = 0; t < 200 && img == null; t++) {
@@ -124,6 +149,8 @@ public class R1VdecTest {
             }
         }
         double secs = (System.nanoTime() - start) / 1e9;
+        if (display)
+            Thread.sleep(5000);
         codec.stop();
         codec.release();
         out.close();

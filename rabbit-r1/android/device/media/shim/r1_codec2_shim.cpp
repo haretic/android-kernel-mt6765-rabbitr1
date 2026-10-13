@@ -54,6 +54,7 @@
 #include <string_view>
 
 #include <android-base/file.h>
+#include <android-base/unique_fd.h>
 #include <android/sync.h>
 #include <log/log.h>
 #include <gui/IGraphicBufferProducer.h>
@@ -131,9 +132,10 @@ sp<HGraphicBufferProducer> r1GraphicBufferSourceGetHProducer(const GraphicBuffer
 
 namespace r1compt {
 
-// android::Fence of Android 12: LightRefBase's count, then the fd. Objects
-// are created, reference-counted and destroyed by libcodec2_vndk's inline
-// code; only these three members are called.
+// android::Fence of Android 12: LightRefBase's count, then the fd in a
+// unique_fd. Objects are created, reference-counted and destroyed by
+// libcodec2_vndk's inline code, whose destructor closes the fd with the
+// fdsan tag of that unique_fd; only these three members are called.
 class Fence {
   public:
     explicit Fence(int fenceFd);
@@ -142,10 +144,10 @@ class Fence {
 
   private:
     mutable std::atomic<int32_t> mCount;
-    int mFenceFd;
+    android::base::unique_fd mFenceFd;
 };
 
-static_assert(sizeof(Fence) == 8 && sizeof(std::atomic<int32_t>) == 4, "Android 12 layout");
+static_assert(sizeof(Fence) == 8 && sizeof(android::base::unique_fd) == 4, "Android 12 layout");
 
 Fence::Fence(int fenceFd) : mCount(0), mFenceFd(fenceFd) {}
 
@@ -160,7 +162,7 @@ nsecs_t Fence::getSignalTime() const {
     if (mFenceFd == -1) return kInvalid;
     struct sync_file_info* info = sync_file_info(mFenceFd);
     if (!info) {
-        ALOGE("sync_file_info returned NULL for fd %d", mFenceFd);
+        ALOGE("sync_file_info returned NULL for fd %d", mFenceFd.get());
         return kInvalid;
     }
     if (info->status != 1) {
