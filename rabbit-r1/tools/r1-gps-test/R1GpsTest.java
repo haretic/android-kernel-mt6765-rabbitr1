@@ -2,7 +2,10 @@
 // Requests GPS fixes from the shell and prints satellite status and locations:
 //   adb push r1-gps-test.jar /data/local/tmp/
 //   adb shell CLASSPATH=/data/local/tmp/r1-gps-test.jar app_process / R1GpsTest [seconds]
-// Runs as the shell user, which holds ACCESS_FINE_LOCATION.
+// Runs as the shell user (adb unroot first), which holds ACCESS_FINE_LOCATION.
+// The shell is not a foreground app, so exempt it from background throttling,
+// or the HAL is asked for one fix every 30 minutes:
+//   adb shell settings put global location_background_throttle_package_whitelist com.android.shell
 import android.content.Context;
 import android.location.GnssStatus;
 import android.location.Location;
