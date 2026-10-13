@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
 config MTK_ION_COMPAT
 	tristate "Legacy MediaTek ION ABI on top of DMA-BUF"
-	depends on DMA_SHARED_BUFFER && MMU
+	depends on DMA_SHARED_BUFFER && DMABUF_HEAPS && MMU
 	help
 	  Provides /dev/ion with the handle-based ION ioctl ABI of the
 	  MediaTek Linux 4.19 vendor kernels, including the MediaTek
@@ -11,6 +11,8 @@ config MTK_ION_COMPAT
 	  exported as standard dma-bufs, which any mainline driver can
 	  import. Secure heaps are not secure. Buffers tagged for an M4U port
 	  whose driver registered with this device get their IOMMU address
-	  from ION_SYS_GET_PHYS and ION_MM_GET_IOVA, as on stock.
+	  from ION_SYS_GET_PHYS and ION_MM_GET_IOVA, as on stock. The
+	  mtk_mm and mtk_mm-uncached DMA heaps MediaTek's Codec2 store asks
+	  for serve the same buffers.
 
 	  If unsure, say N.

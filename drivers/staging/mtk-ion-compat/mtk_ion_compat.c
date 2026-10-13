@@ -32,12 +32,18 @@
  * of the engine's device. Their port and mappings are kept in a record that
  * holds a reference to the buffer until it is the only one left: stock keeps
  * an M4U mapping for as long as its buffer lives.
+ *
+ * MediaTek's Codec2 store also names DMA heaps for codec buffers, mtk_mm and
+ * mtk_mm-uncached, and the platform Codec2 allocators of every process ask
+ * the vendor store which heap to use. Both are registered here and hand out
+ * ion_mm_heap buffers of this device, cached or not.
  */
 
 #include <linux/compat.h>
 #include <linux/device.h>
 #include <linux/device/faux.h>
 #include <linux/dma-buf.h>
+#include <linux/dma-heap.h>
 #include <linux/dma-mapping.h>
 #include <linux/err.h>
 #include <linux/fs.h>
@@ -1007,6 +1013,56 @@ err_free_buffer:
 }
 
 /* ------------------------------------------------------------------------
+ * DMA heaps
+ */
+
+struct mic_dma_heap {
+	const char *name;
+	unsigned int flags;
+};
+
+static const struct mic_dma_heap mic_dma_heaps[] = {
+	{ "mtk_mm", ION_FLAG_CACHED },
+	{ "mtk_mm-uncached", 0 },
+};
+
+static struct dma_buf *mic_heap_allocate(struct dma_heap *heap,
+					 unsigned long len, u32 fd_flags,
+					 u64 heap_flags)
+{
+	const struct mic_dma_heap *mh = dma_heap_get_drvdata(heap);
+
+	return mic_buffer_alloc(len, BIT(MTK_ION_HEAP_MULTIMEDIA), mh->flags);
+}
+
+static const struct dma_heap_ops mic_heap_ops = {
+	.allocate = mic_heap_allocate,
+};
+
+/*
+ * DMA heaps cannot be removed, so once one is registered the module stays.
+ * /dev/ion works without them: a failure is only reported.
+ */
+static void mic_add_dma_heaps(void)
+{
+	struct dma_heap_export_info exp_info = { .ops = &mic_heap_ops };
+	struct dma_heap *heap;
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(mic_dma_heaps); i++) {
+		exp_info.name = mic_dma_heaps[i].name;
+		exp_info.priv = (void *)&mic_dma_heaps[i];
+		heap = dma_heap_add(&exp_info);
+		if (IS_ERR(heap)) {
+			pr_warn("mtk_ion_compat: DMA heap %s: %pe\n",
+				exp_info.name, heap);
+			continue;
+		}
+		__module_get(THIS_MODULE);
+	}
+}
+
+/* ------------------------------------------------------------------------
  * Handles
  */
 
@@ -1939,6 +1995,7 @@ static int __init mic_init(void)
 	if (ret)
 		goto err_destroy;
 
+	mic_add_dma_heaps();
 	return 0;
 
 err_destroy:
@@ -1961,3 +2018,4 @@ module_exit(mic_exit);
 MODULE_DESCRIPTION("Legacy MediaTek ION ABI on top of DMA-BUF");
 MODULE_LICENSE("GPL");
 MODULE_IMPORT_NS("DMA_BUF");
+MODULE_IMPORT_NS("DMA_BUF_HEAP");
