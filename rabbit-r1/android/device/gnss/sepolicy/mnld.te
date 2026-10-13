@@ -33,6 +33,11 @@ allow mnld hal_gnss_default:unix_dgram_socket sendto;
 # Properties
 set_prop(mnld, vendor_mtk_mnld_prop)
 get_prop(mnld, vendor_mtk_connsys_prop)
+# init.mtk-consys.rc and gnss.mk set them; nvram_daemon reads the chip id.
+set_prop(vendor_init, vendor_mtk_connsys_prop)
+get_prop(nvram_daemon, vendor_mtk_connsys_prop)
+# Stock allows the LED class read (vendor_sepolicy.cil).
+r_dir_file(mnld, sysfs_leds)
 # vendor.service.nvram_init, persist.vendor.radio.mnl.prop,
 # ro.vendor.mtk_log_hide_gps (types from modem/sepolicy)
 get_prop(mnld, vendor_mtk_nvram_prop)
