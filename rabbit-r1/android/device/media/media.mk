@@ -147,3 +147,10 @@ DEVICE_MANIFEST_FILE += $(R1_MEDIA_PATH)/manifest-media.xml
 # selection to aidl, which would hide it (the swcodec APEX serves both).
 PRODUCT_VENDOR_PROPERTIES += \
     media.c2.hal.selection=hidl
+
+# The video decoders output MediaTek's block format (NV12_BLK) to surfaces a
+# display composer reads, as the stock MDP/OVL scan it out. Here neither the
+# GPU nor the display can (SurfaceFlinger aborts on the texture), so they
+# always convert it, with dpframework/, as they do for other consumers.
+PRODUCT_VENDOR_PROPERTIES += \
+    vendor.mtk.c2.vdec.force.output.cc=1

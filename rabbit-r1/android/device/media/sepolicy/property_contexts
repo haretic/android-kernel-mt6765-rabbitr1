@@ -3,3 +3,6 @@ ro.vendor.mtk_blowfish_tee_support      u:object_r:vendor_mtk_media_prop:s0 exac
 ro.vendor.mtk_microtrust_tee_support    u:object_r:vendor_mtk_media_prop:s0 exact bool
 ro.vendor.mtk_tee_gp_support            u:object_r:vendor_mtk_media_prop:s0 exact bool
 ro.vendor.mtk_trustonic_tee_support     u:object_r:vendor_mtk_media_prop:s0 exact bool
+# Codec2 HAL switches and debug properties (libcodec2_mtk_vdec, _venc).
+vendor.mtk.c2.                          u:object_r:vendor_mtk_media_prop:s0
+ro.vendor.mtk.c2.                       u:object_r:vendor_mtk_media_prop:s0
