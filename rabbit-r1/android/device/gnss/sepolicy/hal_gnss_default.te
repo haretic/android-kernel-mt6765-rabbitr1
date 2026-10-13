@@ -1,0 +1,6 @@
+# android.hardware.gnss-service.mediatek (AIDL IGnss V1 + passthrough HIDL
+# IGnss 2.1 over gps.default.so) relays everything to mnld.
+allow hal_gnss_default self:unix_dgram_socket create_socket_perms_no_ioctl;
+allow hal_gnss_default mnld:unix_dgram_socket sendto;
+
+allow hal_gnss_default self:global_capability2_class_set wake_alarm;

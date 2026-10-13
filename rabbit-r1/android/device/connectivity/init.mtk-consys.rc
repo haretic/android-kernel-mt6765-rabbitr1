@@ -13,3 +13,7 @@ on post-fs
 
     # ueventd creates the node asynchronously; post-fs-data writes to it.
     wait /dev/wmtWifi 5
+
+    # wmt_drv is up: what stock wmt_loader announces. gps_drv.ko loads on
+    # this (gnss/init.r1.gnss.rc) and mnld checks it.
+    setprop vendor.connsys.driver.ready yes

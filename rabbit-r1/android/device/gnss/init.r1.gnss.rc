@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+# MT6765 CONSYS GPS: gps_drv.ko (/dev/stpgps) and the stock MediaTek GNSS
+# userspace. Service names, users, groups and sockets are the stock ones
+# (init.gps_drv.rc, init.connectivity.common.rc,
+# android.hardware.gnss-service.mediatek.rc).
+
+# init.mtk-consys.rc sets this once wmt_drv is loaded, as wmt_loader does
+# on stock; gps_drv uses its exports.
+on property:vendor.connsys.driver.ready=yes
+    insmod /vendor/lib/modules/gps_drv.ko
+    # ueventd creates the node asynchronously; mnld opens it at start.
+    wait /dev/stpgps 5
+
+on post-fs-data
+    mkdir /data/vendor/gps 0770 gps system
+    mkdir /data/vendor/log 0770 gps system
+    mkdir /data/vendor/log/gps 0770 gps system
+
+service mnld /vendor/bin/mnld
+    class main
+    user gps
+    capabilities WAKE_ALARM
+    group gps inet misc sdcard_rw sdcard_r media_rw system radio wakelock
+    socket mnld stream 660 gps system
+
+service vendor.gnss-default /vendor/bin/hw/android.hardware.gnss-service.mediatek
+    class hal
+    user system
+    capabilities WAKE_ALARM
+    group system gps
