@@ -19,7 +19,7 @@ the framework's requests to `mnld` over abstract datagram sockets
 | `gnss.mk` | Product side: blobs, the VNDK 31 AIDL stub, AOSP `.vendor` libraries, rc and ueventd files, VINTF fragment, feature XML, properties. |
 | `BoardConfigGnss.mk` | Board side: sepolicy dir, `BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES`. |
 | `blobs.txt` | The 9 files to import from `out/stock-vendor/tree`. |
-| `init.r1.gnss.rc` | `insmod gps_drv.ko` on `vendor.connsys.driver.ready=yes`, the `/data/vendor/gps` directories, and the stock `mnld` and `vendor.gnss-default` services. |
+| `init.r1.gnss.rc` | `gps_drv` through vendor_modprobe on `vendor.connsys.driver.ready=yes`, the `/data/vendor/gps` directories, and the stock `mnld` and `vendor.gnss-default` services. |
 | `ueventd.r1-gnss.rc` | `/dev/stpgps` as gps:gps 0660. |
 | `manifest-gnss.xml` | AIDL `IGnss/default` V1 and HIDL `@2.1::IGnss/default` (+ `@1.1`). |
 | `sepolicy/` | The `mnld` domain, device, data, socket and property types, and the `hal_gnss_default` additions. |
@@ -36,7 +36,7 @@ the framework's requests to `mnld` over abstract datagram sockets
 5. **Kernel**: `CONFIG_MTK_CONN_GPS=m` (rabbit_r1_defconfig on `rabbit-r1/gnss`). Put `gps_drv.ko` in `prebuilt/` with the other modules. Also take the new DTB: it adds the GPS LNA pin states to the CONSYS node. Without them, WMT cannot switch the external LNA on.
 6. **Blobs**: create `vendor/rabbit/r1-gnss/proprietary/`, the same way as `vendor/rabbit/r1-modem`.
    - Copy every path in `blobs.txt` from `out/stock-vendor/tree`, keeping the relative path.
-   - No patching is needed. The closure was checked with `nm -D` against the Android 17 build: nothing is unresolved. The one exception is `property_get` in `libmnl.so`, which comes from mnld's `libcutils`.
+   - One patch: the stock `libmnl.so` becomes `libmtkmnl.so` (soname, and mnld's NEEDED), because AOSP's netfilter `libmnl` owns `/vendor/lib64/libmnl.so`. The closure was checked with `nm -D` against the Android 17 build: nothing is unresolved. The one exception is `property_get` in `libmnl.so`, which comes from mnld's `libcutils`.
    - `android.hardware.gnss-V1-ndk_platform.so` is not a blob. gnss.mk installs it straight from `prebuilts/vndk/v31`.
 
 ## Why the pieces are there
