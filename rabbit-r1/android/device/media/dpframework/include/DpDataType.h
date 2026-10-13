@@ -21,11 +21,16 @@ typedef enum DP_STATUS_ENUM {
     DP_STATUS_OUT_OF_MEMORY = -23,
 } DP_STATUS_ENUM;
 
+// libcodec2_mtk_venc picks these from the C2 colour aspects: BT.601, BT.709 or
+// BT.2020 primaries, limited or full range (Aperture records full-range BT.709).
 typedef enum DP_PROFILE_ENUM : int {
     DP_PROFILE_BT601,  // limited range
     DP_PROFILE_BT709,  // limited range
     DP_PROFILE_JPEG,   // BT.601, full range
     DP_PROFILE_FULL_BT601 = DP_PROFILE_JPEG,
+    DP_PROFILE_BT2020,  // limited range
+    DP_PROFILE_FULL_BT709,
+    DP_PROFILE_FULL_BT2020,
 } DP_PROFILE_ENUM;
 
 enum DpInterlaceFormat {

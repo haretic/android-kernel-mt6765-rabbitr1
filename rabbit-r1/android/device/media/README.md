@@ -233,7 +233,7 @@ components.
      `/dev/mtk_cmdq`, and every frame failed with `DpSync: createFence error`
      / `ConvertFrame err = 14`. `dpframework/` replaces it: RGB, YUYV, I420,
      YV12, NV12 and NV21 in, I420, YV12, NV12 and NV21 out, with crop,
-     bilinear scaling and rotation, BT.601, BT.709 or full-range BT.601. A
+     bilinear scaling and rotation, BT.601, BT.709 or BT.2020, limited or full range. A
      job converts in `invalidate()`; `createJob` returns a signalled
      sync_file exported from an idle dma-buf. Colour values use the kernel's
      `MDP_COLOR` layout, as the stock libraries do (I420 is 0x6c0848).
