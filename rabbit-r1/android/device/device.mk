@@ -45,6 +45,9 @@ PRODUCT_BUILD_SUPER_PARTITION := true
 PRODUCT_VIRTUAL_AB_OTA := false
 PRODUCT_VIRTUAL_AB_COMPRESSION := false
 
+# Linaro thermal HAL; sets TARGET_THERMAL_HAL, so include before mainline_common.
+include device/rabbit/r1/thermal/product.mk
+
 $(call inherit-product, device/mainline/common/mainline_common.mk)
 $(call inherit-product, device/rabbit/r1/charging/product.mk)
 
