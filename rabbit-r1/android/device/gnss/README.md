@@ -36,14 +36,14 @@ the framework's requests to `mnld` over abstract datagram sockets
 5. **Kernel**: `CONFIG_MTK_CONN_GPS=m` (rabbit_r1_defconfig on `rabbit-r1/gnss`). Put `gps_drv.ko` in `prebuilt/` with the other modules. Also take the new DTB: it adds the GPS LNA pin states to the CONSYS node. Without them, WMT cannot switch the external LNA on.
 6. **Blobs**: create `vendor/rabbit/r1-gnss/proprietary/`, the same way as `vendor/rabbit/r1-modem`.
    - Copy every path in `blobs.txt` from `out/stock-vendor/tree`, keeping the relative path.
-   - One patch: the stock `libmnl.so` becomes `libmtkmnl.so` (soname, and mnld's NEEDED), because AOSP's netfilter `libmnl` owns `/vendor/lib64/libmnl.so`. The closure was checked with `nm -D` against the Android 17 build: nothing is unresolved. The one exception is `property_get` in `libmnl.so`, which comes from mnld's `libcutils`.
+   - One patch: the stock `libmnl.so` and `libsensorndkbridge.so` get a `libmtk` prefix (soname, and mnld's NEEDED), because AOSP modules own both names in `/vendor/lib64`. The closure was checked with `nm -D` against the Android 17 build: nothing is unresolved. The one exception is `property_get` in `libmnl.so`, which comes from mnld's `libcutils`.
    - `android.hardware.gnss-V1-ndk_platform.so` is not a blob. gnss.mk installs it straight from `prebuilts/vndk/v31`.
 
 ## Why the pieces are there
 
 - **`android.hardware.gnss-V1-ndk_platform.so`**: the AIDL IGnss V1 NDK stubs, under the Android 12 name the HAL links. Android 12 shipped it in the VNDK APEX, and Android 13 renamed it to `-ndk`. The VNDK 31 snapshot copy is the exact library the blobs were built against.
 - **AOSP `.vendor` libraries** (HIDL gnss 1.0-2.1, measurement_corrections, visibility_control, sensors@1.0, sensorservice@1.0, libcurl, libssl): VNDK on Android 12. They are now built for vendor, so they match our libhidlbase and BoringSSL. The stock copies are not shipped.
-- **`libsensorndkbridge.so`** is the stock one. mnld needs its HIDL flavour (`convertToSensorEvent` and the `@1.0::ISensorManager` client). The AOSP module of the same name is AIDL-based now. If another vendor module ever pulls in the AOSP `libsensorndkbridge`, the two will clash on `/vendor/lib64/libsensorndkbridge.so`.
+- **`libmtksensorndkbridge.so`** is the stock `libsensorndkbridge.so`. mnld needs its HIDL flavour (`convertToSensorEvent` and the `@1.0::ISensorManager` client). The AOSP module of that name is AIDL-based and owns the original path, hence the rename.
 - **`persist.vendor.connsys.chipid=0x6765`**: stock `wmt_loader` sets this, and mnld selects its chip configuration from it. We do not run wmt_loader (`CONFIG_MTK_CONN_WMT_AUTOLAUNCH`).
 - **VINTF**: the service registers AIDL IGnss V1 and the passthrough HIDL IGnss 2.1, as on stock.
   - With AIDL IGnss older than V2, the framework (`services/core/jni/gnss/Gnss.cpp`) takes the location path from HIDL 2.1. It uses AIDL V1 for the extensions it covers.
