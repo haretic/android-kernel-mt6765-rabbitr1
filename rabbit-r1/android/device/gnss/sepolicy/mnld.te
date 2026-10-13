@@ -60,3 +60,6 @@ binder_call(mnld, system_server)
 
 wakelock_use(mnld)
 allow mnld self:global_capability2_class_set wake_alarm;
+
+# libfs_mgr reads the default fstab (cmdline, bootconfig, DT); stock allows it.
+read_fstab(mnld)
