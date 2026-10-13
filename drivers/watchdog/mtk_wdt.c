@@ -481,11 +481,23 @@ static int mtk_wdt_probe(struct platform_device *pdev)
 	return 0;
 }
 
+/*
+ * Nothing pings the watchdog while the system sleeps, so stop it there. That
+ * includes a watchdog running without an opener (left on by the bootloader
+ * or start_at_probe), which the watchdog core keeps fed only while awake.
+ * Stop it as late and restart it as early as possible, so that it still
+ * catches a device that hangs in its suspend or resume callbacks.
+ */
+static bool mtk_wdt_needs_pm(struct watchdog_device *wdt_dev)
+{
+	return watchdog_active(wdt_dev) || watchdog_hw_running(wdt_dev);
+}
+
 static int mtk_wdt_suspend(struct device *dev)
 {
 	struct mtk_wdt_dev *mtk_wdt = dev_get_drvdata(dev);
 
-	if (watchdog_active(&mtk_wdt->wdt_dev))
+	if (mtk_wdt_needs_pm(&mtk_wdt->wdt_dev))
 		mtk_wdt_stop(&mtk_wdt->wdt_dev);
 
 	return 0;
@@ -495,7 +507,7 @@ static int mtk_wdt_resume(struct device *dev)
 {
 	struct mtk_wdt_dev *mtk_wdt = dev_get_drvdata(dev);
 
-	if (watchdog_active(&mtk_wdt->wdt_dev)) {
+	if (mtk_wdt_needs_pm(&mtk_wdt->wdt_dev)) {
 		mtk_wdt_start(&mtk_wdt->wdt_dev);
 		mtk_wdt_ping(&mtk_wdt->wdt_dev);
 	}
@@ -520,8 +532,8 @@ static const struct of_device_id mtk_wdt_dt_ids[] = {
 };
 MODULE_DEVICE_TABLE(of, mtk_wdt_dt_ids);
 
-static DEFINE_SIMPLE_DEV_PM_OPS(mtk_wdt_pm_ops,
-				mtk_wdt_suspend, mtk_wdt_resume);
+static DEFINE_NOIRQ_DEV_PM_OPS(mtk_wdt_pm_ops,
+			       mtk_wdt_suspend, mtk_wdt_resume);
 
 static struct platform_driver mtk_wdt_driver = {
 	.probe		= mtk_wdt_probe,

@@ -1037,7 +1037,7 @@ int wlan_reset_thread_main(void *data)
 	struct GLUE_INFO *prGlueInfo = NULL;
 	struct timespec64 rNowTs, rLastTs;
 
-#if defined(CONFIG_ANDROID) && (CFG_ENABLE_WAKE_LOCK)
+#if KAL_WAKE_LOCK_ENABLED
 	KAL_WAKE_LOCK_T *prWlanRstThreadWakeLock;
 
 	KAL_WAKE_LOCK_INIT(NULL,
@@ -1065,7 +1065,7 @@ int wlan_reset_thread_main(void *data)
 				((g_ulFlag & GLUE_FLAG_RST_PROCESS)
 				!= 0));
 		} while (ret != 0);
-#if defined(CONFIG_ANDROID) && (CFG_ENABLE_WAKE_LOCK)
+#if KAL_WAKE_LOCK_ENABLED
 		if (!KAL_WAKE_LOCK_ACTIVE(NULL,
 					  prWlanRstThreadWakeLock))
 			KAL_WAKE_LOCK(NULL,
@@ -1127,7 +1127,7 @@ int wlan_reset_thread_main(void *data)
 		}
 	}
 
-#if defined(CONFIG_ANDROID) && (CFG_ENABLE_WAKE_LOCK)
+#if KAL_WAKE_LOCK_ENABLED
 	if (KAL_WAKE_LOCK_ACTIVE(NULL,
 				 prWlanRstThreadWakeLock))
 		KAL_WAKE_UNLOCK(NULL, prWlanRstThreadWakeLock);

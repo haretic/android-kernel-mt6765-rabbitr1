@@ -4379,7 +4379,7 @@ int hif_thread(void *data)
 	struct ADAPTER *prAdapter = prGlueInfo->prAdapter;
 	int ret = 0;
 	bool fgEnInt;
-#if defined(CONFIG_ANDROID) && (CFG_ENABLE_WAKE_LOCK)
+#if KAL_WAKE_LOCK_ENABLED
 	KAL_WAKE_LOCK_T *prHifThreadWakeLock;
 
 	KAL_WAKE_LOCK_INIT(prGlueInfo->prAdapter,
@@ -4422,7 +4422,7 @@ int hif_thread(void *data)
 
 		kalTraceBegin("hif_thread");
 
-#if defined(CONFIG_ANDROID) && (CFG_ENABLE_WAKE_LOCK)
+#if KAL_WAKE_LOCK_ENABLED
 		if (!KAL_WAKE_LOCK_ACTIVE(prGlueInfo->prAdapter,
 					  prHifThreadWakeLock))
 			KAL_WAKE_LOCK(prGlueInfo->prAdapter,
@@ -4506,7 +4506,7 @@ int hif_thread(void *data)
 	}
 
 	complete(&prGlueInfo->rHifHaltComp);
-#if defined(CONFIG_ANDROID) && (CFG_ENABLE_WAKE_LOCK)
+#if KAL_WAKE_LOCK_ENABLED
 	if (KAL_WAKE_LOCK_ACTIVE(prGlueInfo->prAdapter,
 				 prHifThreadWakeLock))
 		KAL_WAKE_UNLOCK(prGlueInfo->prAdapter, prHifThreadWakeLock);
@@ -4541,7 +4541,7 @@ int rx_thread(void *data)
 	struct QUE_ENTRY *prQueueEntry = NULL;
 
 	int ret = 0;
-#if defined(CONFIG_ANDROID) && (CFG_ENABLE_WAKE_LOCK)
+#if KAL_WAKE_LOCK_ENABLED
 	KAL_WAKE_LOCK_T *prRxThreadWakeLock;
 #endif
 	uint32_t u4LoopCount;
@@ -4549,7 +4549,7 @@ int rx_thread(void *data)
 	/* for spin lock acquire and release */
 	KAL_SPIN_LOCK_DECLARATION();
 
-#if defined(CONFIG_ANDROID) && (CFG_ENABLE_WAKE_LOCK)
+#if KAL_WAKE_LOCK_ENABLED
 	KAL_WAKE_LOCK_INIT(prGlueInfo->prAdapter,
 			   prRxThreadWakeLock, "WLAN rx_thread");
 	KAL_WAKE_LOCK(prGlueInfo->prAdapter, prRxThreadWakeLock);
@@ -4589,7 +4589,7 @@ int rx_thread(void *data)
 
 		kalTraceBegin("rx_thread");
 
-#if defined(CONFIG_ANDROID) && (CFG_ENABLE_WAKE_LOCK)
+#if KAL_WAKE_LOCK_ENABLED
 		if (!KAL_WAKE_LOCK_ACTIVE(prGlueInfo->prAdapter,
 					  prRxThreadWakeLock))
 			KAL_WAKE_LOCK(prGlueInfo->prAdapter,
@@ -4644,7 +4644,7 @@ int rx_thread(void *data)
 	}
 
 	complete(&prGlueInfo->rRxHaltComp);
-#if defined(CONFIG_ANDROID) && (CFG_ENABLE_WAKE_LOCK)
+#if KAL_WAKE_LOCK_ENABLED
 	if (KAL_WAKE_LOCK_ACTIVE(prGlueInfo->prAdapter,
 				 prRxThreadWakeLock))
 		KAL_WAKE_UNLOCK(prGlueInfo->prAdapter, prRxThreadWakeLock);
@@ -4690,7 +4690,7 @@ int main_thread(void *data)
 	struct GL_IO_REQ *prIoReq = NULL;
 	int ret = 0;
 	u_int8_t fgNeedHwAccess = FALSE;
-#if defined(CONFIG_ANDROID) && (CFG_ENABLE_WAKE_LOCK)
+#if KAL_WAKE_LOCK_ENABLED
 	KAL_WAKE_LOCK_T *prTxThreadWakeLock;
 #endif
 #if (CFG_SUPPORT_CONNINFRA == 1)
@@ -4712,7 +4712,7 @@ int main_thread(void *data)
 	set_user_nice(current,
 		      prGlueInfo->prAdapter->rWifiVar.cThreadNice);
 
-#if defined(CONFIG_ANDROID) && (CFG_ENABLE_WAKE_LOCK)
+#if KAL_WAKE_LOCK_ENABLED
 	KAL_WAKE_LOCK_INIT(prGlueInfo->prAdapter,
 			   prTxThreadWakeLock, "WLAN main_thread");
 	KAL_WAKE_LOCK(prGlueInfo->prAdapter, prTxThreadWakeLock);
@@ -4758,7 +4758,7 @@ int main_thread(void *data)
 				((prGlueInfo->ulFlag & GLUE_FLAG_MAIN_PROCESS)
 				!= 0));
 		} while (ret != 0);
-#if defined(CONFIG_ANDROID) && (CFG_ENABLE_WAKE_LOCK)
+#if KAL_WAKE_LOCK_ENABLED
 		if (!KAL_WAKE_LOCK_ACTIVE(prGlueInfo->prAdapter,
 					  prTxThreadWakeLock))
 			KAL_WAKE_LOCK(prGlueInfo->prAdapter,
@@ -5090,7 +5090,7 @@ int main_thread(void *data)
 	wlanReleasePendingOid(prGlueInfo->prAdapter, 0);
 
 	complete(&prGlueInfo->rHaltComp);
-#if defined(CONFIG_ANDROID) && (CFG_ENABLE_WAKE_LOCK)
+#if KAL_WAKE_LOCK_ENABLED
 	if (KAL_WAKE_LOCK_ACTIVE(prGlueInfo->prAdapter,
 				 prTxThreadWakeLock))
 		KAL_WAKE_UNLOCK(prGlueInfo->prAdapter, prTxThreadWakeLock);

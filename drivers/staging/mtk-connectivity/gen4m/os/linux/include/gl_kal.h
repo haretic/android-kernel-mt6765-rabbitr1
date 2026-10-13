@@ -314,14 +314,15 @@ enum ENUM_KAL_MEM_ALLOCATION_TYPE_E {
 	MEM_TYPE_NUM
 };
 
-#ifdef CONFIG_ANDROID		/* Defined in Android kernel source */
-#if (KERNEL_VERSION(4, 19, 0) <= CFG80211_VERSION_CODE)
+/*
+ * The stock driver tied its wakeup sources to the Android kernel's
+ * CONFIG_ANDROID, which mainline no longer has. They need system sleep only.
+ */
+#define KAL_WAKE_LOCK_ENABLED \
+	(IS_ENABLED(CONFIG_PM_SLEEP) && CFG_ENABLE_WAKE_LOCK)
+
+#if KAL_WAKE_LOCK_ENABLED
 #define KAL_WAKE_LOCK_T struct wakeup_source
-#elif (KERNEL_VERSION(4, 9, 0) <= CFG80211_VERSION_CODE)
-#define KAL_WAKE_LOCK_T struct wakeup_source
-#else
-#define KAL_WAKE_LOCK_T struct wake_lock
-#endif
 #else
 #define KAL_WAKE_LOCK_T uint32_t
 #endif
@@ -547,8 +548,7 @@ static inline void kalCfg80211ScanDone(struct cfg80211_scan_request *request,
 /*----------------------------------------------------------------------------*/
 /* Macros of wake_lock operations for using in Driver Layer                   */
 /*----------------------------------------------------------------------------*/
-#if defined(CONFIG_ANDROID) && (CFG_ENABLE_WAKE_LOCK)
-/* CONFIG_ANDROID is defined in Android kernel source */
+#if KAL_WAKE_LOCK_ENABLED
 #if (KERNEL_VERSION(4, 9, 0) <= LINUX_VERSION_CODE)
 #if (KERNEL_VERSION(4, 14, 149) <= LINUX_VERSION_CODE)
 #define KAL_WAKE_LOCK_INIT(_prAdapter, _prWakeLock, _pcName) \

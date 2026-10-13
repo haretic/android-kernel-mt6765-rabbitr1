@@ -16,6 +16,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/platform_device.h>
+#include <linux/pm.h>
 #include <linux/regulator/consumer.h>
 #include <linux/workqueue.h>
 
@@ -248,6 +249,21 @@ static void ms35774_shutdown(struct platform_device *pdev)
 	flush_work(&priv->work);
 }
 
+static int ms35774_suspend(struct device *dev)
+{
+	struct ms35774 *priv = dev_get_drvdata(dev);
+
+	/*
+	 * A move sleeps between steps, and its timers stop while the system
+	 * sleeps: finish it rather than sleep with the coils energised.
+	 */
+	flush_work(&priv->work);
+
+	return 0;
+}
+
+static DEFINE_SIMPLE_DEV_PM_OPS(ms35774_pm_ops, ms35774_suspend, NULL);
+
 static const struct of_device_id ms35774_of_match[] = {
 	{ .compatible = "relmon,ms35774" },
 	{ }
@@ -261,6 +277,7 @@ static struct platform_driver ms35774_driver = {
 		.name = "ms35774",
 		.of_match_table = ms35774_of_match,
 		.dev_groups = ms35774_groups,
+		.pm = pm_sleep_ptr(&ms35774_pm_ops),
 	},
 };
 module_platform_driver(ms35774_driver);

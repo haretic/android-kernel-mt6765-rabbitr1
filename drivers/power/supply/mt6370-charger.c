@@ -20,6 +20,8 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/pm_wakeirq.h>
+#include <linux/pm_wakeup.h>
 #include <linux/power_supply.h>
 #include <linux/property.h>
 #include <linux/regmap.h>
@@ -1606,6 +1608,18 @@ static int mt6370_chg_probe(struct platform_device *pdev)
 	ret = devm_add_action_or_reset(dev, mt6370_chg_quiesce, priv);
 	if (ret)
 		return ret;
+
+	/*
+	 * Plugging or unplugging a source wakes a sleeping system so the
+	 * attach flow runs. The wakeup source also backs the MIVR handling.
+	 */
+	ret = devm_device_init_wakeup(dev);
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to init wakeup\n");
+
+	ret = devm_pm_set_wake_irq(dev, priv->irq_nums[MT6370_IRQ_UVP_D_EVT]);
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to set wake IRQ\n");
 
 	mt6370_chg_pwr_rdy_check(priv);
 

@@ -1220,6 +1220,13 @@ int ccci_modem_pm_suspend(struct device *device)
 		CCCI_ERROR_LOG(MD_SYS1, TAG, "%s pdev == NULL\n", __func__);
 		return -1;
 	}
+	/*
+	 * A booted modem holds the MD1 domain through runtime PM and keeps
+	 * running while the AP sleeps, waking it through CCIF. genpd would
+	 * still power the domain off at suspend_noirq, so keep it on.
+	 */
+	if (!pm_runtime_status_suspended(device))
+		device_set_awake_path(device);
 	return ccci_modem_suspend(pdev, PMSG_SUSPEND);
 }
 

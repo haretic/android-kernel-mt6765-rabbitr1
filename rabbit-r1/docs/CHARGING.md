@@ -58,7 +58,11 @@ required before release.
 The policy uses power-supply controls, not the MT6370 regulator interface, which
 controls OTG power output. Device links order supplier unbind; cleanup stops work
 and notifications before releasing supply references. Suspend inhibits charging
-rather than leaving an unsupervised software policy active.
+rather than leaving an unsupervised software policy active. To charge with the
+screen off anyway, the policy holds a wakeup source while the charger reports a
+source present, and the MT6370 VBUS (`uvp_d_evt`) interrupt wakes a sleeping
+system on plug or unplug. After every resume the policy stays awake until it has
+sampled again; a failed sample keeps the previous decision.
 
 ## Android integration
 

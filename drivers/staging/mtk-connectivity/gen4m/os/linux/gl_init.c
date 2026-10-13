@@ -3212,7 +3212,7 @@ void wlanWakeLockInit(struct GLUE_INFO *prGlueInfo)
 
 void wlanWakeLockUninit(struct GLUE_INFO *prGlueInfo)
 {
-#if defined(CONFIG_ANDROID) && (CFG_ENABLE_WAKE_LOCK)
+#if KAL_WAKE_LOCK_ENABLED
 	if (KAL_WAKE_LOCK_ACTIVE(NULL, prGlueInfo->rIntrWakeLock))
 		KAL_WAKE_UNLOCK(NULL, prGlueInfo->rIntrWakeLock);
 	KAL_WAKE_LOCK_DESTROY(NULL, prGlueInfo->rIntrWakeLock);
