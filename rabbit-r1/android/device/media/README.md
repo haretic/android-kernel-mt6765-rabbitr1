@@ -192,28 +192,32 @@ templates. Two of these are worth knowing about:
    and `android.hardware.media.c2@1.x` are the Android 12 copies the blobs
    were built against.
 
-Set `R1_MEDIA_HW_ENCODE := true` or `R1_MEDIA_HW_DECODE := true` (before
-`media.mk` is inherited) to install the stage 1 or stage 2 list. Without
-either, the HAL runs but the framework lists none of its components.
+`R1_MEDIA_HW_ENCODE` (default `true`) installs the stage 1 list,
+`R1_MEDIA_HW_DECODE := true` the stage 2 one; set them before `media.mk` is
+inherited. With neither, the HAL runs but the framework lists none of its
+components.
 
 ## Stages
 
 0. **Kernel.** `/dev/Vcodec`, core locking and power, interrupts, register
    windows, M4U addresses. Test with `rabbit-r1/tools/r1-vcodec-test.c`.
    Done; both tests pass.
-1. **H.264 encode** (`R1_MEDIA_HW_ENCODE=true`). Camera recording goes
-   through the encoder input surface. Blocked by two kernel gaps:
+1. **H.264 encode** (`R1_MEDIA_HW_ENCODE`, on). Camera recording goes
+   through the encoder input surface. Works: YUV and RGBA surface input
+   decode clean (`rabbit-r1/tools/r1-venc-test`, 54 dB PSNR from YUV),
+   38 fps at 720p from a surface against 25 for `c2.android.avc.encoder`,
+   at half its CPU time. It took two fixes:
    - **Linear buffers come from DMA heaps.** mainline common sets
      `debug.c2.use_dmabufheaps=1`. The Android 12 `C2Store` reads it too, so
      the component's bitstream and working buffers come from
      `/dev/dma_heap/system`. `libmemory_c2` then asks `/dev/ion` for their M4U
-     address (`ION_IOC_CUSTOM`), and `mtk-ion-compat` refuses buffers it did
-     not export (`EFAULT`). The encoder ends up writing to IOVA 0: larb1
+     address (`ION_IOC_CUSTOM`), and `mtk-ion-compat` refused buffers it did
+     not export (`EFAULT`). The encoder ended up writing to IOVA 0: larb1
      port 2 write faults and empty access units. Setting the property to 0
      would move every Android 17 Codec2 user to `/dev/ion` as well.
-     `mtk-ion-compat` needs to take foreign dma-bufs: keep their
-     `CONFIG_BUFFER` port, map them through the engine's device with
-     `dma_buf_attach()`, and keep the mapping for as long as the buffer
+     `mtk-ion-compat` now takes foreign dma-bufs: it keeps their
+     `CONFIG_BUFFER` port, maps them through the engine's device with
+     `dma_buf_attach()`, and keeps the mapping for as long as the buffer
      lives, as stock keeps its M4U mappings.
    - **Colour conversion.** Aperture's frames reach the encoder as RGBA (its
      CameraX pipeline renders through GL). `C2MtkVencExt` converts them with
@@ -225,6 +229,11 @@ either, the HAL runs but the framework lists none of its components.
      job converts in `invalidate()`; `createJob` returns a signalled
      sync_file exported from an idle dma-buf. Colour values use the kernel's
      `MDP_COLOR` layout, as the stock libraries do (I420 is 0x6c0848).
+     The encoder asks for input usage 0, which gets it GPU-only buffers that
+     `mtk-ion-compat` maps write-combined; the CPU reads those at about
+     50 MB/s, 9 fps at 720p. `blobs.txt` patches its default input usage to
+     `CPU_READ`: the gralloc then allocates `ION_FLAG_CACHED`, and
+     `DMA_BUF_IOCTL_SYNC` invalidates before the conversion reads.
 2. **H.264/HEVC decode** (`R1_MEDIA_HW_DECODE=true`). The store sets the
    `mtk_mm` DMA heap for decoder buffers, and this kernel has no such heap.
    `mtk_platform_codecs_config.xml` sets `alwaysColorConvertChecker` and
@@ -257,7 +266,7 @@ grep vcodec /proc/interrupts
 - release when the owner dies
 - larb1 IOVAs for a scattered ION buffer tagged `VENC_RCPU` and `VENC_CUR_LUMA`
 
-Android, stage 1 (built with `R1_MEDIA_HW_ENCODE=true`):
+Android, stage 1 (the default build):
 
 ```sh
 lshal | grep media.c2                                  # @1.2::IComponentStore/default and /software
