@@ -6,7 +6,11 @@ genfscon sysfs /devices/platform/soc/11016000.i2c/i2c-5/5-0034/mt6370-backlight 
 genfscon sysfs /bus/iio u:object_r:vendor_sysfs_iio:s0
 genfscon sysfs /devices/platform/soc/11014000.spi/spi_master/spi4/spi4.0 u:object_r:vendor_sysfs_iio:s0
 genfscon sysfs /devices/trigger u:object_r:vendor_sysfs_iio:s0
-# The HAL probes every IIO device's name and DT node: the PMIC and MT6370 ADCs.
+genfscon sysfs /firmware/devicetree/base/soc/spi@11014000/imu@0 u:object_r:vendor_sysfs_iio:s0
+# The HAL probes every IIO device's name and DT node: the SoC, PMIC and MT6370
+# ADCs.
+genfscon sysfs /devices/platform/soc/11001000.auxadc u:object_r:vendor_sysfs_iio:s0
+genfscon sysfs /firmware/devicetree/base/soc/auxadc@11001000 u:object_r:vendor_sysfs_iio:s0
 genfscon sysfs /devices/platform/soc/1000d000.pwrap/1000d000.pwrap:pmic/mt6359-auxadc u:object_r:vendor_sysfs_iio:s0
 genfscon sysfs /devices/platform/soc/11016000.i2c/i2c-5/5-0034/mt6370-adc. u:object_r:vendor_sysfs_iio:s0
 genfscon sysfs /firmware/devicetree/base/soc/pwrap@1000d000/pmic/adc u:object_r:vendor_sysfs_iio:s0
@@ -18,9 +22,8 @@ genfscon sysfs /devices/platform/charging-policy/wakeup u:object_r:sysfs_wakeup:
 genfscon sysfs /devices/platform/soc/10010000.keyboard/wakeup u:object_r:sysfs_wakeup:s0
 genfscon sysfs /devices/platform/soc/1000d000.pwrap/1000d000.pwrap:pmic/mt6357-rtc/wakeup u:object_r:sysfs_wakeup:s0
 genfscon sysfs /devices/platform/soc/1000d000.pwrap/1000d000.pwrap:pmic/mt6357-gauge/power_supply/mt6357-battery/wakeup u:object_r:sysfs_wakeup:s0
-# MT6370 cells use PLATFORM_DEVID_AUTO; the charger has been mt6370-charger.8.auto.
-genfscon sysfs /devices/platform/soc/11016000.i2c/i2c-5/5-0034/mt6370-charger.8.auto/wakeup u:object_r:sysfs_wakeup:s0
-genfscon sysfs /devices/platform/soc/11016000.i2c/i2c-5/5-0034/mt6370-charger.8.auto/power_supply/mt6370-charger/wakeup u:object_r:sysfs_wakeup:s0
+# The MT6370 charger's and the RTC alarm timer's are in file_contexts: their
+# device names carry PLATFORM_DEVID_AUTO numbers, which genfscon cannot match.
 genfscon sysfs /devices/platform/soc/11200000.usb/musb-hdrc.0/wakeup u:object_r:sysfs_wakeup:s0
 genfscon sysfs /devices/platform/soc/11200000.usb/power_supply/11200000.usb-gadget/wakeup u:object_r:sysfs_wakeup:s0
 genfscon sysfs /devices/platform/soc/18002000.consys/wakeup u:object_r:sysfs_wakeup:s0

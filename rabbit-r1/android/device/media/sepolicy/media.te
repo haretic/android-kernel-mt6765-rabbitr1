@@ -21,3 +21,11 @@ allow mediacodec sysfs_r1_devinfo:file r_file_perms;
 # labelled apart from the modem's ro.vendor.mtk_ prefix.
 vendor_internal_prop(vendor_mtk_media_prop)
 get_prop(mediacodec, vendor_mtk_media_prop)
+# media.mk sets vendor.mtk.c2.vdec.force.output.cc in the vendor build.prop.
+set_prop(vendor_init, vendor_mtk_media_prop)
+
+# Optional lookups of the codec libraries: the debug property mtk.vdec.log,
+# which a vendor property_contexts cannot name, and MediaTek's
+# IMtkPerf boost service, which this build does not have.
+dontaudit mediacodec default_prop:file read;
+dontaudit mediacodec default_android_hwservice:hwservice_manager find;
