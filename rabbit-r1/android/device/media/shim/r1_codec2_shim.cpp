@@ -28,6 +28,15 @@
 //       from beyond it. libcodec2_vndk imports these as r1compt::Fence
 //       instead (blobs.txt), which keeps the Android 12 layout.
 //
+// And one allocation:
+//
+//   r1gbnew(size_t)
+//       libcodec2_vndk's `new GraphicBuffer` (C2BufferQueueBlockPool), which
+//       allocated Android 12's 0xa0 bytes; Android 17's class is 0x6f8, its
+//       DependencyMonitor appended, and its constructors filled the rest of
+//       the heap. The three calls go here instead of to operator new
+//       (blobs.txt).
+//
 // The member functions are defined as free functions under the member's
 // mangled name. That has the member's calling convention: the object is the
 // first argument, and a returned sp<> goes through the same hidden result
@@ -37,6 +46,7 @@
 
 #include <errno.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -48,6 +58,7 @@
 #include <log/log.h>
 #include <gui/IGraphicBufferProducer.h>
 #include <gui/bufferqueue/2.0/B2HGraphicBufferProducer.h>
+#include <ui/GraphicBuffer.h>
 #include <ui/GraphicBufferMapper.h>
 #include <ui/Rect.h>
 #include <utils/Errors.h>
@@ -166,3 +177,9 @@ nsecs_t Fence::getSignalTime() const {
 }
 
 }  // namespace r1compt
+
+// Storage for a GraphicBuffer that libcodec2_vndk constructs: at least the
+// size the Android 17 constructors and destructor work with.
+extern "C" void* r1gbnew(size_t size) {
+    return ::operator new(std::max(size, sizeof(android::GraphicBuffer)));
+}

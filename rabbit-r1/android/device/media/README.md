@@ -123,6 +123,18 @@ Android 12 class layouts in an Android 17 process:
   NULL for fd 0"); decoding to a surface crashed the HAL with heap
   corruption. Its three `Fence` imports are renamed to `r1compt::Fence`,
   which the shim implements with the Android 12 layout (`blobs.txt`).
+- **`GraphicBuffer`** (`libui`). Android 17 appended a `DependencyMonitor`:
+  the class went from 0xa0 to 0x6f8 bytes. `C2BufferQueueBlockPool` in
+  `libcodec2_vndk` allocates the buffers it dequeues from a surface with
+  `new`, so the constructors overwrote 1.6 KiB of heap per buffer and the
+  decoder deadlocked or crashed on corrupted locks soon after. Its three
+  allocations call the shim's `r1gbnew` in place of `operator new`, through
+  the PLT slot of an import it never calls (`blobs.txt`). The members before
+  the monitor are unchanged, so the code's inline accesses still fit.
+  `GraphicBufferMapper` and `GraphicBufferAllocator` are 8 bytes in both.
+  `GraphicBufferSource`, which `libcodec2_hidl` allocates at 0x120 bytes, is
+  only built for HAL-side input surfaces, which the framework asks a HIDL
+  HAL for only with `debug.stagefright.c2inputsurface` set.
 - **`C2InterfaceHelper::GetBaseOffset`** (Android 12 `libcodec2_vndk`) maps
   the offset of a flexible array element to element 0, then keeps searching
   and returns "not found". `F(values[i])` for `i > 0` therefore gets a null
@@ -318,8 +330,10 @@ no `DpBlitStream`/cmdq errors.
   encode falls short of 30 fps, raise that clock first.
 - **Android 12 C++ in an Android 17 process.** The symbol check is clean
   with the shim, but class layouts are not covered by it. `AHandler`,
-  `C2InterfaceHelper` and `Fence` were wrong ("Linking"). `GraphicBufferMapper`
-  and the `libstagefright_bufferqueue_helper` classes still cross the boundary.
+  `C2InterfaceHelper`, `Fence` and `GraphicBuffer` were wrong ("Linking").
+  Classes the blobs allocate are compared by the size their `new` asks for;
+  `GraphicBufferSource` (HAL-side input surfaces, off by default) is the one
+  left unchecked.
 - **`libmtk_drvb`** scrambles its state when
   `/proc/device-tree/chosen/atag,devinfo` is missing. LK is expected to inject
   it into the mainline DT. The codec HAL reads it under its own label

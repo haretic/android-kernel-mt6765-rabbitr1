@@ -30,6 +30,15 @@
 #   "7r1compt" in _ZN7android5FenceC1Ei at file offset 0xad6a0,
 #   _ZNK7android5Fence13getSignalTimeEv at 0xacb84 and _ZN7android5Fence4waitEi
 #   at 0xac82a, after checking each is a whole string of its own.
+# lib/r1-c2/libcodec2_vndk.so allocates its GraphicBuffers through the shim's
+#   r1gbnew (README.md, "Linking"): the unused memmove import is renamed,
+#   "memmove" to "r1gbnew" in .dynstr at file offset 0xbc7ec (dynsym 179,
+#   whose .gnu.version entry at 0x7552 goes from 2, LIBC, to 1), and the
+#   blx _Znwj at vaddr 0x4b30a, 0x4bc92 and 0x4c75c (file offset minus
+#   0x1000; each after movs r0, #0xa0) becomes blx 0x72fe0, its PLT entry:
+#     4b30a: 25 f0 82 ec -> 27 f0 6a ee
+#     4bc92: 24 f0 be ef -> 27 f0 a6 e9
+#     4c75c: 24 f0 58 ea -> 26 f0 40 ec
 # lib/libcodec2_mtk_venc.so gets its input usage set to C2MemoryUsage::CPU_READ
 #   (README.md, "Stages"): the C2StreamUsageTuning::input defaults of the two
 #   encoder interfaces, 32 bytes each at file offsets 0x3e516 and 0x52282, from
