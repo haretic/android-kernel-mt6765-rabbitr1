@@ -13,7 +13,7 @@
 R1_GNSS_PATH := device/rabbit/r1/gnss
 R1_GNSS_BLOBS := vendor/rabbit/r1-gnss/proprietary
 
-# Generated from blobs.txt; keep the two in sync.
+# Generated from blobs.txt; keep the two in sync (libmnl is renamed, see there).
 PRODUCT_COPY_FILES += \
     $(R1_GNSS_BLOBS)/bin/mnld:$(TARGET_COPY_OUT_VENDOR)/bin/mnld \
     $(R1_GNSS_BLOBS)/bin/hw/android.hardware.gnss-service.mediatek:$(TARGET_COPY_OUT_VENDOR)/bin/hw/android.hardware.gnss-service.mediatek \
@@ -22,7 +22,7 @@ PRODUCT_COPY_FILES += \
     $(R1_GNSS_BLOBS)/lib64/hw/android.hardware.gnss@2.1-impl-mediatek.so:$(TARGET_COPY_OUT_VENDOR)/lib64/hw/android.hardware.gnss@2.1-impl-mediatek.so \
     $(R1_GNSS_BLOBS)/lib64/hw/gps.default.so:$(TARGET_COPY_OUT_VENDOR)/lib64/hw/gps.default.so \
     $(R1_GNSS_BLOBS)/lib64/libDR.so:$(TARGET_COPY_OUT_VENDOR)/lib64/libDR.so \
-    $(R1_GNSS_BLOBS)/lib64/libmnl.so:$(TARGET_COPY_OUT_VENDOR)/lib64/libmnl.so \
+    $(R1_GNSS_BLOBS)/lib64/libmtkmnl.so:$(TARGET_COPY_OUT_VENDOR)/lib64/libmtkmnl.so \
     $(R1_GNSS_BLOBS)/lib64/libsensorndkbridge.so:$(TARGET_COPY_OUT_VENDOR)/lib64/libsensorndkbridge.so
 
 # The HAL links the AIDL IGnss V1 stubs under their Android 12 name, which

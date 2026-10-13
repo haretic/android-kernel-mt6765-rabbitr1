@@ -11,6 +11,9 @@
 #   libladder.so: vendor/rabbit/r1-pvr
 # The stock copies of the HIDL interface libraries are not shipped so that
 # they match our libhidlbase.
+# Needs patchelf at import: lib64/libmnl.so is stored as lib64/libmtkmnl.so
+#   (--set-soname libmtkmnl.so) and bin/mnld gets --replace-needed
+#   libmnl.so libmtkmnl.so; AOSP's netfilter libmnl owns /vendor/lib64/libmnl.so.
 bin/mnld
 bin/hw/android.hardware.gnss-service.mediatek
 etc/MNL_Config.xml
