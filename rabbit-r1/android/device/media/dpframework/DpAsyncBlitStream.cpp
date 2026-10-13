@@ -227,24 +227,60 @@ struct I420Buffer {
     }
 };
 
-// libyuv's ARGB, B G R A in memory, to I420 with a matrix libyuv has no
-// entry point for: BT.709, limited range. 8-bit coefficients in 16-bit sums,
-// as libyuv's own rows, in loops the compiler vectorises: Y = 16 + 219/255
-// (Kr R + Kg G + Kb B); U, V = 128 + 224/255 of (B - Y') / (2 (1 - Kb)) and
-// (R - Y') / (2 (1 - Kr)), on 2x2 averages. The chroma sums wrap modulo 2^16
-// on the way, but end in 0..255 after the 0x8080 bias.
-void argbToI420Bt709(const uint8_t* argb, int argbStride, const Planes& dst, int w, int h,
-                     std::vector<uint16_t>* scratch) {
-    constexpr uint16_t yr = 47, yg = 157, yb = 16;
-    constexpr uint16_t ur = 26, ug = 86, ub = 112;  // U = ub B - ur R - ug G
-    constexpr uint16_t vr = 112, vg = 102, vb = 10;  // V = vr R - vg G - vb B
+// 8-bit fixed-point RGB to YUV coefficients, as in libyuv's rows: Y =
+// (yr R + yg G + yb B + yBias) >> 8, U = (ub B - ur R - ug G + cBias) >> 8,
+// V = (vr R - vg G - vb B + cBias) >> 8.
+struct Matrix {
+    uint16_t yr, yg, yb, yBias;
+    uint16_t ur, ug, ub;
+    uint16_t vr, vg, vb;
+    uint16_t cBias;
+};
 
+constexpr uint16_t q8(double v) {
+    return static_cast<uint16_t>(v * 256 + 0.5);
+}
+
+// Y = 16 + 219/255 (Kr R + Kg G + Kb B) for limited range, Kr R + Kg G + Kb B
+// for full; U and V are 128 plus 224/255 (limited) or all of (B - Y') /
+// (2 (1 - Kb)) and (R - Y') / (2 (1 - Kr)). The rounded coefficients are
+// evened out so that Y's add up to its scale and U's and V's to 0: grey
+// stays grey.
+constexpr Matrix makeMatrix(double kr, double kb, bool full) {
+    const double ys = full ? 1 : 219.0 / 255, cs = full ? 1 : 224.0 / 255;
+    Matrix m{};
+    m.yr = q8(kr * ys);
+    m.yb = q8(kb * ys);
+    m.yg = q8(ys) - m.yr - m.yb;
+    m.yBias = full ? 0x80 : 0x1080;
+    m.ub = q8(cs / 2);
+    m.ur = q8(kr / (2 * (1 - kb)) * cs);
+    m.ug = m.ub - m.ur;
+    m.vr = q8(cs / 2);
+    m.vb = q8(kb / (2 * (1 - kr)) * cs);
+    m.vg = m.vr - m.vb;
+    // 128 << 8 plus rounding; full range's 128 x 255 needs one short of
+    // 0x80 for the sums to stay within 16 bits.
+    m.cBias = full ? 0x807f : 0x8080;
+    return m;
+}
+
+constexpr Matrix kBt709 = makeMatrix(0.2126, 0.0722, false);
+constexpr Matrix kBt709Full = makeMatrix(0.2126, 0.0722, true);
+constexpr Matrix kBt2020 = makeMatrix(0.2627, 0.0593, false);
+constexpr Matrix kBt2020Full = makeMatrix(0.2627, 0.0593, true);
+
+// libyuv's ARGB, B G R A in memory, to I420 with a matrix libyuv has no entry
+// point for, in loops the compiler vectorises. Chroma comes from 2x2 averages.
+// The sums wrap modulo 2^16 on the way but end in 0..255 after the bias.
+void argbToI420Matrix(const uint8_t* argb, int argbStride, const Planes& dst, int w, int h,
+                      const Matrix& m, std::vector<uint16_t>* scratch) {
     for (int y = 0; y < h; y++) {
         const uint8_t* px = argb + y * argbStride;
         uint8_t* out = dst.p[0] + y * dst.stride[0];
         for (int x = 0; x < w; x++)
-            out[x] = static_cast<uint16_t>(yr * px[4 * x + 2] + yg * px[4 * x + 1] +
-                                           yb * px[4 * x] + 0x1080) >> 8;
+            out[x] = static_cast<uint16_t>(m.yr * px[4 * x + 2] + m.yg * px[4 * x + 1] +
+                                           m.yb * px[4 * x] + m.yBias) >> 8;
     }
 
     // Per row pair: the vertical sums of each channel, then the horizontal
@@ -273,8 +309,8 @@ void argbToI420Bt709(const uint8_t* argb, int argbStride, const Planes& dst, int
             const uint16_t b = (sb[2 * i] + sb[2 * i + 1] + 2) >> 2;
             const uint16_t g = (sg[2 * i] + sg[2 * i + 1] + 2) >> 2;
             const uint16_t r = (sr[2 * i] + sr[2 * i + 1] + 2) >> 2;
-            u[i] = static_cast<uint16_t>(ub * b - ur * r - ug * g + 0x8080) >> 8;
-            v[i] = static_cast<uint16_t>(vr * r - vg * g - vb * b + 0x8080) >> 8;
+            u[i] = static_cast<uint16_t>(m.ub * b - m.ur * r - m.ug * g + m.cBias) >> 8;
+            v[i] = static_cast<uint16_t>(m.vr * r - m.vg * g - m.vb * b + m.cBias) >> 8;
         }
     }
 }
@@ -315,7 +351,16 @@ int argbToI420(const uint8_t* argb, int argbStride, const Planes& dst, int w, in
             return libyuv::ARGBToJ420(argb, argbStride, d.p[0], d.stride[0], d.p[1], d.stride[1],
                                       d.p[2], d.stride[2], w, h);
         case DP_PROFILE_BT709:
-            argbToI420Bt709(argb, argbStride, dst, w, h, scratch);
+            argbToI420Matrix(argb, argbStride, dst, w, h, kBt709, scratch);
+            return 0;
+        case DP_PROFILE_FULL_BT709:
+            argbToI420Matrix(argb, argbStride, dst, w, h, kBt709Full, scratch);
+            return 0;
+        case DP_PROFILE_BT2020:
+            argbToI420Matrix(argb, argbStride, dst, w, h, kBt2020, scratch);
+            return 0;
+        case DP_PROFILE_FULL_BT2020:
+            argbToI420Matrix(argb, argbStride, dst, w, h, kBt2020Full, scratch);
             return 0;
     }
     ALOGE("unknown profile %d", profile);
