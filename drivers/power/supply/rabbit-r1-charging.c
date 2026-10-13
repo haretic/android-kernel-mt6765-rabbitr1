@@ -299,6 +299,15 @@ static void r1_charge_work(struct work_struct *work)
 	p->measured_ua = sample.current_ua;
 	target = r1_charge_decide(p, &sample);
 	if (!ret && !r1_charge_fresh(p, start, generation)) {
+		/*
+		 * Nothing is written yet. A supply event during the sample has
+		 * queued this work again, so keep the applied limits until it
+		 * runs; isolating here flips the battery status, whose event
+		 * then races the next pass. The charger's policy lease still
+		 * isolates if no pass completes.
+		 */
+		if (atomic_read(&p->generation) != generation)
+			goto requeue;
 		target = (struct r1_charge_target) { .reason = R1_STALE };
 		ret = -EAGAIN;
 	}
@@ -316,6 +325,7 @@ static void r1_charge_work(struct work_struct *work)
 	}
 	p->error = ret;
 	p->applied = target;
+requeue:
 	/* Preserve an immediate update queued by a concurrent budget change. */
 	queue_delayed_work(system_highpri_wq, &p->work, 2 * HZ);
 out:
