@@ -822,5 +822,23 @@
         "after_sha256": "f46530c3e1eff1f4b2967205ca07d6daa5439a049daa11eba1bc729bab8dd002"
       }
     ]
+  },
+  {
+    "project": "hardware/mainline/common",
+    "base_commit": "779b7985a717938bbfb0e54f1f562c279013d0a8",
+    "patch": "0014-map-composer-brightness-0-to-the-lowest-visible-backlight.patch",
+    "sha256": "ce85b5fb39578e0ebc208d7ef0b73885d33596fc3932eb7a1906803fbe72539d",
+    "files": [
+      {
+        "path": "interfaces/graphics/composer/drmfb/DrmDevice.cpp",
+        "before_sha256": "78d5153d9d01c86c6480adcacca88d914b5ec5b34fb84512cd310849368a94dc",
+        "after_sha256": "139e180e6a50ae396836a1c3b40b2c769d03faa5a4e34f5e7cdfa6d4ccf60b96"
+      },
+      {
+        "path": "interfaces/graphics/composer/drmfb/DrmDevice.h",
+        "before_sha256": "d8d52734f9b65ab80a10b97e98b3cc51673ad44a7cad99a35e0859261ec6929e",
+        "after_sha256": "3bfd7afb7eb1fab989f1ec8be49effbaf300fb292a5bf25a59f9716d4cfcc24b"
+      }
+    ]
   }
 ]
