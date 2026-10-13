@@ -1,0 +1,5 @@
+ro.vendor.mtk_sec_video_path_support    u:object_r:vendor_mtk_media_prop:s0 exact bool
+ro.vendor.mtk_blowfish_tee_support      u:object_r:vendor_mtk_media_prop:s0 exact bool
+ro.vendor.mtk_microtrust_tee_support    u:object_r:vendor_mtk_media_prop:s0 exact bool
+ro.vendor.mtk_tee_gp_support            u:object_r:vendor_mtk_media_prop:s0 exact bool
+ro.vendor.mtk_trustonic_tee_support     u:object_r:vendor_mtk_media_prop:s0 exact bool
