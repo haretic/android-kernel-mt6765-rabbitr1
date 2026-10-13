@@ -409,6 +409,64 @@ static int dmabuf_listed(unsigned long ino)
  * libmemory_c2 asks /dev/ion for their M4U addresses as for ION buffers. As
  * on stock, the mapping lives as long as the buffer, not the handle.
  */
+/*
+ * The mtk_mm heaps MediaTek's Codec2 store names: buffers of /dev/ion's own
+ * ion_mm_heap, cached and uncached, which take an M4U address as such.
+ */
+static void test_mtk_mm_heaps(void)
+{
+	static const char *const names[] = { "mtk_mm", "mtk_mm-uncached" };
+	unsigned int i;
+
+	for (i = 0; i < 2; i++) {
+		struct dma_heap_allocation_data heap = {
+			.len = BUF_LEN, .fd_flags = O_RDWR | O_CLOEXEC,
+		};
+		struct ion_fd_data imp;
+		struct ion_handle_data hd;
+		unsigned long addr = 0, len = 0;
+		char path[64];
+		int ion, heapfd, ret;
+		void *p;
+
+		snprintf(path, sizeof(path), "/dev/dma_heap/%s", names[i]);
+		heapfd = open(path, O_RDONLY | O_CLOEXEC);
+		CHECK(heapfd >= 0, "open %s", path);
+		if (heapfd < 0)
+			continue;
+		ret = xioctl(heapfd, DMA_HEAP_IOCTL_ALLOC, &heap);
+		close(heapfd);
+		CHECK(ret == 0, "%s: DMA_HEAP_IOCTL_ALLOC %d bytes -> %d", names[i], BUF_LEN, ret);
+		if (ret)
+			continue;
+		p = mmap(NULL, BUF_LEN, PROT_READ | PROT_WRITE, MAP_SHARED, heap.fd, 0);
+		CHECK(p != MAP_FAILED, "%s: mmap", names[i]);
+		if (p != MAP_FAILED) {
+			memset(p, 0x5a, BUF_LEN);
+			munmap(p, BUF_LEN);
+		}
+		ion = open("/dev/ion", O_RDONLY | O_CLOEXEC);
+		if (ion >= 0) {
+			memset(&imp, 0, sizeof(imp));
+			imp.fd = heap.fd;
+			ret = xioctl(ion, ION_IOC_IMPORT, &imp);
+			CHECK(ret == 0, "%s: ION_IOC_IMPORT -> %d", names[i], ret);
+			if (!ret) {
+				CHECK(ion_config(ion, imp.handle, PORT_VENC_RCPU) == 0,
+				      "%s: ION_MM_CONFIG_BUFFER VENC_RCPU", names[i]);
+				ret = ion_phys(ion, imp.handle, &addr, &len);
+				CHECK(ret == 0 && addr && len == BUF_LEN,
+				      "%s: ION_SYS_GET_PHYS -> %d, IOVA %#lx + %#lx", names[i], ret,
+				      addr, len);
+				hd.handle = imp.handle;
+				xioctl(ion, ION_IOC_FREE, &hd);
+			}
+			close(ion);
+		}
+		close(heap.fd);
+	}
+}
+
 static void test_foreign_iova(void)
 {
 	struct dma_heap_allocation_data heap = {
@@ -506,6 +564,7 @@ int main(void)
 	test_abandon(a);
 	test_iova();
 	test_foreign_iova();
+	test_mtk_mm_heaps();
 
 	close(b);
 	close(a);
