@@ -12,7 +12,14 @@
 # Needs patchelf at import: lib/libcodec2_hidl@1.0.so, lib/libcodec2_hidl@1.1.so,
 #   lib/libcodec2_hidl@1.2.so, lib/libcodec2_vndk.so and
 #   lib/libavservices_minijail_vendor.so get --add-needed libr1_codec2_shim.so
-#   (see shim/).
+#   (see shim/). Then these move to lib/r1-c2/ (installed as /vendor/lib/r1-c2),
+#   because AOSP vendor_available modules own their names in /vendor/lib:
+#   android.hardware.media.c2@1.0-1.2, libavservices_minijail_vendor,
+#   libcodec2_hidl@1.0-1.2, libcodec2_hidl_plugin, libcodec2_soft_common,
+#   libcodec2_vndk, libhwbinder, libsfplugin_ccodec_utils,
+#   libstagefright_bufferpool@2.0.1. Finally every ELF gets
+#   --set-rpath /vendor/lib/r1-c2 (bionic searches the caller's DT_RUNPATH for
+#   DT_NEEDED and dlopen alike).
 etc/mtk_platform_codecs_config.xml
 etc/seccomp_policy/android.hardware.media.c2@1.2-extended-seccomp-policy
 etc/seccomp_policy/android.hardware.media.c2@1.2-mediatek-seccomp-policy

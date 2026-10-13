@@ -128,5 +128,8 @@ $(call inherit-product, $(LOCAL_PATH)/modem/modem.mk)
 # CONSYS GPS: gps_drv.ko and the stock MediaTek mnld and GNSS HAL.
 $(call inherit-product, $(LOCAL_PATH)/gnss/gnss.mk)
 
+# MT6765 VENC/VDEC: the stock MediaTek Codec2 HAL on /dev/Vcodec.
+$(call inherit-product, $(LOCAL_PATH)/media/media.mk)
+
 # Hi-846 rear camera: libcamera simple pipeline + software ISP on CAMSV.
 $(call inherit-product, $(LOCAL_PATH)/camera/camera.mk)

@@ -4,8 +4,9 @@
 # README.md for the hookup and the staged bring-up.
 #
 # Blobs: vendor/rabbit/r1-media/proprietary/ holds the files in blobs.txt,
-# copied verbatim from out/stock-vendor/tree except the five libraries that
-# get "patchelf --add-needed libr1_codec2_shim.so" (blobs.txt, shim/).
+# copied from out/stock-vendor/tree and patched as blobs.txt describes:
+# the shim NEEDED, every ELF's DT_RUNPATH, and the Android 12 libraries whose
+# names AOSP modules own moved to /vendor/lib/r1-c2.
 # Board side: BoardConfigMedia.mk (sepolicy).
 
 ifneq ($(R1_GPU),pvr)
@@ -21,24 +22,24 @@ PRODUCT_COPY_FILES += \
     $(R1_MEDIA_BLOBS)/etc/seccomp_policy/android.hardware.media.c2@1.2-extended-seccomp-policy:$(TARGET_COPY_OUT_VENDOR)/etc/seccomp_policy/android.hardware.media.c2@1.2-extended-seccomp-policy \
     $(R1_MEDIA_BLOBS)/etc/seccomp_policy/android.hardware.media.c2@1.2-mediatek-seccomp-policy:$(TARGET_COPY_OUT_VENDOR)/etc/seccomp_policy/android.hardware.media.c2@1.2-mediatek-seccomp-policy \
     $(R1_MEDIA_BLOBS)/bin/hw/android.hardware.media.c2@1.2-mediatek:$(TARGET_COPY_OUT_VENDOR)/bin/hw/android.hardware.media.c2@1.2-mediatek \
-    $(R1_MEDIA_BLOBS)/lib/android.hardware.media.c2@1.0.so:$(TARGET_COPY_OUT_VENDOR)/lib/android.hardware.media.c2@1.0.so \
-    $(R1_MEDIA_BLOBS)/lib/android.hardware.media.c2@1.1.so:$(TARGET_COPY_OUT_VENDOR)/lib/android.hardware.media.c2@1.1.so \
-    $(R1_MEDIA_BLOBS)/lib/android.hardware.media.c2@1.2.so:$(TARGET_COPY_OUT_VENDOR)/lib/android.hardware.media.c2@1.2.so \
+    $(R1_MEDIA_BLOBS)/lib/r1-c2/android.hardware.media.c2@1.0.so:$(TARGET_COPY_OUT_VENDOR)/lib/r1-c2/android.hardware.media.c2@1.0.so \
+    $(R1_MEDIA_BLOBS)/lib/r1-c2/android.hardware.media.c2@1.1.so:$(TARGET_COPY_OUT_VENDOR)/lib/r1-c2/android.hardware.media.c2@1.1.so \
+    $(R1_MEDIA_BLOBS)/lib/r1-c2/android.hardware.media.c2@1.2.so:$(TARGET_COPY_OUT_VENDOR)/lib/r1-c2/android.hardware.media.c2@1.2.so \
     $(R1_MEDIA_BLOBS)/lib/hw/android.hardware.graphics.mapper@4.0-impl-mediatek.so:$(TARGET_COPY_OUT_VENDOR)/lib/hw/android.hardware.graphics.mapper@4.0-impl-mediatek.so \
     $(R1_MEDIA_BLOBS)/lib/hw/gralloc.rogue.so:$(TARGET_COPY_OUT_VENDOR)/lib/hw/gralloc.rogue.so \
     $(R1_MEDIA_BLOBS)/lib/libHEVCdec_sa.ca7.android.so:$(TARGET_COPY_OUT_VENDOR)/lib/libHEVCdec_sa.ca7.android.so \
     $(R1_MEDIA_BLOBS)/lib/libPVRMtkutils.so:$(TARGET_COPY_OUT_VENDOR)/lib/libPVRMtkutils.so \
-    $(R1_MEDIA_BLOBS)/lib/libavservices_minijail_vendor.so:$(TARGET_COPY_OUT_VENDOR)/lib/libavservices_minijail_vendor.so \
+    $(R1_MEDIA_BLOBS)/lib/r1-c2/libavservices_minijail_vendor.so:$(TARGET_COPY_OUT_VENDOR)/lib/r1-c2/libavservices_minijail_vendor.so \
     $(R1_MEDIA_BLOBS)/lib/libbwc.so:$(TARGET_COPY_OUT_VENDOR)/lib/libbwc.so \
-    $(R1_MEDIA_BLOBS)/lib/libcodec2_hidl@1.0.so:$(TARGET_COPY_OUT_VENDOR)/lib/libcodec2_hidl@1.0.so \
-    $(R1_MEDIA_BLOBS)/lib/libcodec2_hidl@1.1.so:$(TARGET_COPY_OUT_VENDOR)/lib/libcodec2_hidl@1.1.so \
-    $(R1_MEDIA_BLOBS)/lib/libcodec2_hidl@1.2.so:$(TARGET_COPY_OUT_VENDOR)/lib/libcodec2_hidl@1.2.so \
-    $(R1_MEDIA_BLOBS)/lib/libcodec2_hidl_plugin.so:$(TARGET_COPY_OUT_VENDOR)/lib/libcodec2_hidl_plugin.so \
+    $(R1_MEDIA_BLOBS)/lib/r1-c2/libcodec2_hidl@1.0.so:$(TARGET_COPY_OUT_VENDOR)/lib/r1-c2/libcodec2_hidl@1.0.so \
+    $(R1_MEDIA_BLOBS)/lib/r1-c2/libcodec2_hidl@1.1.so:$(TARGET_COPY_OUT_VENDOR)/lib/r1-c2/libcodec2_hidl@1.1.so \
+    $(R1_MEDIA_BLOBS)/lib/r1-c2/libcodec2_hidl@1.2.so:$(TARGET_COPY_OUT_VENDOR)/lib/r1-c2/libcodec2_hidl@1.2.so \
+    $(R1_MEDIA_BLOBS)/lib/r1-c2/libcodec2_hidl_plugin.so:$(TARGET_COPY_OUT_VENDOR)/lib/r1-c2/libcodec2_hidl_plugin.so \
     $(R1_MEDIA_BLOBS)/lib/libcodec2_mtk_c2store.so:$(TARGET_COPY_OUT_VENDOR)/lib/libcodec2_mtk_c2store.so \
     $(R1_MEDIA_BLOBS)/lib/libcodec2_mtk_vdec.so:$(TARGET_COPY_OUT_VENDOR)/lib/libcodec2_mtk_vdec.so \
     $(R1_MEDIA_BLOBS)/lib/libcodec2_mtk_venc.so:$(TARGET_COPY_OUT_VENDOR)/lib/libcodec2_mtk_venc.so \
-    $(R1_MEDIA_BLOBS)/lib/libcodec2_soft_common.so:$(TARGET_COPY_OUT_VENDOR)/lib/libcodec2_soft_common.so \
-    $(R1_MEDIA_BLOBS)/lib/libcodec2_vndk.so:$(TARGET_COPY_OUT_VENDOR)/lib/libcodec2_vndk.so \
+    $(R1_MEDIA_BLOBS)/lib/r1-c2/libcodec2_soft_common.so:$(TARGET_COPY_OUT_VENDOR)/lib/r1-c2/libcodec2_soft_common.so \
+    $(R1_MEDIA_BLOBS)/lib/r1-c2/libcodec2_vndk.so:$(TARGET_COPY_OUT_VENDOR)/lib/r1-c2/libcodec2_vndk.so \
     $(R1_MEDIA_BLOBS)/lib/libcodec2_vpp_qt_plugin.so:$(TARGET_COPY_OUT_VENDOR)/lib/libcodec2_vpp_qt_plugin.so \
     $(R1_MEDIA_BLOBS)/lib/libcodec2_vpp_rs_plugin.so:$(TARGET_COPY_OUT_VENDOR)/lib/libcodec2_vpp_rs_plugin.so \
     $(R1_MEDIA_BLOBS)/lib/libdpframework.so:$(TARGET_COPY_OUT_VENDOR)/lib/libdpframework.so \
@@ -52,7 +53,7 @@ PRODUCT_COPY_FILES += \
     $(R1_MEDIA_BLOBS)/lib/libh264dec_sd.ca7.so:$(TARGET_COPY_OUT_VENDOR)/lib/libh264dec_sd.ca7.so \
     $(R1_MEDIA_BLOBS)/lib/libh264dec_se.ca7.so:$(TARGET_COPY_OUT_VENDOR)/lib/libh264dec_se.ca7.so \
     $(R1_MEDIA_BLOBS)/lib/libh264enc_sa.ca7.so:$(TARGET_COPY_OUT_VENDOR)/lib/libh264enc_sa.ca7.so \
-    $(R1_MEDIA_BLOBS)/lib/libhwbinder.so:$(TARGET_COPY_OUT_VENDOR)/lib/libhwbinder.so \
+    $(R1_MEDIA_BLOBS)/lib/r1-c2/libhwbinder.so:$(TARGET_COPY_OUT_VENDOR)/lib/r1-c2/libhwbinder.so \
     $(R1_MEDIA_BLOBS)/lib/libion_mtk.so:$(TARGET_COPY_OUT_VENDOR)/lib/libion_mtk.so \
     $(R1_MEDIA_BLOBS)/lib/libion_ulit.so:$(TARGET_COPY_OUT_VENDOR)/lib/libion_ulit.so \
     $(R1_MEDIA_BLOBS)/lib/libladder.so:$(TARGET_COPY_OUT_VENDOR)/lib/libladder.so \
@@ -61,9 +62,9 @@ PRODUCT_COPY_FILES += \
     $(R1_MEDIA_BLOBS)/lib/libmtkperf_client_vendor.so:$(TARGET_COPY_OUT_VENDOR)/lib/libmtkperf_client_vendor.so \
     $(R1_MEDIA_BLOBS)/lib/libpowerhalwrap_vendor.so:$(TARGET_COPY_OUT_VENDOR)/lib/libpowerhalwrap_vendor.so \
     $(R1_MEDIA_BLOBS)/lib/libpq_prot.so:$(TARGET_COPY_OUT_VENDOR)/lib/libpq_prot.so \
-    $(R1_MEDIA_BLOBS)/lib/libsfplugin_ccodec_utils.so:$(TARGET_COPY_OUT_VENDOR)/lib/libsfplugin_ccodec_utils.so \
+    $(R1_MEDIA_BLOBS)/lib/r1-c2/libsfplugin_ccodec_utils.so:$(TARGET_COPY_OUT_VENDOR)/lib/r1-c2/libsfplugin_ccodec_utils.so \
     $(R1_MEDIA_BLOBS)/lib/libsrv_um.so:$(TARGET_COPY_OUT_VENDOR)/lib/libsrv_um.so \
-    $(R1_MEDIA_BLOBS)/lib/libstagefright_bufferpool@2.0.1.so:$(TARGET_COPY_OUT_VENDOR)/lib/libstagefright_bufferpool@2.0.1.so \
+    $(R1_MEDIA_BLOBS)/lib/r1-c2/libstagefright_bufferpool@2.0.1.so:$(TARGET_COPY_OUT_VENDOR)/lib/r1-c2/libstagefright_bufferpool@2.0.1.so \
     $(R1_MEDIA_BLOBS)/lib/libthha.so:$(TARGET_COPY_OUT_VENDOR)/lib/libthha.so \
     $(R1_MEDIA_BLOBS)/lib/libvcodec_oal.so:$(TARGET_COPY_OUT_VENDOR)/lib/libvcodec_oal.so \
     $(R1_MEDIA_BLOBS)/lib/libvcodec_utility.so:$(TARGET_COPY_OUT_VENDOR)/lib/libvcodec_utility.so \
@@ -120,10 +121,10 @@ PRODUCT_COPY_FILES += \
 R1_MEDIA_HW_DECODE ?= false
 ifeq ($(R1_MEDIA_HW_DECODE),true)
 PRODUCT_COPY_FILES += \
-    $(R1_MEDIA_PATH)/media_codecs_c2.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs_c2.xml
+    $(R1_MEDIA_PATH)/media_codecs_c2.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs.xml
 else
 PRODUCT_COPY_FILES += \
-    $(R1_MEDIA_PATH)/media_codecs_c2_encode.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs_c2.xml
+    $(R1_MEDIA_PATH)/media_codecs_c2_encode.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs.xml
 endif
 
 DEVICE_MANIFEST_FILE += $(R1_MEDIA_PATH)/manifest-media.xml

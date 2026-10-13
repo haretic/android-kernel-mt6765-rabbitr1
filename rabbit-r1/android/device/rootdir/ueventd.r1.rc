@@ -10,6 +10,9 @@ import /vendor/etc/ueventd.r1-modem.rc
 # GPS device node (gnss/ueventd.r1-gnss.rc).
 import /vendor/etc/ueventd.r1-gnss.rc
 
+# Video codec node (media/ueventd.r1-media.rc).
+import /vendor/etc/ueventd.r1-media.rc
+
 # Factory reset protection data (ro.frp.pst), read and written by
 # system_server's PersistentDataBlockService. Stock ueventd.rc.
 /dev/block/by-name/frp    0660   root       system
