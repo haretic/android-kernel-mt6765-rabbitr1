@@ -809,5 +809,18 @@
         "after_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
       }
     ]
+  },
+  {
+    "project": "packages/providers/TelephonyProvider",
+    "base_commit": "8c7e341e0c8ff2630c56341e43f780608946b889",
+    "patch": "0013-reload-apns-when-the-conf-or-table-needs-it.patch",
+    "sha256": "defac3c4c07a47ccc92b012c49ff535c578b3deb62dc911d11a6e0ec8514a485",
+    "files": [
+      {
+        "path": "src/com/android/providers/telephony/TelephonyProvider.java",
+        "before_sha256": "5165106bac576c53bc88654091ca86eec86e9652d1deb1590b6f147c82f9d4eb",
+        "after_sha256": "f46530c3e1eff1f4b2967205ca07d6daa5439a049daa11eba1bc729bab8dd002"
+      }
+    ]
   }
 ]
