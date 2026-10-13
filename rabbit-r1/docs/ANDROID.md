@@ -65,7 +65,8 @@ APEX's ARM64 payload, service and VINTF declarations, and external library
 requirements. Runtime APEX/linker behavior still needs testing.
 
 `android/local_manifests/r1.xml` pins the common mainline device tree and its ten
-direct and transitive dependencies. Use it with the LineageOS manifest commit in `sources.lock.json`.
+direct and transitive dependencies, plus Linaro's generic thermal HAL that
+`device/thermal/product.mk` selects. Use it with the LineageOS manifest commit in `sources.lock.json`.
 The upstream manifest uses the Android 17 release tag for AOSP projects and
 moving Lineage branches for other projects; record a resolved manifest after
 sync and account for any local source edits when recording build provenance.

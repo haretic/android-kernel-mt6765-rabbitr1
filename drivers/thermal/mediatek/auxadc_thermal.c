@@ -129,6 +129,7 @@
  */
 #define CALIB_BUF0_VALID_V1		BIT(0)
 #define CALIB_BUF1_ADC_GE_V1(x)		(((x) >> 22) & 0x3ff)
+#define CALIB_BUF1_ADC_OE_V1(x)		(((x) >> 12) & 0x3ff)
 #define CALIB_BUF0_VTS_TS1_V1(x)	(((x) >> 17) & 0x1ff)
 #define CALIB_BUF0_VTS_TS2_V1(x)	(((x) >> 8) & 0x1ff)
 #define CALIB_BUF1_VTS_TS3_V1(x)	(((x) >> 0) & 0x1ff)
@@ -182,6 +183,8 @@ enum mtk_thermal_version {
 	MTK_THERMAL_V1 = 1,
 	MTK_THERMAL_V2,
 	MTK_THERMAL_V3,
+	/* V1 fuses and sensor mux, calibrated the way MediaTek's MT6765 code does */
+	MTK_THERMAL_V4,
 };
 
 /* MT2701 thermal sensors */
@@ -296,6 +299,28 @@ enum mtk_thermal_version {
 #define MT8365_TS2 1
 #define MT8365_TS3 2
 
+/* MT6765 thermal sensors */
+#define MT6765_TS1	0
+#define MT6765_TS2	1
+#define MT6765_TS3	2
+#define MT6765_TS4	3
+#define MT6765_TS5	4
+
+/* AUXADC channel 11 is used for the temperature sensors */
+#define MT6765_TEMP_AUXADC_CHANNEL	11
+
+/* The total number of temperature sensors in the MT6765 */
+#define MT6765_NUM_SENSORS		5
+
+/* The number of banks in the MT6765 */
+#define MT6765_NUM_ZONES		1
+
+/* The number of sensing points per bank */
+#define MT6765_NUM_SENSORS_PER_ZONE	5
+
+/* The number of controller in the MT6765 */
+#define MT6765_NUM_CONTROLLER		2
+
 struct mtk_thermal;
 
 struct thermal_bank_cfg {
@@ -327,6 +352,11 @@ struct mtk_thermal_data {
 	u32 apmixed_buffer_ctl_set;
 };
 
+struct mtk_thermal_sensor {
+	struct mtk_thermal *mt;
+	int id;
+};
+
 struct mtk_thermal {
 	struct device *dev;
 	void __iomem *thermal_base;
@@ -346,6 +376,7 @@ struct mtk_thermal {
 
 	const struct mtk_thermal_data *conf;
 	struct mtk_thermal_bank banks[MAX_NUM_ZONES];
+	struct mtk_thermal_sensor sensors[MAX_NUM_VTS];
 
 	int (*raw_to_mcelsius)(struct mtk_thermal *mt, int sensno, s32 raw);
 };
@@ -467,6 +498,26 @@ static const int mt8365_mux_values[MT8365_NUM_SENSORS] = { 0, 1, 2 };
 static const int mt8365_tc_offset[MT8365_NUM_CONTROLLER] = { 0 };
 
 static const int mt8365_vts_index[MT8365_NUM_SENSORS] = { VTS1, VTS2, VTS3 };
+
+/* MT6765 thermal sensor data */
+static const int mt6765_bank_data[MT6765_NUM_SENSORS] = {
+	MT6765_TS1, MT6765_TS2, MT6765_TS3, MT6765_TS4, MT6765_TS5
+};
+
+static const int mt6765_msr[MT6765_NUM_SENSORS_PER_ZONE] = {
+	TEMP_MSR0, TEMP_MSR1, TEMP_MSR2, TEMP_MSR0_1, TEMP_MSR1_1
+};
+
+static const int mt6765_adcpnp[MT6765_NUM_SENSORS_PER_ZONE] = {
+	TEMP_ADCPNP0, TEMP_ADCPNP1, TEMP_ADCPNP2, TEMP_ADCPNP0_1, TEMP_ADCPNP1_1
+};
+
+static const int mt6765_mux_values[MT6765_NUM_SENSORS] = { 0, 1, 2, 3, 4 };
+static const int mt6765_tc_offset[MT6765_NUM_CONTROLLER] = { 0x0, 0x100 };
+
+static const int mt6765_vts_index[MT6765_NUM_SENSORS] = {
+	VTS1, VTS2, VTS3, VTS4, VTS5
+};
 
 /*
  * The MT8173 thermal controller has four banks. Each bank can read up to
@@ -669,6 +720,38 @@ static const struct mtk_thermal_data mt8183_thermal_data = {
 };
 
 /*
+ * The MT6765 has five temperature sensors. MediaTek's code uses TS1 for CPU
+ * cores 0-3, TS2 for cores 4-7, TS3 for the GPU and TS4 and TS5 for the rest
+ * of the SoC. The first controller reads TS1-TS3, the second one, at offset
+ * 0x100, TS4 and TS5.
+ * As on the MT8183 both are handled as a single bank. The fuse layout is the
+ * V1 one, but the raw values are converted as MediaTek's own MT6765 driver
+ * does it, see raw_to_mcelsius_v4().
+ */
+static const struct mtk_thermal_data mt6765_thermal_data = {
+	.auxadc_channel = MT6765_TEMP_AUXADC_CHANNEL,
+	.num_banks = MT6765_NUM_ZONES,
+	.num_sensors = MT6765_NUM_SENSORS,
+	.vts_index = mt6765_vts_index,
+	.num_controller = MT6765_NUM_CONTROLLER,
+	.controller_offset = mt6765_tc_offset,
+	.need_switch_bank = false,
+	.bank_data = {
+		{
+			.num_sensors = MT6765_NUM_SENSORS,
+			.sensors = mt6765_bank_data,
+		},
+	},
+	.msr = mt6765_msr,
+	.adcpnp = mt6765_adcpnp,
+	.sensor_mux_values = mt6765_mux_values,
+	.version = MTK_THERMAL_V4,
+	.apmixed_buffer_ctl_reg = APMIXED_SYS_TS_CON0,
+	.apmixed_buffer_ctl_mask = (u32) ~GENMASK(29, 28),
+	.apmixed_buffer_ctl_set = 0,
+};
+
+/*
  * MT7986 uses AUXADC Channel 11 for raw data access.
  */
 static const struct mtk_thermal_data mt7986_thermal_data = {
@@ -771,6 +854,32 @@ static int raw_to_mcelsius_v3(struct mtk_thermal *mt, int sensno, s32 raw)
 }
 
 /**
+ * raw_to_mcelsius_v4 - convert a raw ADC value to mcelsius
+ * @mt:	The thermal controller
+ * @sensno:	sensor number
+ * @raw:	raw ADC value
+ *
+ * This follows raw_to_temperature_roomt() of MediaTek's MT6765 driver: the
+ * ADC gain error is applied as (ADC_GE - 512) / 4096, the offset error as
+ * ADC_OE - 512, and the slope term is 1534 + 10 * O_SLOPE with a 15/18 scale.
+ */
+static int raw_to_mcelsius_v4(struct mtk_thermal *mt, int sensno, s32 raw)
+{
+	s32 g_gain, g_oe, x_roomt, tmp;
+
+	raw &= 0xfff;
+	g_gain = 10000 + (mt->adc_ge - 512) * 10000 / 4096;
+	g_oe = mt->adc_oe - 512;
+	x_roomt = (mt->vts[sensno] + 3350 - g_oe) * 10000 / 4096 * 10000 / g_gain;
+
+	tmp = ((((raw - g_oe) * 10000) >> 12) * 10000) / g_gain - x_roomt;
+	tmp = tmp * 15 / 18;
+	tmp = tmp * 1000 / (1534 + mt->o_slope * 10);
+
+	return (mt->degc_cali * 10 / 2 - tmp) * 100;
+}
+
+/**
  * mtk_thermal_get_bank - get bank
  * @bank:	The bank
  *
@@ -844,6 +953,55 @@ static int mtk_thermal_bank_temperature(struct mtk_thermal_bank *bank)
 
 	return max;
 }
+
+/**
+ * mtk_thermal_sensor_temperature - get the temperature of one sensor
+ * @sensor:	The sensor
+ *
+ * The sensor is read through the first bank it is assigned to.
+ */
+static int mtk_thermal_sensor_temperature(struct mtk_thermal_sensor *sensor)
+{
+	struct mtk_thermal *mt = sensor->mt;
+	const struct mtk_thermal_data *conf = mt->conf;
+	int temp = THERMAL_TEMP_INVALID;
+	int i, j;
+	u32 raw;
+
+	for (i = 0; i < conf->num_banks; i++) {
+		const struct thermal_bank_cfg *cfg = &conf->bank_data[i];
+
+		for (j = 0; j < cfg->num_sensors; j++) {
+			if (cfg->sensors[j] != sensor->id)
+				continue;
+
+			mtk_thermal_get_bank(&mt->banks[i]);
+			raw = readl(mt->thermal_base + conf->msr[j]);
+			mtk_thermal_put_bank(&mt->banks[i]);
+
+			temp = mt->raw_to_mcelsius(mt, sensor->id, raw);
+			if (!mtk_thermal_temp_is_valid(temp))
+				temp = THERMAL_TEMP_INVALID;
+
+			return temp;
+		}
+	}
+
+	return temp;
+}
+
+static int mtk_read_sensor_temp(struct thermal_zone_device *tz, int *temperature)
+{
+	struct mtk_thermal_sensor *sensor = thermal_zone_device_priv(tz);
+
+	*temperature = mtk_thermal_sensor_temperature(sensor);
+
+	return 0;
+}
+
+static const struct thermal_zone_device_ops mtk_thermal_sensor_ops = {
+	.get_temp = mtk_read_sensor_temp,
+};
 
 static int mtk_read_temp(struct thermal_zone_device *tz, int *temperature)
 {
@@ -930,7 +1088,8 @@ static void mtk_thermal_init_bank(struct mtk_thermal *mt, int num,
 	writel(auxadc_phys_base + AUXADC_CON1_CLR_V,
 	       controller_base + TEMP_ADCMUXADDR);
 
-	if (mt->conf->version == MTK_THERMAL_V1) {
+	if (mt->conf->version == MTK_THERMAL_V1 ||
+	    mt->conf->version == MTK_THERMAL_V4) {
 		/* AHB address for pnp sensor mux selection */
 		writel(apmixed_phys_base + APMIXED_SYS_TS_CON1,
 		       controller_base + TEMP_PNPMUXADDR);
@@ -1070,6 +1229,45 @@ static int mtk_thermal_extract_efuse_v3(struct mtk_thermal *mt, u32 *buf)
 	return 0;
 }
 
+static int mtk_thermal_extract_efuse_v4(struct mtk_thermal *mt, u32 *buf)
+{
+	int i;
+
+	if (!(buf[0] & CALIB_BUF0_VALID_V1))
+		return -EINVAL;
+
+	mt->adc_ge = CALIB_BUF1_ADC_GE_V1(buf[1]);
+	mt->adc_oe = CALIB_BUF1_ADC_OE_V1(buf[1]);
+	mt->vts[VTS1] = CALIB_BUF0_VTS_TS1_V1(buf[0]);
+	mt->vts[VTS2] = CALIB_BUF0_VTS_TS2_V1(buf[0]);
+	mt->vts[VTS3] = CALIB_BUF1_VTS_TS3_V1(buf[1]);
+	mt->vts[VTS4] = CALIB_BUF2_VTS_TS4_V1(buf[2]);
+	mt->vts[VTS5] = CALIB_BUF2_VTS_TS5_V1(buf[2]);
+	mt->vts[VTSABB] = CALIB_BUF2_VTS_TSABB_V1(buf[2]);
+	mt->degc_cali = CALIB_BUF0_DEGC_CALI_V1(buf[0]);
+
+	/* O_SLOPE is only trimmed on parts with the ID bit set */
+	if (!CALIB_BUF1_ID_V1(buf[1]))
+		mt->o_slope = 0;
+	else if (CALIB_BUF0_O_SLOPE_SIGN_V1(buf[0]))
+		mt->o_slope = -CALIB_BUF0_O_SLOPE_V1(buf[0]);
+	else
+		mt->o_slope = CALIB_BUF0_O_SLOPE_V1(buf[0]);
+
+	/* Replace out of range values like MediaTek's driver does */
+	if (mt->adc_ge < 265 || mt->adc_ge > 758)
+		mt->adc_ge = 512;
+	if (mt->adc_oe < 265 || mt->adc_oe > 758)
+		mt->adc_oe = 512;
+	for (i = 0; i < MAX_NUM_VTS; i++)
+		if (mt->vts[i] > 484)
+			mt->vts[i] = 260;
+	if (mt->degc_cali < 1)
+		mt->degc_cali = 40;
+
+	return 0;
+}
+
 static int mtk_thermal_get_calibration_data(struct device *dev,
 					    struct mtk_thermal *mt)
 {
@@ -1116,6 +1314,9 @@ static int mtk_thermal_get_calibration_data(struct device *dev,
 	case MTK_THERMAL_V3:
 		ret = mtk_thermal_extract_efuse_v3(mt, buf);
 		break;
+	case MTK_THERMAL_V4:
+		ret = mtk_thermal_extract_efuse_v4(mt, buf);
+		break;
 	default:
 		ret = -EINVAL;
 		break;
@@ -1133,6 +1334,10 @@ out:
 }
 
 static const struct of_device_id mtk_thermal_of_match[] = {
+	{
+		.compatible = "mediatek,mt6765-thermal",
+		.data = (void *)&mt6765_thermal_data,
+	},
 	{
 		.compatible = "mediatek,mt8173-thermal",
 		.data = (void *)&mt8173_thermal_data,
@@ -1270,15 +1475,18 @@ static int mtk_thermal_probe(struct platform_device *pdev)
 
 	mtk_thermal_turn_on_buffer(mt, apmixed_base);
 
-	if (mt->conf->version != MTK_THERMAL_V1)
+	if (mt->conf->version == MTK_THERMAL_V2 ||
+	    mt->conf->version == MTK_THERMAL_V3)
 		mtk_thermal_release_periodic_ts(mt, auxadc_base);
 
 	if (mt->conf->version == MTK_THERMAL_V1)
 		mt->raw_to_mcelsius = raw_to_mcelsius_v1;
 	else if (mt->conf->version == MTK_THERMAL_V2)
 		mt->raw_to_mcelsius = raw_to_mcelsius_v2;
-	else
+	else if (mt->conf->version == MTK_THERMAL_V3)
 		mt->raw_to_mcelsius = raw_to_mcelsius_v3;
+	else
+		mt->raw_to_mcelsius = raw_to_mcelsius_v4;
 
 	for (ctrl_id = 0; ctrl_id < mt->conf->num_controller ; ctrl_id++)
 		for (i = 0; i < mt->conf->num_banks; i++)
@@ -1293,6 +1501,31 @@ static int mtk_thermal_probe(struct platform_device *pdev)
 	ret = devm_thermal_add_hwmon_sysfs(&pdev->dev, tzdev);
 	if (ret)
 		dev_warn(&pdev->dev, "error in thermal_add_hwmon_sysfs");
+
+	/*
+	 * Sensor ID 0 is the hottest sensor of all banks, sensor ID n is the
+	 * n-th sensor of the SoC on its own.
+	 */
+	for (i = 0; i < mt->conf->num_sensors; i++) {
+		struct mtk_thermal_sensor *sensor = &mt->sensors[i];
+
+		sensor->mt = mt;
+		sensor->id = i;
+
+		tzdev = devm_thermal_of_zone_register(&pdev->dev, i + 1, sensor,
+						      &mtk_thermal_sensor_ops);
+		if (IS_ERR(tzdev)) {
+			/* This sensor has no thermal zone in the device tree */
+			if (PTR_ERR(tzdev) == -ENODEV)
+				continue;
+
+			return PTR_ERR(tzdev);
+		}
+
+		ret = devm_thermal_add_hwmon_sysfs(&pdev->dev, tzdev);
+		if (ret)
+			dev_warn(&pdev->dev, "error in thermal_add_hwmon_sysfs");
+	}
 
 	return 0;
 }

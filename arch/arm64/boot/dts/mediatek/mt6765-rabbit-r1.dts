@@ -126,6 +126,51 @@
 		max-microvolt = <3000000>;
 	};
 
+	/*
+	 * Board NTC next to the SoC on AUXADC channel 0, the stock "mtktsAP"
+	 * sensor: a 100 kOhm NCP15WF104F03RC to ground under a 390 kOhm pull-up
+	 * to 1.8 V (thermal.conf tzbts_param: PUP_R 390000, PUP_VOLT 1800,
+	 * NTC_TABLE 7; DT thermal-sensor1 on auxadc channel 0). The NCP03WF104
+	 * is the same WF104 part in a smaller package; the driver's table for it
+	 * matches the stock table 7 entry for entry.
+	 */
+	ap_ntc: thermal-sensor-ap {
+		compatible = "murata,ncp03wf104";
+		io-channels = <&auxadc 0>;
+		pullup-uv = <1800000>;
+		pullup-ohm = <390000>;
+		pulldown-ohm = <0>;
+		#thermal-sensor-cells = <0>;
+	};
+
+	thermal-zones {
+		/*
+		 * The stock policy limits charging from 45 C here and turns the
+		 * camera off from 53 C. These trips only report the crossings
+		 * to userspace: the reading is not validated on hardware, so
+		 * nothing in the kernel acts on it yet.
+		 */
+		ap_ntc_thermal: ap-ntc-thermal {
+			polling-delay-passive = <1000>;
+			polling-delay = <2000>;
+			thermal-sensors = <&ap_ntc>;
+
+			trips {
+				ap_ntc_warm: trip-warm {
+					temperature = <45000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+
+				ap_ntc_hot: trip-hot {
+					temperature = <53000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+			};
+		};
+	};
+
 	chosen {
 		stdout-path = "serial0:921600n8";
 		/* Single CPU until the r1's PSCI/firmware behavior is measured. */
@@ -143,8 +188,8 @@
 	 * LK leaves L 1500 MHz, LL 920 MHz and CCI 600 MHz at 0.800 V. CCI is
 	 * not scaled; the stock CCI table needs 0.8125 V for 600 MHz, so no OPP
 	 * below 0.8125 V is listed. OPPs above 0.85 V are turbo-mode: they stay
-	 * unused until /sys/devices/system/cpu/cpufreq/boost is set to 1,
-	 * because nothing throttles the SoC thermally yet.
+	 * unused until /sys/devices/system/cpu/cpufreq/boost is set to 1, as
+	 * the thermal throttling in mt6765.dtsi is not validated on hardware.
 	 */
 	cluster0_opp: opp-table-cluster0 {
 		compatible = "operating-points-v2";
@@ -465,6 +510,10 @@
 	operating-points-v2 = <&cluster1_opp>;
 	proc-supply = <&mt6357_vproc_reg>;
 	sram-supply = <&mt6357_vsram_proc_reg>;
+};
+
+&auxadc {
+	status = "okay";
 };
 
 &uart0 {
