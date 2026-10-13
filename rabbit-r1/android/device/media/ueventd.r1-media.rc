@@ -5,3 +5,7 @@
 #   import /vendor/etc/ueventd.r1-media.rc
 
 /dev/Vcodec               0660   media      system
+# mtk-ion-compat's mtk_mm heaps, which MediaTek's Codec2 store hands every
+# Codec2 allocator: as the platform's /dev/dma_heap/system.
+/dev/dma_heap/mtk_mm             0444   system     system
+/dev/dma_heap/mtk_mm-uncached    0444   system     system
