@@ -13,3 +13,4 @@ persist.vendor.dp.                  u:object_r:vendor_mtk_pq_prop:s0
 vendor.sys.pq.                      u:object_r:vendor_mtk_pq_prop:s0
 vendor.debug.pq.                    u:object_r:vendor_mtk_pq_prop:s0
 vendor.dp.                          u:object_r:vendor_mtk_pq_prop:s0
+vendor.debug.camera.dumpin.path.config u:object_r:vendor_mtk_pq_prop:s0

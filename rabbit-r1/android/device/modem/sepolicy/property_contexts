@@ -12,3 +12,4 @@ vendor.gsm.                     u:object_r:vendor_mtk_ril_prop:s0
 ctl.vendor.gsm0710muxd          u:object_r:vendor_mtk_ctl_modem_prop:s0
 ctl.vendor.ril-daemon-mtk       u:object_r:vendor_mtk_ctl_modem_prop:s0
 ctl.vendor.ccci_rpcd            u:object_r:vendor_mtk_ctl_modem_prop:s0
+vendor.sms.                     u:object_r:vendor_mtk_ril_prop:s0
