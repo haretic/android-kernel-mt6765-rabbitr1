@@ -62,11 +62,15 @@ PRODUCT_PACKAGES += \
 # The logger validates expdb and bounds its mapping before loading pstore.
 PRODUCT_VENDOR_PROPERTIES += ro.vendor.r1.expdb.enabled=1
 
+# The panel goes dark below 2 of 512 (MT6370 backlight), measured on the device. The
+# composer maps brightness 0, which dimming before screen-off reaches, to this level.
+PRODUCT_VENDOR_PROPERTIES += ro.vendor.drmfb.backlight_min=2
+
 # Factory reset protection data (stock value).
 PRODUCT_VENDOR_PROPERTIES += ro.frp.pst=/dev/block/by-name/frp
 
-# One online core: ueventd lags apexd's default 1 s wait for dm-verity links,
-# so boot APEX activation fails (and bpfloader with it) unless this waits longer.
+# ueventd can lag apexd's default 1 s wait for dm-verity links while coldboot
+# relabels /sys, and boot APEX activation (and bpfloader with it) then fails.
 PRODUCT_VENDOR_PROPERTIES += \
     apexd.config.dm_create.timeout=20000 \
     apexd.config.dm_delete.timeout=5000

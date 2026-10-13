@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Lowest level the panel still shows (2 of 512 on the MT6370 backlight), measured on the device. -->
-    <item name="config_screenBrightnessSettingMinimumFloat" format="float" type="dimen">0.004315791</item>
+    <!-- 2% above the lowest level the panel still shows (ro.vendor.drmfb.backlight_min),
+         the lowest the user found comfortable. -->
+    <item name="config_screenBrightnessSettingMinimumFloat" format="float" type="dimen">0.02</item>
+
+    <!-- The r1 has no Back or Home keys (only the side button and the scroll wheel).
+         Without a navigation bar SystemUI also never attaches the back gesture. -->
+    <bool name="config_showNavigationBar">true</bool>
 </resources>

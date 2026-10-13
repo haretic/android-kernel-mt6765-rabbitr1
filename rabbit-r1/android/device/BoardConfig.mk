@@ -56,7 +56,7 @@ BOARD_KERNEL_CMDLINE += $(filter-out binder.impl=rust,$(MAINLINE_COMMON_KERNEL_P
 BOARD_KERNEL_CMDLINE += $(MAINLINE_COMMON_ANDROIDBOOT_PARAMS)
 BOARD_KERNEL_CMDLINE += bootopt=64S3,32N2,64N2 androidboot.fstab_suffix=r1
 BOARD_KERNEL_CMDLINE += earlycon=uart8250,mmio32,0x11002000 console=ttyS0,921600n8
-BOARD_KERNEL_CMDLINE += maxcpus=1 clk_ignore_unused regulator_ignore_unused
+BOARD_KERNEL_CMDLINE += clk_ignore_unused regulator_ignore_unused
 # Reboot on panic; the kernel default would hang.
 BOARD_KERNEL_CMDLINE += panic=-1
 # The stock ATF offers PSCI SYSTEM_SUSPEND, but it runs SPM firmware that only

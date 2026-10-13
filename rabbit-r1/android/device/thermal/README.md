@@ -46,8 +46,8 @@ its thermal status from SKIN sensors. The battery zone has no trips, so its
 
 The board NTC and the battery zone are `Optional`: the HAL drops them if they
 are missing instead of failing to start. `cpufreq-cpu4` is optional because
-with `maxcpus=1` the second cluster has no cpufreq policy and therefore no
-cooling device. The four SoC zones and `cpufreq-cpu0` are required: without
+it was missing while the kernel booted with `maxcpus=1`; the r1 no longer
+passes it. The four SoC zones and `cpufreq-cpu0` are required: without
 them the thermal driver did not probe, and the HAL failing to start says so.
 
 ## Hooking it in
