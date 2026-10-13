@@ -6,7 +6,12 @@ cc_library_shared {
     vendor: true,
     // The codec libraries it serves are 32-bit only.
     compile_multilib: "32",
-    srcs: ["r1_codec2_shim.cpp"],
+    srcs: [
+        // gui/FrameTimestamps.h includes the generated android/gui/FrameEvent.h,
+        // as in libstagefright_bufferqueue-defaults.
+        ":libgui_frame_event_aidl",
+        "r1_codec2_shim.cpp",
+    ],
     // IGraphicBufferProducer as the vendor libstagefright_bufferqueue_helper
     // sees it: built from libgui_bufferqueue_static without binder.
     cflags: [
