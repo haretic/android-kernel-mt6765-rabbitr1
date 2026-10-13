@@ -42,7 +42,6 @@ PRODUCT_COPY_FILES += \
     $(R1_MEDIA_BLOBS)/lib/r1-c2/libcodec2_vndk.so:$(TARGET_COPY_OUT_VENDOR)/lib/r1-c2/libcodec2_vndk.so \
     $(R1_MEDIA_BLOBS)/lib/libcodec2_vpp_qt_plugin.so:$(TARGET_COPY_OUT_VENDOR)/lib/libcodec2_vpp_qt_plugin.so \
     $(R1_MEDIA_BLOBS)/lib/libcodec2_vpp_rs_plugin.so:$(TARGET_COPY_OUT_VENDOR)/lib/libcodec2_vpp_rs_plugin.so \
-    $(R1_MEDIA_BLOBS)/lib/libdpframework.so:$(TARGET_COPY_OUT_VENDOR)/lib/libdpframework.so \
     $(R1_MEDIA_BLOBS)/lib/libformatter.so:$(TARGET_COPY_OUT_VENDOR)/lib/libformatter.so \
     $(R1_MEDIA_BLOBS)/lib/libged.so:$(TARGET_COPY_OUT_VENDOR)/lib/libged.so \
     $(R1_MEDIA_BLOBS)/lib/libgpud.so:$(TARGET_COPY_OUT_VENDOR)/lib/libgpud.so \
@@ -61,7 +60,6 @@ PRODUCT_COPY_FILES += \
     $(R1_MEDIA_BLOBS)/lib/libmtk_drvb.so:$(TARGET_COPY_OUT_VENDOR)/lib/libmtk_drvb.so \
     $(R1_MEDIA_BLOBS)/lib/libmtkperf_client_vendor.so:$(TARGET_COPY_OUT_VENDOR)/lib/libmtkperf_client_vendor.so \
     $(R1_MEDIA_BLOBS)/lib/libpowerhalwrap_vendor.so:$(TARGET_COPY_OUT_VENDOR)/lib/libpowerhalwrap_vendor.so \
-    $(R1_MEDIA_BLOBS)/lib/libpq_prot.so:$(TARGET_COPY_OUT_VENDOR)/lib/libpq_prot.so \
     $(R1_MEDIA_BLOBS)/lib/r1-c2/libsfplugin_ccodec_utils.so:$(TARGET_COPY_OUT_VENDOR)/lib/r1-c2/libsfplugin_ccodec_utils.so \
     $(R1_MEDIA_BLOBS)/lib/libsrv_um.so:$(TARGET_COPY_OUT_VENDOR)/lib/libsrv_um.so \
     $(R1_MEDIA_BLOBS)/lib/r1-c2/libstagefright_bufferpool@2.0.1.so:$(TARGET_COPY_OUT_VENDOR)/lib/r1-c2/libstagefright_bufferpool@2.0.1.so \
@@ -73,11 +71,14 @@ PRODUCT_COPY_FILES += \
     $(R1_MEDIA_BLOBS)/lib/libvp9dec_sa.ca7.so:$(TARGET_COPY_OUT_VENDOR)/lib/libvp9dec_sa.ca7.so \
     $(R1_MEDIA_BLOBS)/lib/vendor.mediatek.hardware.mtkpower@1.0.so:$(TARGET_COPY_OUT_VENDOR)/lib/vendor.mediatek.hardware.mtkpower@1.0.so \
     $(R1_MEDIA_BLOBS)/lib/vendor.mediatek.hardware.mtkpower@1.1.so:$(TARGET_COPY_OUT_VENDOR)/lib/vendor.mediatek.hardware.mtkpower@1.1.so \
-    $(R1_MEDIA_BLOBS)/lib/vendor.mediatek.hardware.mtkpower@1.2.so:$(TARGET_COPY_OUT_VENDOR)/lib/vendor.mediatek.hardware.mtkpower@1.2.so \
-    $(R1_MEDIA_BLOBS)/lib/vendor.mediatek.hardware.pq@2.0.so:$(TARGET_COPY_OUT_VENDOR)/lib/vendor.mediatek.hardware.pq@2.0.so
+    $(R1_MEDIA_BLOBS)/lib/vendor.mediatek.hardware.mtkpower@1.2.so:$(TARGET_COPY_OUT_VENDOR)/lib/vendor.mediatek.hardware.mtkpower@1.2.so
 
 # The Android 12 symbols the blobs import (shim/).
 PRODUCT_PACKAGES += libr1_codec2_shim
+
+# The MDP colour conversion the codecs ask libdpframework for, on the CPU
+# (dpframework/): the stock library needs /dev/mtk_cmdq and /dev/mdp_sync.
+PRODUCT_PACKAGES += libdpframework
 
 # Platform libraries the blobs link against, as 32-bit vendor variants.
 PRODUCT_PACKAGES += \

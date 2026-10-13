@@ -1,0 +1,22 @@
+// SPDX-License-Identifier: Apache-2.0
+// libdpframework for the stock MediaTek Codec2 libraries, on the CPU
+// (DpAsyncBlitStream.cpp).
+
+cc_library_shared {
+    name: "libdpframework",
+    vendor: true,
+    // The codec libraries it serves are 32-bit only; /vendor/lib64 has the
+    // stock one of the PowerVR stack.
+    compile_multilib: "32",
+    srcs: ["DpAsyncBlitStream.cpp"],
+    export_include_dirs: ["include"],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+    static_libs: ["libyuv_static"],
+    shared_libs: [
+        "liblog",
+        "libsync",
+    ],
+}
