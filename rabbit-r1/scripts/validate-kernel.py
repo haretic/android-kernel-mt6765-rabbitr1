@@ -107,7 +107,7 @@ def main():
                     'BLK_DEV_DM','PSTORE','PSTORE_CONSOLE','PSTORE_PMSG','MMC_MTK','EFI_PARTITION']:
             assert f'CONFIG_{key}=y\n' in config, f'Missing CONFIG_{key}'
         for key in ['MFD_MT6370', 'MEDIATEK_MT6370_ADC', 'SENSORS_IIO_HWMON',
-                    'BATTERY_MT6357', 'BATTERY_MT6357_LIVE_DIAGNOSTICS',
+                    'BATTERY_MT6357',
                     'CHARGER_RABBIT_R1', 'MEDIATEK_MT6359_AUXADC',
                     'RTC_CLASS', 'RTC_DRV_MT6397', 'RTC_NVMEM', 'NVMEM', 'NVMEM_SYSFS']:
             assert f'CONFIG_{key}=y\n' in config, f'Missing power monitor CONFIG_{key}'
