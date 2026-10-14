@@ -845,5 +845,18 @@
         "after_sha256": "3bfd7afb7eb1fab989f1ec8be49effbaf300fb292a5bf25a59f9716d4cfcc24b"
       }
     ]
+  },
+  {
+    "project": "packages/apps/Launcher3",
+    "base_commit": "ecfc230d813c0e2b6ea3fda1200e3e53a2f0dd60",
+    "patch": "0015-add-a-rabbit-r1-launcher-display-option.patch",
+    "sha256": "892c8fd3d6d7ff6699b48d519666c179096183b0af0c7d1bfdb9f75606f52ab1",
+    "files": [
+      {
+        "path": "res/xml/device_profiles.xml",
+        "before_sha256": "eae178801a3242501549658674bc2b968cbad5ab53df5ffe0cf3b2bad5c1b0f3",
+        "after_sha256": "6aebcdfe288ee1ec0b2e8b8b7ec057a0e87a152fed4cb02b693623b34d3d5519"
+      }
+    ]
   }
 ]

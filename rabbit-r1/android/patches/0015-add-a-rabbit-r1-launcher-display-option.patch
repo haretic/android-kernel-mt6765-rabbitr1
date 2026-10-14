@@ -1,0 +1,38 @@
+From: itskenny0 <0@kenny.cat>
+Subject: [PATCH] Launcher3: add a Rabbit R1 display option to the 4x5 grid
+
+The R1's 480x640 panel at density 186 leaves 413x498 dp, too short
+for five rows of 65dp icons: the cells scaled the icons to fit and
+clipped their labels, and the drawer fell back to 10dp labels. Add a
+display option at that size with 52dp icons and 13sp labels.
+---
+  res/xml/device_profiles.xml | 16 ++++++++++++++++
+  1 file changed, 16 insertions(+)
+
+diff --git a/res/xml/device_profiles.xml b/res/xml/device_profiles.xml
+index 1ea9cb5..cbf411e 100644
+--- a/res/xml/device_profiles.xml
++++ b/res/xml/device_profiles.xml
+@@ -106,6 +106,22 @@
+         launcher:defaultLayoutId="@xml/default_workspace_4x5"
+         launcher:deviceCategory="phone|multi_display" >
+ 
++        <!-- Rabbit R1 (480x640 panel) at density 186: 4:3 and too short for five
++             rows of 65dp icons, which scaled the icons and clipped their labels. -->
++        <display-option
++            launcher:name="Rabbit R1"
++            launcher:minWidthDps="413"
++            launcher:minHeightDps="498"
++            launcher:iconImageSize="52"
++            launcher:iconTextSize="13.0"
++            launcher:allAppsIconSize="52"
++            launcher:allAppsIconTextSize="13.0"
++            launcher:allAppsBorderSpace="16"
++            launcher:allAppsCellHeight="96"
++            launcher:startAlignTaskbar="true"
++            launcher:startAlignTaskbarLandscape="true"
++            launcher:canBeDefault="true" />
++
+         <display-option
+             launcher:name="Short Stubby"
+             launcher:minWidthDps="275"
