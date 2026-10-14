@@ -872,9 +872,24 @@
   {
     "project": "lineage-sdk",
     "base_commit": "a5135bf1b689e73e508e61643410b9d63209b567",
-    "patch": "0016-allow-a-50-percent-charging-limit.patch",
-    "sha256": "6e2fe3ce2e7b1eaeff4d8490163a1c70f5366586f1bb1b90b6bb90cdbe547b28",
+    "patch": "0016-charging-limit-down-to-50-and-scheduled-modes-on-limit-hals.patch",
+    "sha256": "a6745a493247d39fe05de11825530642ae282302fe81e2b33bfadcfb3860dd85",
     "files": [
+      {
+        "path": "lineage/lib/main/java/org/lineageos/platform/internal/health/ccprovider/ChargeSchedule.java",
+        "before_sha256": null,
+        "after_sha256": "fe46eadac039469799428c6364323950f60caa0b137d6a908a9b53a977212bca"
+      },
+      {
+        "path": "lineage/lib/main/java/org/lineageos/platform/internal/health/ccprovider/Limit.java",
+        "before_sha256": "3650bbca252665554e73800fc091adf4fbd38c429d8e7feed82b61539eea439f",
+        "after_sha256": "b7bd87d12cb503e6e9244d53a7f2aa7269f25da582d803f555ddf14e3ef49bf9"
+      },
+      {
+        "path": "lineage/lib/main/java/org/lineageos/platform/internal/health/ccprovider/Toggle.java",
+        "before_sha256": "44b1ed7a6ffab02a1d27dbb1c0161b88a8a6d815a885ab5cec226924b1d0e405",
+        "after_sha256": "8c38a00a998d71072bdc20645e4c6b849fe7765785742352a70c35a8a386a5e1"
+      },
       {
         "path": "sdk/src/java/lineageos/providers/LineageSettings.java",
         "before_sha256": "54437d7f66f98215b5a5ffefc3cfb45ac446d401e8fe580fb52b8fc7734f2074",
