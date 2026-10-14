@@ -17,7 +17,8 @@ r1_build_time "$src"
 mkdir -p "$out" "$dist"
 exec > >(tee "$R1_ROOT/logs/mainline-build.log") 2>&1
 # An empty LOCALVERSION stops setlocalversion appending "+"; CONFIG_LOCALVERSION names the build.
-kmake=(make -C "$src" O="$out" ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LOCALVERSION=)
+kmake=(make -C "$src" O="$out" ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LOCALVERSION=
+       KBUILD_BUILD_USER=kenny KBUILD_BUILD_HOST=rabbit-mainline)
 "${kmake[@]}" rabbit_r1_defconfig
 r1_soc_expected=n
 if ((r1_experimental_soc)); then

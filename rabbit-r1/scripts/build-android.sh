@@ -22,6 +22,8 @@ R1_ANDROID_JOBS=${R1_ANDROID_JOBS:-8}
 export REPO_CONFIG_DIR="$R1_ROOT/.cache/repo" REPO_NO_INTERACTIVE=1
 export GOCACHE="$R1_ROOT/.cache/go-build" GOPATH="$R1_ROOT/.cache/go"
 export GRADLE_USER_HOME="$R1_ROOT/.cache/gradle" ANDROID_USER_HOME="$R1_ROOT/.cache/android"
+# Builder stamped into ro.build.user/host and the fingerprint description.
+export BUILD_USERNAME=kenny BUILD_HOSTNAME=rabbit-mainline
 cd "$R1_ROOT/src/android"
 
 # Siso requires a relative config path; Soong test packaging rejects '..'.
