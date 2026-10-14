@@ -55,6 +55,30 @@ static int regulator_haptic_toggle(struct regulator_haptic *haptic, bool on)
 	return 0;
 }
 
+/*
+ * A regulator with a few sparse steps in range rounds every request up to
+ * the next one, so most magnitudes land on the same voltage. Pick the
+ * closest listed voltage instead; continuous regulators get the request.
+ */
+static int regulator_haptic_set_nearest(struct regulator_haptic *haptic,
+					unsigned int target)
+{
+	int i, count, volt, best = -1;
+
+	count = regulator_count_voltages(haptic->regulator);
+	for (i = 0; i < count; i++) {
+		volt = regulator_list_voltage(haptic->regulator, i);
+		if (volt <= 0 || volt < haptic->min_volt || volt > haptic->max_volt)
+			continue;
+		if (best < 0 || abs(volt - (int)target) < abs(best - (int)target))
+			best = volt;
+	}
+	if (best < 0)
+		return regulator_set_voltage(haptic->regulator, target,
+					     haptic->max_volt);
+	return regulator_set_voltage(haptic->regulator, best, best);
+}
+
 static int regulator_haptic_set_voltage(struct regulator_haptic *haptic,
 					 unsigned int magnitude)
 {
@@ -65,9 +89,7 @@ static int regulator_haptic_set_voltage(struct regulator_haptic *haptic,
 	volt_mag_multi = (u64)(haptic->max_volt - haptic->min_volt) * magnitude;
 	intensity = (unsigned int)(volt_mag_multi >> MAX_MAGNITUDE_SHIFT);
 
-	error = regulator_set_voltage(haptic->regulator,
-				      intensity + haptic->min_volt,
-				      haptic->max_volt);
+	error = regulator_haptic_set_nearest(haptic, intensity + haptic->min_volt);
 	if (error) {
 		dev_err(haptic->dev, "cannot set regulator voltage to %d: %d\n",
 			intensity + haptic->min_volt, error);
