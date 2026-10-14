@@ -178,7 +178,7 @@ static const struct drm_display_mode r1_panel_mode = {
 	 * 85 Hz; keep the r1 porches and raise only the pixel clock
 	 * (DSI ~376 Mbit/s per lane).
 	 */
-	.clock = 31305,
+	.clock = 31303,
 	.hdisplay = 480,
 	.hsync_start = 480 + 20,
 	.hsync_end = 480 + 20 + 20,
@@ -189,21 +189,44 @@ static const struct drm_display_mode r1_panel_mode = {
 	.vtotal = 640 + 26 + 2 + 14,
 };
 
+/*
+ * Same porches at every rate; only the pixel clock moves (htotal 540 *
+ * vtotal 682). Clocks round down: SurfaceFlinger rejects a policy whose
+ * default mode is even 0.003 Hz above the user's cap. Changing the clock
+ * means a DSI PLL reprogram, so switching is a full modeset. The fastest
+ * mode is preferred: Android keeps the preferred mode unless the user's
+ * peak rate excludes it, then takes the fastest mode below the cap.
+ * 110 Hz and up show the picture duplicated horizontally.
+ */
+static const int r1_panel_clocks[] = {
+	22096,	/* 60 Hz */
+	27621,	/* 75 Hz */
+	31303,	/* 85 Hz */
+	33145,	/* 90 Hz */
+	36828,	/* 100 Hz */
+};
+
 static int r1_panel_get_modes(struct drm_panel *panel,
 			      struct drm_connector *connector)
 {
 	struct drm_display_mode *mode;
+	int i;
 
-	mode = drm_mode_duplicate(connector->dev, &r1_panel_mode);
-	if (!mode)
-		return -ENOMEM;
+	for (i = 0; i < ARRAY_SIZE(r1_panel_clocks); i++) {
+		mode = drm_mode_duplicate(connector->dev, &r1_panel_mode);
+		if (!mode)
+			return i;
 
-	mode->type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED;
-	drm_mode_set_name(mode);
-	drm_mode_probed_add(connector, mode);
+		mode->clock = r1_panel_clocks[i];
+		mode->type = DRM_MODE_TYPE_DRIVER;
+		if (i == ARRAY_SIZE(r1_panel_clocks) - 1)
+			mode->type |= DRM_MODE_TYPE_PREFERRED;
+		drm_mode_set_name(mode);
+		drm_mode_probed_add(connector, mode);
+	}
 	connector->display_info.bpc = 8;
 
-	return 1;
+	return i;
 }
 
 static const struct drm_panel_funcs r1_panel_funcs = {
