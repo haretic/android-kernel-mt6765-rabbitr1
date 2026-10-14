@@ -623,9 +623,24 @@
 		};
 	};
 
+	/*
+	 * Stock battery_cv is 4.4 V (a high-voltage cell) and the factory
+	 * 25 C profile's Qmax is 1010 mAh; the pack is rated 1000 mAh. Alert
+	 * temperatures are the stock 0-55 C charging envelope. Charging
+	 * limits are the charging policy's, not these.
+	 */
+	r1_pack: battery {
+		compatible = "simple-battery";
+		device-chemistry = "lithium-ion";
+		charge-full-design-microamp-hours = <1000000>;
+		voltage-max-design-microvolt = <4400000>;
+		alert-celsius = <0 55>;
+	};
+
 	r1_battery: gauge {
 		compatible = "mediatek,mt6357-gauge";
 		power-supplies = <&r1_charger>;
+		monitored-battery = <&r1_pack>;
 		/* Stock R_FG_VALUE=10 mOhm, CAR_TUNE_VALUE=100 percent. */
 		shunt-resistor-micro-ohms = <10000>;
 		mediatek,current-gain-permille = <1000>;
