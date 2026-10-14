@@ -2,6 +2,15 @@
 LOCAL_PATH := device/rabbit/r1
 
 TARGET_HAS_BATTERY := true
+# Lineage charging control in "limit" mode: the kernel charging policy stops at
+# charge_stop_level and resumes at charge_start_level, keeping the system on
+# USB power in between. It has no charge on/off toggle, bypass or deadline.
+PRODUCT_PACKAGES += vendor.lineage.health-service.default
+$(call soong_config_set_bool,lineage_health,charging_control_supports_limit,true)
+$(call soong_config_set_bool,lineage_health,charging_control_supports_toggle,false)
+$(call soong_config_set_bool,lineage_health,charging_control_supports_bypass,false)
+$(call soong_config_set,lineage_health,charging_control_limit_start_path,/sys/devices/platform/charging-policy/charge_start_level)
+$(call soong_config_set,lineage_health,charging_control_limit_stop_path,/sys/devices/platform/charging-policy/charge_stop_level)
 # inherit-product defers and sorts children; set the selector before common defaults.
 include device/rabbit/r1/health/product.mk
 # wpa_supplicant APEX with the device overlays (connectivity/wifi).
@@ -58,6 +67,7 @@ PRODUCT_PACKAGES += \
     android.hardware.boot-service.r1_recovery \
     FrameworksResR1 \
     SettingsR1 \
+    LineageSdkR1 \
     r1-expdb
 
 # The logger validates expdb and bounds its mapping before loading pstore.

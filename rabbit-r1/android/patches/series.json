@@ -858,5 +858,31 @@
         "after_sha256": "6aebcdfe288ee1ec0b2e8b8b7ec057a0e87a152fed4cb02b693623b34d3d5519"
       }
     ]
+  },
+  {
+    "project": "lineage-sdk",
+    "base_commit": "a5135bf1b689e73e508e61643410b9d63209b567",
+    "patch": "0016-allow-a-50-percent-charging-limit.patch",
+    "sha256": "6e2fe3ce2e7b1eaeff4d8490163a1c70f5366586f1bb1b90b6bb90cdbe547b28",
+    "files": [
+      {
+        "path": "sdk/src/java/lineageos/providers/LineageSettings.java",
+        "before_sha256": "54437d7f66f98215b5a5ffefc3cfb45ac446d401e8fe580fb52b8fc7734f2074",
+        "after_sha256": "707c8502a74f8fb362ee5edb41fad388eea3ecd769cd07d4eead1b5fc1a83130"
+      }
+    ]
+  },
+  {
+    "project": "packages/apps/LineageParts",
+    "base_commit": "523584c4dd82a9a3f613244798f3002f2fcedcb9",
+    "patch": "0017-offer-a-50-percent-charging-limit.patch",
+    "sha256": "f944cec7884e973dfa0a22c1f377c1744efe6c3340029f2c9113e6ef0627e5ba",
+    "files": [
+      {
+        "path": "src/org/lineageos/lineageparts/health/ChargingLimitPreference.java",
+        "before_sha256": "8be9caf3974f9ef0ddbc9fda6150cdcf7c0f724e449dd4b9e38b4eb3a02bf20c",
+        "after_sha256": "9e8c1ab426e20c4e74fc0415ca1d9129570332ba2f882d4e0363affd8c290903"
+      }
+    ]
   }
 ]

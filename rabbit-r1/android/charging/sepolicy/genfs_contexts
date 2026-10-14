@@ -1,1 +1,4 @@
-genfscon sysfs /devices/platform/charging-policy u:object_r:sysfs_r1_charging:s0
+# Only the files this feature owns; the directory stays sysfs so vendor HALs
+# can reach the policy's other nodes.
+genfscon sysfs /devices/platform/charging-policy/charge_control_limit u:object_r:sysfs_r1_charging:s0
+genfscon sysfs /devices/platform/charging-policy/status u:object_r:sysfs_r1_charging:s0

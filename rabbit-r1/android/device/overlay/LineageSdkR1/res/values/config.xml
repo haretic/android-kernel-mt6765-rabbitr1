@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The charging policy enforces a level limit in the kernel; the time
+         based modes would only hold the same limit until a target time. -->
+    <integer name="config_defaultChargingControlMode">3</integer>
+</resources>

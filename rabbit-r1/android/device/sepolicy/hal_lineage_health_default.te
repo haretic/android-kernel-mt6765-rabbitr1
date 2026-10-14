@@ -1,0 +1,4 @@
+# Charging control "limit" mode: the charging policy's start/stop levels.
+type sysfs_r1_charge_level, sysfs_type, fs_type;
+allow hal_lineage_health_default sysfs:dir search;
+allow hal_lineage_health_default sysfs_r1_charge_level:file rw_file_perms;
