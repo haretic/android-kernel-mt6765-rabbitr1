@@ -826,13 +826,18 @@
   {
     "project": "hardware/mainline/common",
     "base_commit": "779b7985a717938bbfb0e54f1f562c279013d0a8",
-    "patch": "0014-map-composer-brightness-0-to-the-lowest-visible-backlight.patch",
-    "sha256": "ce85b5fb39578e0ebc208d7ef0b73885d33596fc3932eb7a1906803fbe72539d",
+    "patch": "0014-composer-brightness-floor-and-one-config-group-per-mode.patch",
+    "sha256": "760d1976cc58ac22c8d50d8a1ecdd273ed6cfb1f12c81f54bce3a835cf446384",
     "files": [
+      {
+        "path": "interfaces/graphics/composer/drmfb/ComposerClient.cpp",
+        "before_sha256": "2fa2aaf54e210f2c238958a903d32fb6f726e253772c3b887caf363533c95a43",
+        "after_sha256": "32edb39b379e4d0d025102df256635e06552cdd35f8ac337fecd682a7de9d0fc"
+      },
       {
         "path": "interfaces/graphics/composer/drmfb/DrmDevice.cpp",
         "before_sha256": "78d5153d9d01c86c6480adcacca88d914b5ec5b34fb84512cd310849368a94dc",
-        "after_sha256": "139e180e6a50ae396836a1c3b40b2c769d03faa5a4e34f5e7cdfa6d4ccf60b96"
+        "after_sha256": "1ae60bd4820946ec98adaddfea90c1d4cffb1e172f20113faee4da52abb6049c"
       },
       {
         "path": "interfaces/graphics/composer/drmfb/DrmDevice.h",
