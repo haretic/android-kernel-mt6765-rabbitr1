@@ -146,9 +146,11 @@
 	thermal-zones {
 		/*
 		 * The stock policy limits charging from 45 C here and turns the
-		 * camera off from 53 C. These trips only report the crossings
-		 * to userspace: the reading is not validated on hardware, so
-		 * nothing in the kernel acts on it yet.
+		 * camera off from 53 C. Both trips also throttle the CPUs: under
+		 * an all-core load at the 2.2/1.6 GHz OPPs only the SoC zones
+		 * throttled (at 85 C) and this board sensor reached 62 C, taking
+		 * the battery past 55 C. The sensor tracked that load, rising
+		 * 40 to 62 C and falling back as it cooled.
 		 */
 		ap_ntc_thermal: ap-ntc-thermal {
 			polling-delay-passive = <1000>;
@@ -166,6 +168,32 @@
 					temperature = <53000>;
 					hysteresis = <2000>;
 					type = "passive";
+				};
+			};
+
+			cooling-maps {
+				map0 {
+					trip = <&ap_ntc_warm>;
+					cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu1 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu2 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu3 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu5 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu6 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu7 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				};
+
+				map1 {
+					trip = <&ap_ntc_hot>;
+					cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu1 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu2 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu3 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu5 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu6 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu7 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
 				};
 			};
 		};
@@ -211,49 +239,41 @@
 		opp-1803000000 {
 			opp-hz = /bits/ 64 <1803000000>;
 			opp-microvolt = <893750>;
-			turbo-mode;
 		};
 
 		opp-1856000000 {
 			opp-hz = /bits/ 64 <1856000000>;
 			opp-microvolt = <937500>;
-			turbo-mode;
 		};
 
 		opp-1909000000 {
 			opp-hz = /bits/ 64 <1909000000>;
 			opp-microvolt = <975000>;
-			turbo-mode;
 		};
 
 		opp-1962000000 {
 			opp-hz = /bits/ 64 <1962000000>;
 			opp-microvolt = <1018750>;
-			turbo-mode;
 		};
 
 		opp-2015000000 {
 			opp-hz = /bits/ 64 <2015000000>;
 			opp-microvolt = <1056250>;
-			turbo-mode;
 		};
 
 		opp-2068000000 {
 			opp-hz = /bits/ 64 <2068000000>;
 			opp-microvolt = <1100000>;
-			turbo-mode;
 		};
 
 		opp-2130000000 {
 			opp-hz = /bits/ 64 <2130000000>;
 			opp-microvolt = <1150000>;
-			turbo-mode;
 		};
 
 		opp-2200000000 {
 			opp-hz = /bits/ 64 <2200000000>;
 			opp-microvolt = <1200000>;
-			turbo-mode;
 		};
 	};
 
@@ -274,49 +294,41 @@
 		opp-1114000000 {
 			opp-hz = /bits/ 64 <1114000000>;
 			opp-microvolt = <893750>;
-			turbo-mode;
 		};
 
 		opp-1179000000 {
 			opp-hz = /bits/ 64 <1179000000>;
 			opp-microvolt = <937500>;
-			turbo-mode;
 		};
 
 		opp-1244000000 {
 			opp-hz = /bits/ 64 <1244000000>;
 			opp-microvolt = <975000>;
-			turbo-mode;
 		};
 
 		opp-1309000000 {
 			opp-hz = /bits/ 64 <1309000000>;
 			opp-microvolt = <1018750>;
-			turbo-mode;
 		};
 
 		opp-1374000000 {
 			opp-hz = /bits/ 64 <1374000000>;
 			opp-microvolt = <1056250>;
-			turbo-mode;
 		};
 
 		opp-1439000000 {
 			opp-hz = /bits/ 64 <1439000000>;
 			opp-microvolt = <1100000>;
-			turbo-mode;
 		};
 
 		opp-1515000000 {
 			opp-hz = /bits/ 64 <1515000000>;
 			opp-microvolt = <1150000>;
-			turbo-mode;
 		};
 
 		opp-1600000000 {
 			opp-hz = /bits/ 64 <1600000000>;
 			opp-microvolt = <1200000>;
-			turbo-mode;
 		};
 	};
 
