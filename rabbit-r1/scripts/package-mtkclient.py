@@ -130,6 +130,7 @@ def main():
                    'earlycon=uart8250,mmio32,0x11002000 console=ttyS0,921600n8 '
                    'clk_ignore_unused regulator_ignore_unused '
                    'mem_sleep_default=s2idle '
+                   'fbcon=logo-pos:center,logo-count:1 vt.global_cursor_default=0 '
                    'rdinit=/init loglevel=8 ignore_loglevel r1.usb=1 '
                    f'r1.expdb={int(profile == "expdb")}')
         image = DIST/f'boot-{profile}.img'

@@ -62,6 +62,8 @@ BOARD_KERNEL_CMDLINE += panic=-1
 # The stock ATF offers PSCI SYSTEM_SUSPEND, but it runs SPM firmware that only
 # the stock kernel hands over. "mem" must mean suspend-to-idle.
 BOARD_KERNEL_CMDLINE += mem_sleep_default=s2idle
+# fbcon shows the LK splash from display bind until Android draws.
+BOARD_KERNEL_CMDLINE += fbcon=logo-pos:center,logo-count:1 vt.global_cursor_default=0
 
 BOARD_USES_RECOVERY_AS_BOOT := true
 TARGET_NO_RECOVERY := false

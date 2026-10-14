@@ -204,8 +204,10 @@
 		/*
 		 * The stock ATF offers PSCI SYSTEM_SUSPEND, but it runs SPM
 		 * firmware that only the stock kernel hands over: sleep to idle.
+		 * fbcon draws the LK splash (logo_rabbit_r1_clut224) centred, once,
+		 * with no cursor, from when the display binds until Android draws.
 		 */
-		bootargs = "earlycon=uart8250,mmio32,0x11002000 console=ttyS0,921600n8 clk_ignore_unused regulator_ignore_unused mem_sleep_default=s2idle";
+		bootargs = "earlycon=uart8250,mmio32,0x11002000 console=ttyS0,921600n8 clk_ignore_unused regulator_ignore_unused mem_sleep_default=s2idle fbcon=logo-pos:center,logo-count:1 vt.global_cursor_default=0";
 	};
 
 	/*
@@ -218,9 +220,9 @@
 	 *
 	 * LK leaves L 1500 MHz, LL 920 MHz and CCI 600 MHz at 0.800 V. CCI is
 	 * not scaled; the stock CCI table needs 0.8125 V for 600 MHz, so no OPP
-	 * below 0.8125 V is listed. OPPs above 0.85 V are turbo-mode: they stay
-	 * unused until /sys/devices/system/cpu/cpufreq/boost is set to 1, as
-	 * the thermal throttling in mt6765.dtsi is not validated on hardware.
+	 * below 0.8125 V is listed. The OPPs above 0.85 V were turbo-mode until
+	 * throttling was checked on hardware (see ap-ntc-thermal); schedutil
+	 * never selects boost OPPs, so they have to be ordinary entries.
 	 */
 	cluster0_opp: opp-table-cluster0 {
 		compatible = "operating-points-v2";
