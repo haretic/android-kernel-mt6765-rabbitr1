@@ -14,4 +14,13 @@
          needs no mode switch. -->
     <integer name="config_defaultRefreshRate">0</integer>
     <integer name="config_defaultPeakRefreshRate">100</integer>
+    <!-- The motor runs from VIBR, whose steps between the vibrator's 2.0 and
+         3.0 V limits are 2.0, 2.8 and 3.0 V; amplitude maps linearly onto that
+         range and regulator-haptic picks the nearest step. These factors put
+         low, medium (the default) and high on one step each. -->
+    <string-array name="config_vibrationIntensityScaleFactors" translatable="false">
+        <item>0.2</item>
+        <item>0.75</item>
+        <item>1.0</item>
+    </string-array>
 </resources>

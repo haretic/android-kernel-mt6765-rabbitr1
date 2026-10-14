@@ -2,4 +2,7 @@
 <resources>
     <!-- The panel offers 60 to 100 Hz modes; let the user cap the rate. -->
     <bool name="config_show_peak_refresh_rate_switch">true</bool>
+    <!-- Low/medium/high vibration intensity sliders; the framework overlay maps
+         them onto the motor's 2.0, 2.8 and 3.0 V steps. -->
+    <integer name="config_vibration_supported_intensity_levels">3</integer>
 </resources>
