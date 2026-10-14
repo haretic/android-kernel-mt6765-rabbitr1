@@ -1,2 +1,2 @@
-# Shown as the Bluetooth name; Build.MODEL stays "haretic".
+# Bluetooth name; Build.MODEL alone is "rabbit r1".
 bluetooth.device.default_name=haretic rabbit r1
