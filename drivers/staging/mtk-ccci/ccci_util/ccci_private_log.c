@@ -979,7 +979,7 @@ void ccci_util_mem_dump(int md_id, int buf_type, void *start_addr, int len)
 	unsigned char *curr_ch_p = NULL;
 	int _16_fix_num = len / 16;
 	int tail_num = len % 16;
-	char buf[16];
+	unsigned int buf[4];
 	int i, j;
 
 	if (curr_p == NULL) {
@@ -996,25 +996,28 @@ void ccci_util_mem_dump(int md_id, int buf_type, void *start_addr, int len)
 	for (i = 0; i < _16_fix_num; i++) {
 		ccci_dump_write(md_id, buf_type, 0,
 				"%03X: %08X %08X %08X %08X\n",
-				i * 16, *curr_p, *(curr_p + 1),
-				*(curr_p + 2), *(curr_p + 3));
+				i * 16, READ_ONCE(curr_p[0]), READ_ONCE(curr_p[1]),
+				READ_ONCE(curr_p[2]), READ_ONCE(curr_p[3]));
 		curr_p += 4;
 	}
 
-	/* Tail section */
+	/*
+	 * Tail section. Callers also pass ioremapped registers: a plain byte
+	 * loop is turned into memcpy, whose 8-byte loads at a 4-byte aligned
+	 * register address take an alignment fault on Device memory. Read
+	 * whole words, then single bytes, each access exactly once.
+	 */
 	if (tail_num > 0) {
-		curr_ch_p = (unsigned char *)curr_p;
-		for (j = 0; j < tail_num; j++) {
-			buf[j] = *curr_ch_p;
-			curr_ch_p++;
-		}
+		for (j = 0; j < tail_num / 4; j++)
+			buf[j] = READ_ONCE(curr_p[j]);
+		curr_ch_p = (unsigned char *)(curr_p + j);
+		for (j *= 4; j < tail_num; j++)
+			((unsigned char *)buf)[j] = READ_ONCE(*curr_ch_p++);
 		for (; j < 16; j++)
-			buf[j] = 0;
-		curr_p = (unsigned int *)buf;
+			((unsigned char *)buf)[j] = 0;
 		ccci_dump_write(md_id, buf_type, 0,
 				"%03X: %08X %08X %08X %08X\n",
-				i * 16, *curr_p, *(curr_p + 1),
-				*(curr_p + 2), *(curr_p + 3));
+				i * 16, buf[0], buf[1], buf[2], buf[3]);
 	}
 }
 EXPORT_SYMBOL(ccci_util_mem_dump);
