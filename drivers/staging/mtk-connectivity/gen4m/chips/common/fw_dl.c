@@ -190,7 +190,9 @@ void wlanImageSectionGetCompressFwInfo(IN struct ADAPTER
 		kalMemZero(aucBuf, 32);
 		kalStrnCpy(aucBuf, prTailer->ram_version,
 			   sizeof(prTailer->ram_version));
-		DBGLOG(INIT, INFO, "date[%s] version[%s]\n",
+		/* The firmware's date field is not NUL-terminated. */
+		DBGLOG(INIT, INFO, "date[%.*s] version[%s]\n",
+		       (int)sizeof(prTailer->ram_built_date),
 		       prTailer->ram_built_date, aucBuf);
 	}
 	/* Backup to FW version info */
@@ -2040,7 +2042,8 @@ uint32_t wlanGetHarvardTailerInfo(IN struct ADAPTER
 		kalMemZero(aucBuf, 32);
 		kalStrnCpy(aucBuf, prTailers[u4SecIdx].ram_version,
 			   sizeof(prTailers[u4SecIdx].ram_version));
-		DBGLOG(INIT, INFO, "date[%s] version[%s]\n",
+		DBGLOG(INIT, INFO, "date[%.*s] version[%s]\n",
+		       (int)sizeof(prTailers[u4SecIdx].ram_built_date),
 		       prTailers[u4SecIdx].ram_built_date, aucBuf);
 	}
 
@@ -2072,11 +2075,12 @@ uint32_t wlanGetConnacTailerInfo(IN struct WIFI_VER_INFO *prVerInfo,
 
 	/* Dump image information */
 	DBGLOG(INIT, INFO,
-		"%s: chip_info[%u:E%u] region_num[%d] date[%s] version[%s]\n",
+		"%s: chip_info[%u:E%u] region_num[%d] date[%.*s] version[%s]\n",
 			(eDlIdx == IMG_DL_IDX_N9_FW) ? "N9" : "CR4",
 			prComTailer->ucChipInfo,
 			prComTailer->ucEcoCode + 1,
 			prComTailer->ucRegionNum,
+			(int)sizeof(prComTailer->aucRamBuiltDate),
 			prComTailer->aucRamBuiltDate,
 			aucBuf);
 
