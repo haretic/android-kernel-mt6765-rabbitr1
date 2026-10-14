@@ -3229,7 +3229,10 @@ struct SW_RFB *qmHandleRxPackets(IN struct ADAPTER *prAdapter,
 				hs20IsUnsecuredFrame(prAdapter,
 				prBssInfo,
 				prCurrSwRfb)) {
-				DBGLOG(QM, WARN,
+				/* Passpoint drops gratuitous ARP and unsolicited
+				 * NA by design; RX_HS20_DROP_COUNT counts them.
+				 */
+				DBGLOG(QM, TRACE,
 					"Mark NULL the Packet for Dropped Packet %u\n",
 					ucBssIndex);
 				RX_INC_CNT(&prAdapter->rRxCtrl,
