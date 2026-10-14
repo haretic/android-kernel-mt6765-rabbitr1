@@ -24,6 +24,7 @@ enum r1_battery_error {
     R1_BATTERY_SEARCH_LIMIT = -5,
     R1_BATTERY_NO_ROOT = -6,
     R1_BATTERY_AMBIGUOUS = -7,
+    R1_BATTERY_ABOVE_FULL = -8,
 };
 
 struct r1_battery_point {

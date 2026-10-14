@@ -447,7 +447,9 @@ int r1_battery_model_seed(const struct r1_battery_profile *profile,
             if (++roots > 1) return R1_BATTERY_AMBIGUOUS;
         }
     }
-    if (!roots) return R1_BATTERY_NO_ROOT;
+    /* With no crossing every residual shares a sign; negative means the
+     * terminal is above the first row's loaded voltage. */
+    if (!roots) return residual[0] < 0 ? R1_BATTERY_ABOVE_FULL : R1_BATTERY_NO_ROOT;
     if ((ret = model_point(profile, residual, left, right, &result))) return ret;
     *out = result;
     return R1_BATTERY_OK;

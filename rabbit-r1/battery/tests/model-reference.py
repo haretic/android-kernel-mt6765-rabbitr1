@@ -32,6 +32,8 @@ def seed(points, voltage, parameters):
             if a[0] == b[0]:
                 return -7, ()  # No unique charge-to-state model at this jump.
             roots.add(at(a, b, (voltage - v0) / (v1 - v0)))
+    if not roots and voltage > loaded[0]:
+        return -8, ()  # Above the first row: at least that full.
     if len(roots) != 1:
         return (-6 if not roots else -7), ()
     return 0, tuple(x.numerator // x.denominator for x in roots.pop())
