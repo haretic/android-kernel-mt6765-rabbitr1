@@ -11,12 +11,14 @@
 # /mnt tmpfs, and nvram_daemon could back that up over the nvram partition.
 
 on post-fs
-    # Binding the driver does not boot the modem; ccci_mdinit does.
-    exec u:r:vendor_modprobe:s0 -- /vendor/bin/modprobe -a -d /vendor/lib/modules mtk-ccci
+    # Binding the driver does not boot the modem; ccci_mdinit does. It loads
+    # alongside the other drivers instead of holding init.
+    start vendor.modprobe-ccci
     # gsm0710muxd links its channel ptys here (stock init.mt6765.rc)
     mkdir /dev/radio 0770 radio radio
 
 on post-fs-data
+    wait /sys/kernel/ccci/boot 5
     # Stock init.cccimdinit.rc
     mkdir /mnt/vendor/nvdata/md 0770 root system
     chown radio radio /sys/kernel/ccci/boot
@@ -38,6 +40,13 @@ on property:vendor.r1.modem.nv_ready=1
     start nvram-hidl-1-1
     start vendor.ccci_rpcd
     start ccci_mdinit
+
+service vendor.modprobe-ccci /vendor/bin/modprobe -a -d /vendor/lib/modules mtk-ccci
+    disabled
+    oneshot
+    user root
+    group root
+    seclabel u:r:vendor_modprobe:s0
 
 service vendor.r1-modem-nvcheck /vendor/bin/r1-modem-nvcheck.sh
     user root
