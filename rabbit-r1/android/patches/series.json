@@ -744,8 +744,8 @@
   {
     "project": "system/core",
     "base_commit": "7c3f32fe89c52b4176fd288ba5bb4f907809c202",
-    "patch": "0010-prime-initial-battery-level-and-recognize-sandboxed-memfds.patch",
-    "sha256": "0b7d3567446f4bde91c7c41dac21595ed36ae2bd403499137e0b9686e124fe6e",
+    "patch": "0010-prime-battery-level-recognize-sandboxed-memfds-and-dedupe-restorecon-dirs.patch",
+    "sha256": "65c05f2ae35f9eb1b9dca43171f47b7aeac3193c840a908e86365c1eef899bcc",
     "files": [
       {
         "path": "healthd/BatteryMonitor.cpp",
@@ -756,6 +756,16 @@
         "path": "healthd/include/healthd/BatteryMonitor.h",
         "before_sha256": "cfe869785539bbfe005bede01ae0724dc44e1540e68d0b3a199c2158c71ca9a9",
         "after_sha256": "257514f99cc5864b0cb141b7c567ca98b894c5013d8af8527f680f8538752889"
+      },
+      {
+        "path": "init/ueventd_parser.cpp",
+        "before_sha256": "2d1bc84ca8d16b9cb9a8127a6e60dca986dee16a3363e1f5318bafcd3737f9f8",
+        "after_sha256": "e49aa9b4cdcf07e1268d454ac13a4573610a1845638bba9d5c7054a9415d008f"
+      },
+      {
+        "path": "init/ueventd_parser_test.cpp",
+        "before_sha256": "5a4e84af40923133bcb2ec3584504bd8082e5f3e66e1b8bc5e91b8abd3168094",
+        "after_sha256": "f5d77efb058ba6abc5d8fd79737f960b770a3571412a1e75085c35d7a0538229"
       },
       {
         "path": "libcutils/ashmem-dev.cpp",
