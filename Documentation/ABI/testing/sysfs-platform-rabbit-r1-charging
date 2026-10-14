@@ -9,6 +9,21 @@ Description:
                 Zero is not Automatic. Policy may reduce or inhibit charging.
                 This controls battery charge current, not total USB input draw.
 
+What:           /sys/devices/platform/charging-policy/charge_start_level
+What:           /sys/devices/platform/charging-policy/charge_stop_level
+Date:           October 2026
+Contact:        itskenny0 <0@kenny.cat>
+Description:
+                Charge level limit in percent of battery capacity, 0 through
+                100. Read/write. Charging stops once the capacity reaches
+                charge_stop_level and resumes once it falls to
+                charge_start_level; in between the input keeps powering the
+                system with charging inhibited (status reason level-limit).
+                A start level at or above the stop level gives no hysteresis.
+                charge_stop_level 100 (the default) disables the limit, as
+                does an unavailable capacity reading. Written by the LineageOS
+                health HAL's charging control "limit" mode.
+
 What:           /sys/devices/platform/charging-policy/status
 Date:           October 2026
 Contact:        itskenny0 <0@kenny.cat>
@@ -22,5 +37,5 @@ Description:
                 with error=0. error is a negative errno or zero. Reasons are:
                 waiting, unplugged, no-battery, sensor-error, charger-fault,
                 safety-timer, temperature, voltage, usb-budget, user-limit,
-                thermal-limit, ready, io-error, stale, stopped.
+                thermal-limit, ready, io-error, stale, stopped, level-limit.
                 No battery capacity or health HAL is synthesized by this driver.

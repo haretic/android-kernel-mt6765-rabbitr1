@@ -22,19 +22,19 @@ enum r1_charge_reason {
 	R1_WAITING, R1_UNPLUGGED, R1_NO_BATTERY, R1_SENSOR_ERROR,
 	R1_CHARGER_FAULT, R1_TIMER, R1_TEMPERATURE, R1_VOLTAGE,
 	R1_USB_BUDGET, R1_USER_LIMIT, R1_THERMAL_LIMIT, R1_READY,
-	R1_IO_ERROR, R1_STALE, R1_STOPPED,
+	R1_IO_ERROR, R1_STALE, R1_STOPPED, R1_LEVEL_LIMIT,
 };
 
 static const char * const r1_reason_names[] = {
 	"waiting", "unplugged", "no-battery", "sensor-error",
 	"charger-fault", "safety-timer", "temperature", "voltage",
 	"usb-budget", "user-limit", "thermal-limit", "ready",
-	"io-error", "stale", "stopped",
+	"io-error", "stale", "stopped", "level-limit",
 };
 
 struct r1_charge_sample {
 	bool valid;
-	int present, plugged, health, temperature, voltage, current_ua;
+	int present, plugged, health, temperature, voltage, current_ua, capacity;
 	int usb_type, gadget_ua;
 	int typec_online, typec_type, typec_ua, typec_uv;
 	bool timer_expired;
@@ -53,9 +53,10 @@ struct r1_charge_policy {
 	struct notifier_block notifier;
 	atomic_t generation;
 	bool stopping, suspended, cold, hot, full, session, timeout;
-	bool notifier_registered, awake;
+	bool notifier_registered, awake, level_hold;
 	unsigned long session_start;
 	int requested_ua, measured_ua, error;
+	int charge_start_level, charge_stop_level;
 	struct r1_charge_target applied;
 };
 
@@ -88,22 +89,26 @@ static struct r1_charge_target r1_charge_decide(struct r1_charge_policy *p,
 		t.reason = R1_CHARGER_FAULT;
 		return t;
 	}
-	/* Conservative bring-up limits; stock permits 0..55 C and 4.4 V. */
+	/*
+	 * The pack is a 4.4 V cell (stock battery_cv; stock JEITA charges to
+	 * 4.4 V from 15 to 45 C and 4.1 V from 45 to 55 C). The temperature
+	 * window stays narrower than stock 0..55 C, and below 15 C the target
+	 * stays at 4.2 V where stock allows 4.4 V.
+	 */
 	p->cold = s->temperature < 50 || (p->cold && s->temperature < 70);
 	p->hot = s->temperature >= 500 || (p->hot && s->temperature >= 480);
 	if (p->cold || p->hot) {
 		t.reason = R1_TEMPERATURE;
 		return t;
 	}
-	t.voltage_uv = 4200000;
+	t.voltage_uv = 4400000;
 	if (s->temperature < 150 || s->temperature >= 430) {
 		thermal_ua = 500000;
-		if (s->temperature >= 430)
-			t.voltage_uv = 4100000;
+		t.voltage_uv = s->temperature >= 430 ? 4100000 : 4200000;
 	}
 	p->full = s->voltage >= t.voltage_uv ||
 		  (p->full && s->voltage >= t.voltage_uv - 100000);
-	if (s->voltage < 3000000 || s->voltage > 4400000 || p->full) {
+	if (s->voltage < 3000000 || s->voltage > 4450000 || p->full) {
 		t.reason = R1_VOLTAGE;
 		return t;
 	}
@@ -134,6 +139,23 @@ static struct r1_charge_target r1_charge_decide(struct r1_charge_policy *p,
 	if (t.charge_ua < R1_CHARGE_MIN_UA) {
 		t.charge_ua = 0;
 		t.input_ua = 0;
+	}
+	/*
+	 * Charge level limit: stop at charge_stop_level, resume once the
+	 * level falls to charge_start_level. The input keeps powering the
+	 * system meanwhile, so the battery holds its level. An unknown level
+	 * charges normally; the voltage limits above still end the charge.
+	 */
+	if (p->charge_stop_level >= 100 || s->capacity < 0)
+		p->level_hold = false;
+	else if (s->capacity >= p->charge_stop_level)
+		p->level_hold = true;
+	else if (s->capacity <= p->charge_start_level)
+		p->level_hold = false;
+	if (p->level_hold && t.input_ua) {
+		t.charge_ua = 0;
+		t.reason = R1_LEVEL_LIMIT;
+		return t;
 	}
 	if (budget < min(p->requested_ua, thermal_ua))
 		t.reason = R1_USB_BUDGET;
@@ -207,6 +229,9 @@ static int r1_charge_sample(struct r1_charge_policy *p, struct r1_charge_sample 
 	READ_SAMPLE(battery, TEMP, temperature);
 	READ_SAMPLE(battery, VOLTAGE_NOW, voltage);
 	READ_SAMPLE(battery, CURRENT_NOW, current_ua);
+	/* Optional: the gauge reports no capacity until its model has a fix. */
+	if (r1_get(p->battery, POWER_SUPPLY_PROP_CAPACITY, &s->capacity))
+		s->capacity = -1;
 	READ_SAMPLE(charger, USB_TYPE, usb_type);
 	READ_SAMPLE(gadget, CURRENT_MAX, gadget_ua);
 	if (p->typec) {
@@ -384,6 +409,56 @@ static ssize_t charge_control_limit_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(charge_control_limit);
 
+static ssize_t r1_level_show(struct r1_charge_policy *p, int *level, char *buf)
+{
+	int value;
+
+	mutex_lock(&p->lock);
+	value = *level;
+	mutex_unlock(&p->lock);
+	return sysfs_emit(buf, "%d\n", value);
+}
+
+/* Each level is set alone, so start >= stop is accepted: it means no hysteresis. */
+static ssize_t r1_level_store(struct r1_charge_policy *p, int *level,
+			      const char *buf, size_t count)
+{
+	int ret, value;
+
+	ret = kstrtoint(buf, 10, &value);
+	if (ret)
+		return ret;
+	if (value < 0 || value > 100)
+		return -ERANGE;
+	mutex_lock(&p->lock);
+	if (p->stopping) {
+		mutex_unlock(&p->lock);
+		return -ESHUTDOWN;
+	}
+	*level = value;
+	atomic_inc(&p->generation);
+	if (!p->suspended)
+		mod_delayed_work(system_highpri_wq, &p->work, 0);
+	mutex_unlock(&p->lock);
+	return count;
+}
+
+#define R1_LEVEL_ATTR(name) \
+static ssize_t name##_show(struct device *dev, struct device_attribute *attr, char *buf) \
+{ \
+	struct r1_charge_policy *p = dev_get_drvdata(dev); \
+	return r1_level_show(p, &p->name, buf); \
+} \
+static ssize_t name##_store(struct device *dev, struct device_attribute *attr, \
+			    const char *buf, size_t count) \
+{ \
+	struct r1_charge_policy *p = dev_get_drvdata(dev); \
+	return r1_level_store(p, &p->name, buf, count); \
+} \
+static DEVICE_ATTR_RW(name)
+R1_LEVEL_ATTR(charge_start_level);
+R1_LEVEL_ATTR(charge_stop_level);
+
 static ssize_t status_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct r1_charge_policy *p = dev_get_drvdata(dev);
@@ -402,6 +477,8 @@ static DEVICE_ATTR_RO(status);
 
 static struct attribute *r1_charge_attrs[] = {
 	&dev_attr_charge_control_limit.attr,
+	&dev_attr_charge_start_level.attr,
+	&dev_attr_charge_stop_level.attr,
 	&dev_attr_status.attr,
 	NULL,
 };
@@ -513,6 +590,7 @@ static int r1_charge_probe(struct platform_device *pdev)
 	p->dev = dev;
 	/* Android restores the persistent preference; diagnostics start at 500 mA. */
 	p->requested_ua = R1_CHARGE_MIN_UA;
+	p->charge_stop_level = 100;
 	p->applied.reason = R1_WAITING;
 	platform_set_drvdata(pdev, p);
 	mutex_init(&p->lock);
