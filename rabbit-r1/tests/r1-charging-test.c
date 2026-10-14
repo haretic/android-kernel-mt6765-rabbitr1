@@ -57,18 +57,19 @@ enum power_supply_property { POWER_SUPPLY_PROP_PRESENT, POWER_SUPPLY_PROP_HEALTH
        POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT, POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR,
        POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE, POWER_SUPPLY_PROP_INPUT_VOLTAGE_LIMIT,
        POWER_SUPPLY_PROP_PRECHARGE_CURRENT, POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT,
-       POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT, PROP_COUNT };
+       POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT, POWER_SUPPLY_PROP_CAPACITY, PROP_COUNT };
 enum { POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO, POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE };
 union power_supply_propval { int intval; };
 struct power_supply { int values[PROP_COUNT]; };
 static struct power_supply charger, battery, gadget, typec;
 static unsigned int reads, writes, read_fail, write_fail, change_on_write;
+static enum power_supply_property failed_read;
 static atomic_t *generation_pointer;
 static struct { enum power_supply_property prop; int value; } trace[100];
 static int power_supply_get_property(struct power_supply *p, enum power_supply_property prop,
                                      union power_supply_propval *v)
 {
-    if (++reads == read_fail) return -EIO;
+    if (++reads == read_fail) { failed_read=prop; return -EIO; }
     v->intval=p->values[prop]; return 0;
 }
 static int power_supply_set_property(struct power_supply *p, enum power_supply_property prop,
@@ -87,7 +88,7 @@ static struct r1_charge_sample good(void)
 {
     return (struct r1_charge_sample){.valid=true, .present=1, .plugged=1,
         .health=POWER_SUPPLY_HEALTH_GOOD, .temperature=250, .voltage=3800000,
-        .usb_type=POWER_SUPPLY_USB_TYPE_DCP, .gadget_ua=0};
+        .usb_type=POWER_SUPPLY_USB_TYPE_DCP, .gadget_ua=0, .capacity=50};
 }
 static void reset(void)
 {
@@ -95,13 +96,14 @@ static void reset(void)
     memset(&gadget,0,sizeof(gadget)); memset(&typec,0,sizeof(typec));
     reads=writes=read_fail=write_fail=change_on_write=0; jiffies=100;
     p.dev=&dev; p.charger=&charger; p.battery=&battery; p.gadget=&gadget;
-    p.requested_ua=1000000; generation_pointer=&p.generation;
+    p.requested_ua=1000000; p.charge_stop_level=100; generation_pointer=&p.generation;
     charger.values[POWER_SUPPLY_PROP_PRESENT]=1;
     charger.values[POWER_SUPPLY_PROP_HEALTH]=POWER_SUPPLY_HEALTH_GOOD;
     charger.values[POWER_SUPPLY_PROP_USB_TYPE]=POWER_SUPPLY_USB_TYPE_DCP;
     battery.values[POWER_SUPPLY_PROP_PRESENT]=1;
     battery.values[POWER_SUPPLY_PROP_TEMP]=250;
     battery.values[POWER_SUPPLY_PROP_VOLTAGE_NOW]=3800000;
+    battery.values[POWER_SUPPLY_PROP_CAPACITY]=50;
 }
 static void decisions(void)
 {
@@ -119,11 +121,12 @@ static void decisions(void)
         struct r1_charge_target t=r1_charge_decide(&p,&s);
         assert(t.charge_ua<=cap && t.charge_ua<=1000000 && t.input_ua<=1000000);
         assert(t.charge_ua==0 || (t.charge_ua>=500000 && t.charge_ua%100000==0));
-        if (temp<50 || temp>=500 || voltage<3000000 || voltage>=4200000)
+        int target=temp<150 ? 4200000 : temp>=430 ? 4100000 : 4400000;
+        if (temp<50 || temp>=500 || voltage<3000000 || voltage>=target)
             assert(!t.charge_ua);
-        if (temp>=430 && voltage>=4100000) assert(!t.charge_ua);
+        if (t.charge_ua) assert(t.voltage_uv==target);
         if (temp<150 || temp>=430 || usb==POWER_SUPPLY_USB_TYPE_SDP || !usb) assert(t.charge_ua<=500000);
-        if (temp>=150 && temp<430 && voltage>=3000000 && voltage<4200000 && usb>=2)
+        if (temp>=150 && temp<430 && voltage>=3000000 && voltage<4400000 && usb>=2)
             assert(t.charge_ua==cap);
         cases++;
     }
@@ -145,14 +148,39 @@ static void decisions(void)
     s.temperature=500; assert(!r1_charge_decide(&p,&s).charge_ua);
     s.temperature=480; assert(!r1_charge_decide(&p,&s).charge_ua);
     s.temperature=479; assert(r1_charge_decide(&p,&s).charge_ua==500000);
-    s=good(); s.voltage=4200000; assert(!r1_charge_decide(&p,&s).charge_ua);
-    s.voltage=4100000; assert(!r1_charge_decide(&p,&s).charge_ua);
-    s.voltage=4099999; assert(r1_charge_decide(&p,&s).charge_ua==1000000);
+    s=good(); s.voltage=4400000; assert(!r1_charge_decide(&p,&s).charge_ua);
+    s.voltage=4300000; assert(!r1_charge_decide(&p,&s).charge_ua);
+    s.voltage=4299999; assert(r1_charge_decide(&p,&s).charge_ua==1000000);
+    assert(r1_charge_decide(&p,&s).voltage_uv==4400000);
     s=good(); s.health=POWER_SUPPLY_HEALTH_UNSPEC_FAILURE; assert(!r1_charge_decide(&p,&s).charge_ua);
     s=good(); s.timer_expired=true; assert(r1_charge_decide(&p,&s).reason==R1_TIMER);
     s=good(); s.valid=false; assert(!r1_charge_decide(&p,&s).charge_ua);
     s=good(); s.present=0; assert(!r1_charge_decide(&p,&s).charge_ua);
     printf("PASS: %u decision combinations, boundaries, USB budgets and hysteresis\n",cases);
+}
+static void levels(void)
+{
+    struct r1_charge_sample s; struct r1_charge_target t; unsigned int cases=0;
+    for (int start=0; start<=100; start+=5)
+    for (int stop=0; stop<=100; stop+=5) {
+        reset(); p.charge_start_level=start; p.charge_stop_level=stop;
+        bool held=false;
+        /* Charge up, then drain, crossing both levels and an unknown level. */
+        for (int step=0; step<=300; step++) {
+            int cap = step<=100 ? step : step<=200 ? 200-step : (step%7 ? step-200 : -1);
+            s=good(); s.capacity=cap; t=r1_charge_decide(&p,&s);
+            if (stop>=100 || cap<0) held=false;
+            else if (cap>=stop) held=true;
+            else if (cap<=start) held=false;
+            assert((t.reason==R1_LEVEL_LIMIT)==held);
+            assert(held ? !t.charge_ua && t.input_ua==1000000 : t.charge_ua==1000000);
+            cases++;
+        }
+    }
+    reset(); p.charge_stop_level=50; s=good(); s.capacity=60; s.plugged=0;
+    assert(r1_charge_decide(&p,&s).reason==R1_UNPLUGGED);
+    s=good(); s.capacity=60; s.temperature=10; assert(r1_charge_decide(&p,&s).reason==R1_TEMPERATURE);
+    printf("PASS: %u charge level limit steps\n", cases);
 }
 static void transactions(void)
 {
@@ -169,6 +197,11 @@ static void transactions(void)
     reset(); r1_charge_work(&p.work.work); total=reads;
     for (unsigned int fail=1;fail<=total;fail++) {
         reset(); read_fail=fail; r1_charge_work(&p.work.work);
+        if (failed_read==POWER_SUPPLY_PROP_CAPACITY && fail>3) {
+            /* Capacity is optional: an unknown level charges normally. */
+            assert(!p.error && p.applied.charge_ua==1000000);
+            continue;
+        }
         assert(p.error==-EIO && !p.applied.charge_ua && writes==2);
         assert(charger.values[POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR]==1);
     }
@@ -210,6 +243,21 @@ static void transactions(void)
     reset(); r1_charge_notify(&p.notifier,PSY_EVENT_PROP_CHANGED,&gadget);
     assert(p.generation.value==1 && p.work.delay==0);
     r1_charge_notify(&p.notifier,PSY_EVENT_PROP_CHANGED,&charger); assert(p.generation.value==1);
+    reset(); assert(r1_level_store(&p,&p.charge_stop_level,"80\n",3)==3 && p.charge_stop_level==80);
+    assert(r1_level_store(&p,&p.charge_start_level,"70",2)==2 && p.charge_start_level==70);
+    assert(r1_level_store(&p,&p.charge_stop_level,"101",3)==-ERANGE);
+    assert(r1_level_store(&p,&p.charge_start_level,"-1",2)==-ERANGE);
+    assert(r1_level_store(&p,&p.charge_stop_level,"8x",2)==-EINVAL && p.charge_stop_level==80);
+    battery.values[POWER_SUPPLY_PROP_CAPACITY]=80; r1_charge_work(&p.work.work);
+    assert(!p.error && p.applied.reason==R1_LEVEL_LIMIT && !p.applied.charge_ua);
+    /* Held at the limit, the input still powers the system with charging inhibited. */
+    assert(p.applied.input_ua==1000000 && charger.values[POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT]==1000000);
+    assert(charger.values[POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR]==1);
+    battery.values[POWER_SUPPLY_PROP_CAPACITY]=71; r1_charge_work(&p.work.work);
+    assert(p.applied.reason==R1_LEVEL_LIMIT && !p.applied.charge_ua);
+    battery.values[POWER_SUPPLY_PROP_CAPACITY]=70; r1_charge_work(&p.work.work);
+    assert(p.applied.charge_ua==1000000 && charger.values[POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR]==0);
+    p.stopping=true; assert(r1_level_store(&p,&p.charge_stop_level,"50",2)==-ESHUTDOWN); p.stopping=false;
     puts("PASS: read/write faults, superseded grants, safety timeout, suspend and sysfs validation");
 }
-int main(void) { decisions(); transactions(); return 0; }
+int main(void) { decisions(); levels(); transactions(); return 0; }

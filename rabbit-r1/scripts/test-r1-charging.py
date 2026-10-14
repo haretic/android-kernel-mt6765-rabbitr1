@@ -21,7 +21,7 @@ parts = s[s.index('#define R1_CHARGE_MIN_UA'):s.index('static bool r1_charge_lim
 for name in ('r1_charge_limit_valid', 'r1_charge_decide', 'r1_get', 'r1_set',
              'r1_charge_isolate', 'r1_charge_sample', 'r1_charge_hold_awake', 'r1_charge_fresh',
              'r1_charge_apply', 'r1_charge_work', 'r1_charge_notify',
-             'charge_control_limit_store', 'r1_charge_suspend', 'r1_charge_resume'):
+             'charge_control_limit_store', 'r1_level_store', 'r1_charge_suspend', 'r1_charge_resume'):
     parts += function(name)
 (OUT / 'policy-under-test.h').write_text(parts)
 command = ['cc', '-std=gnu11', '-O1', '-g', '-Wall', '-Wextra', '-Werror',

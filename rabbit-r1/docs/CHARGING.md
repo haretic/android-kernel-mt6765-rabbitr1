@@ -18,12 +18,17 @@ It combines the requested cap with these independent constraints:
 
 * Fresh battery presence, temperature, voltage and current readings are required.
   BATON detection must already be enabled; failed reads never become defaults.
-* Normal charging uses at most 1,000 mA and 4.2 V. Below 15 °C or from 43 °C,
-  current is limited to 500 mA; the warm voltage limit is 4.1 V. Charging stops
-  below 5 °C or at 50 °C, with 2 °C recovery hysteresis. Voltage below 3 V or
-  reaching the selected ceiling stops charging; restart requires 100 mV margin.
-  These bring-up limits are deliberately stricter than the stock DT's 4.4 V,
-  1 A and 0–55 °C envelope. They are not a replacement for battery validation.
+* Normal charging uses at most 1,000 mA and the pack's 4.4 V (stock
+  `battery_cv`). Below 15 °C current is limited to 500 mA and voltage to 4.2 V;
+  from 43 °C to 500 mA and 4.1 V. Charging stops below 5 °C or at 50 °C, with
+  2 °C recovery hysteresis. Voltage below 3 V or reaching the selected ceiling
+  stops charging; restart requires 100 mV margin. The temperature window and
+  the cold voltage are stricter than the stock DT's 0–55 °C JEITA envelope.
+* A charge level limit (`charge_start_level`/`charge_stop_level`) stops charging
+  at the stop level and resumes at the start level. Meanwhile the input keeps
+  powering the system with charging inhibited, so the battery holds its level.
+  **Settings → Battery → Charging control** sets it through the LineageOS
+  health HAL in "limit" mode (50–100 %, resuming 10 % below the limit).
 * BC1.2 DCP/CDP permit at most 1 A. SDP uses the gadget's actual enumeration and
   suspend budget, capped at 500 mA. Budgets below the charger's 500 mA minimum
   charge current isolate input; no small USB budget is rounded up. The diagnostic
