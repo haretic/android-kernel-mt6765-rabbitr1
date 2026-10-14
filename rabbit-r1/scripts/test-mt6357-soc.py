@@ -83,15 +83,25 @@ static struct power_supply *devm_power_supply_register(struct device *dev,
     int ret=step(); if (ret) return ERR_PTR(ret);
     if (fail_registration) return ERR_PTR(-EIO);
     if (gauge.soc.enabled) {
-        assert(desc == &mt6357_gauge_soc_desc && desc->num_properties == 7);
-        union power_supply_propval value={.intval=-777};
+        assert(desc == &mt6357_gauge_soc_desc && desc->num_properties == 9);
+        union power_supply_propval value={.intval=-777}, full={.intval=-777};
         assert(!desc->get_property(&psy,POWER_SUPPLY_PROP_CAPACITY,&value));
         assert(value.intval>=0 && value.intval<=100);
+        /* Android semantics: charge left, bounded by the modeled full charge. */
+        assert(!desc->get_property(&psy,POWER_SUPPLY_PROP_CHARGE_FULL,&full));
+        assert(full.intval>0);
+        value.intval=-777;
+        assert(!desc->get_property(&psy,POWER_SUPPLY_PROP_CHARGE_COUNTER,&value));
+        assert(value.intval>=0 && value.intval<=full.intval);
+        /* Without alert temperatures, health is unknown and reads nothing. */
+        psy.battery_info=NULL; value.intval=-777;
+        assert(!desc->get_property(&psy,POWER_SUPPLY_PROP_HEALTH,&value));
+        assert(value.intval==POWER_SUPPLY_HEALTH_UNKNOWN);
     }
     registrations++; return &psy;
 }'''.strip())
 # Descriptor is defined later; framework mock only checks property count here.
-model = model.replace('desc == &mt6357_gauge_soc_desc && desc->num_properties == 7','desc->num_properties == 7')
+model = model.replace('desc == &mt6357_gauge_soc_desc && desc->num_properties == 9','desc->num_properties == 9')
 body = replace(body, ns['model'], model)
 fixture = PROJECT/'tests/battery/mt6357-soc.c'
 live_fixture = (PROJECT/'tests/battery/mt6357-live.c').read_text()

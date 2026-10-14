@@ -121,10 +121,11 @@ struct device_node { int index; };
 struct of_phandle_args { struct device_node *np; };
 struct mutex { pthread_mutex_t raw; unsigned int owner; bool initialized; };
 struct regmap { int unused; };
-struct power_supply { void *drvdata; struct device dev; };
+struct power_supply_battery_info { int temp_alert_min, temp_alert_max; };
+struct power_supply { void *drvdata; struct device dev; struct power_supply_battery_info *battery_info; };
 struct notifier_block { int (*notifier_call)(struct notifier_block *, unsigned long, void *); };
 union power_supply_propval { int intval; };
-enum power_supply_property { POWER_SUPPLY_PROP_PRESENT, POWER_SUPPLY_PROP_CURRENT_NOW, POWER_SUPPLY_PROP_CHARGE_COUNTER, POWER_SUPPLY_PROP_VOLTAGE_NOW, POWER_SUPPLY_PROP_TEMP, POWER_SUPPLY_PROP_CAPACITY, POWER_SUPPLY_PROP_STATUS };
+enum power_supply_property { POWER_SUPPLY_PROP_PRESENT, POWER_SUPPLY_PROP_CURRENT_NOW, POWER_SUPPLY_PROP_CHARGE_COUNTER, POWER_SUPPLY_PROP_VOLTAGE_NOW, POWER_SUPPLY_PROP_TEMP, POWER_SUPPLY_PROP_CAPACITY, POWER_SUPPLY_PROP_STATUS, POWER_SUPPLY_PROP_CHARGE_FULL, POWER_SUPPLY_PROP_HEALTH };
 #define POWER_SUPPLY_TYPE_BATTERY 1
 struct power_supply_desc {
     void (*external_power_changed)(struct power_supply *);
@@ -185,6 +186,11 @@ struct delayed_work { struct work_struct work; };
 #define PSY_EVENT_PROP_CHANGED 1
 #define NOTIFY_DONE 0
 #define POWER_SUPPLY_STATUS_UNKNOWN 0
+#define POWER_SUPPLY_HEALTH_UNKNOWN 0
+#define POWER_SUPPLY_HEALTH_GOOD 1
+#define POWER_SUPPLY_HEALTH_OVERHEAT 2
+#define POWER_SUPPLY_HEALTH_COLD 6
+#define clamp_t(type, v, lo, hi) ((type)(v) < (type)(lo) ? (type)(lo) : (type)(v) > (type)(hi) ? (type)(hi) : (type)(v))
 #define POWER_SUPPLY_STATUS_FULL 4
 static int power_supply_reg_notifier(struct notifier_block *nb) { assert(false); return -EIO; }
 static void power_supply_unreg_notifier(struct notifier_block *nb) { assert(false); }
