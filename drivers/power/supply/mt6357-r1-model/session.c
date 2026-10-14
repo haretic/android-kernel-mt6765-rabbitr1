@@ -164,6 +164,13 @@ static __attribute__((__noinline__)) int candidate(const struct r1_battery_polic
         parameters.current_01ma = o->endpoint[i].current_ua / 100;
         ret = r1_battery_model_seed(&curve, o->endpoint[i].voltage_uv / 100,
                                     &parameters, &root);
+        /* A pack charged past the profile's first row (the R1 charges to
+         * 4.4 V; the stock tables start near 4.37 V) is at least that full.
+         * Seed it there; the padding below still bounds the estimate. */
+        if (ret == R1_BATTERY_ABOVE_FULL) {
+            root.charge_01mah = curve.curve.points[0].charge_01mah;
+            ret = R1_BATTERY_OK;
+        }
         if (ret) return ret;
         ret = expand_root(root.charge_01mah, padding, &intervals[i]);
         if (ret) { *why = R1_BATTERY_REASON_ARITHMETIC; return ret; }

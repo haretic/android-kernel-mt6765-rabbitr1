@@ -122,7 +122,7 @@ static void boundaries(void)
     m = discharge;
     seed(&p, 39000, &m, 0, 0,40000,1000);
     seed(&p, 28000, &m, 0, 1000,30000,2000);
-    seed(&p, 39001, &m, R1_BATTERY_NO_ROOT, 0,0,0);
+    seed(&p, 39001, &m, R1_BATTERY_ABOVE_FULL, 0,0,0);
     seed(&p, 27999, &m, R1_BATTERY_NO_ROOT, 0,0,0);
     cutoff(&p, 39000, &m, R1_BATTERY_NO_CUTOFF, 0,0,0,0);
     cutoff(&p, 40000, &m, R1_BATTERY_NO_CUTOFF, 0,0,0,0);
@@ -159,7 +159,7 @@ static void boundaries(void)
         const struct r1_battery_point flat[] = {{0,40000,1000},{1000,39000,2000}};
         p = curve(flat, 2); m.current_01ma = 10000;
         seed(&p, 41000, &m, R1_BATTERY_AMBIGUOUS, 0,0,0); /* Exact IR cancellation. */
-        seed(&p, 41001, &m, R1_BATTERY_NO_ROOT, 0,0,0);
+        seed(&p, 41001, &m, R1_BATTERY_ABOVE_FULL, 0,0,0);
         p.curve.points[1].voltage_01mv = 40000; m.current_01ma = 0;
         seed(&p, 40000, &m, R1_BATTERY_AMBIGUOUS, 0,0,0);
     }

@@ -82,6 +82,8 @@ def observed(p, o):
     for e in endpoints:
         error, root = MODEL.seed(PROFILES[profile_c(temp)], F(e['v'], 100),
                                  (F(e['i'], 100), p['shunt'], p['meter'], p['dc']))
+        if error == -8:
+            error, root = 0, (PROFILES[profile_c(temp)][0][0],)
         require(not error, 'MODEL', error)
         roots.append(hull_root(root[0], p['model_error'] + temporal(p, end-start)))
     q = overlap(*roots)

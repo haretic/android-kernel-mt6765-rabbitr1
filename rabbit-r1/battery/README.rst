@@ -237,7 +237,8 @@ integer rounding. The implementation uses checked signed64 residuals::
 Each consecutive pair of explicit rows describes a linear model segment.
 ``model_seed`` solves for the unique exact root over all segments, then floors
 charge, OCV and cell resistance individually to their named positive units.
-It returns ``NO_ROOT`` outside the modeled loaded-voltage domain and
+It returns ``ABOVE_FULL`` above the first row's loaded voltage, ``NO_ROOT``
+elsewhere outside the modeled loaded-voltage domain and
 ``AMBIGUOUS`` for multiple exact roots, a nontrivial flat zero interval, or a
 candidate on a nonidentical zero-charge-width segment, including its endpoints.
 Identical repeated rows are deduplicated; a vertex shared by ordinary segments
