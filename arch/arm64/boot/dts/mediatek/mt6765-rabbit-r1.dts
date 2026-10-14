@@ -117,12 +117,13 @@
 
 	/*
 	 * Stock drives the motor from VIBR at 2.3 - 3.2 V (regulator-vibrator);
-	 * VIBR's steps in that range are 2.8 and 3.0 V.
+	 * VIBR's steps in that range are 2.8 and 3.0 V. 2.0 V adds a weaker
+	 * step for Android's low vibration intensities.
 	 */
 	vibrator {
 		compatible = "regulator-haptic";
 		haptic-supply = <&mt6357_vibr_reg>;
-		min-microvolt = <2800000>;
+		min-microvolt = <2000000>;
 		max-microvolt = <3000000>;
 	};
 
