@@ -617,10 +617,10 @@ static int mt6357_soc_percent(r1_battery_int basis_points, int *out)
 	return 0;
 }
 
-static int mt6357_soc_capacity_locked(struct mt6357_gauge *gauge, u64 now, int *out)
+static int mt6357_soc_estimate_locked(struct mt6357_gauge *gauge, u64 now,
+				      struct r1_battery_estimate *estimate)
 {
 	struct mt6357_r1_soc *soc = &gauge->soc;
-	struct r1_battery_estimate estimate;
 	int ret;
 
 	lockdep_assert_held(&soc->lock);
@@ -632,24 +632,71 @@ static int mt6357_soc_capacity_locked(struct mt6357_gauge *gauge, u64 now, int *
 		return soc->error;
 	if (!now || now > S64_MAX)
 		return -ERANGE;
-	ret = r1_battery_session_read(&soc->session, now, &estimate);
+	ret = r1_battery_session_read(&soc->session, now, estimate);
 	if (ret)
 		return -EINVAL;
-	if (estimate.validity != R1_BATTERY_FRESH)
-		return mt6357_soc_errno(&estimate);
+	if (estimate->validity != R1_BATTERY_FRESH)
+		return mt6357_soc_errno(estimate);
+	return 0;
+}
+
+static int mt6357_soc_capacity_locked(struct mt6357_gauge *gauge, u64 now, int *out)
+{
+	struct r1_battery_estimate estimate;
+	int ret;
+
+	ret = mt6357_soc_estimate_locked(gauge, now, &estimate);
+	if (ret)
+		return ret;
 	return mt6357_soc_percent(estimate.soc_point_bp, out);
 }
 
-static int mt6357_soc_read_capacity(struct mt6357_gauge *gauge, int *out)
+/*
+ * Android reads CHARGE_COUNTER as the charge left in the pack, so the model
+ * reports usable minus discharged charge rather than the raw CAR accumulator.
+ */
+static int mt6357_soc_charge_locked(struct mt6357_gauge *gauge, u64 now,
+				    enum power_supply_property psp, int *out)
 {
+	struct r1_battery_estimate estimate;
+	r1_battery_int charge;
+	int ret;
+
+	ret = mt6357_soc_estimate_locked(gauge, now, &estimate);
+	if (ret)
+		return ret;
+	if (estimate.usable_point_uah <= 0 || estimate.usable_point_uah > INT_MAX)
+		return -ERANGE;
+	if (psp == POWER_SUPPLY_PROP_CHARGE_FULL) {
+		*out = estimate.usable_point_uah;
+		return 0;
+	}
+	charge = estimate.usable_point_uah - estimate.discharged_point_uah;
+	*out = clamp_t(r1_battery_int, charge, 0, estimate.usable_point_uah);
+	return 0;
+}
+
+static int mt6357_soc_read(struct mt6357_gauge *gauge, enum power_supply_property psp,
+			   int *out)
+{
+	u64 now;
 	int ret;
 
 	if (!gauge->soc.enabled)
 		return -EINVAL;
 	mutex_lock(&gauge->soc.lock);
-	ret = mt6357_soc_capacity_locked(gauge, ktime_get_boottime_ns(), out);
+	now = ktime_get_boottime_ns();
+	if (psp == POWER_SUPPLY_PROP_CAPACITY)
+		ret = mt6357_soc_capacity_locked(gauge, now, out);
+	else
+		ret = mt6357_soc_charge_locked(gauge, now, psp, out);
 	mutex_unlock(&gauge->soc.lock);
 	return ret;
+}
+
+static int mt6357_soc_read_capacity(struct mt6357_gauge *gauge, int *out)
+{
+	return mt6357_soc_read(gauge, POWER_SUPPLY_PROP_CAPACITY, out);
 }
 
 /* Source report is retained independently. Even a populated value beside an
@@ -1044,17 +1091,53 @@ static void mt6357_gauge_stop_status(void *data)
 	cancel_delayed_work_sync(&gauge->status_work);
 }
 
+#if IS_ENABLED(CONFIG_BATTERY_MT6357_R1_SOC)
+/* Health follows the pack's alert temperatures (monitored-battery alert-celsius). */
+static int mt6357_gauge_read_health(struct mt6357_gauge *gauge,
+				    const struct power_supply_battery_info *info, int *health)
+{
+	int temp, ret;
+
+	if (!info || info->temp_alert_min == INT_MIN || info->temp_alert_max == INT_MAX) {
+		*health = POWER_SUPPLY_HEALTH_UNKNOWN;
+		return 0;
+	}
+	ret = mt6357_gauge_read_temperature(gauge, &temp);
+	if (ret)
+		return ret;
+	if (temp < info->temp_alert_min * 10)
+		*health = POWER_SUPPLY_HEALTH_COLD;
+	else if (temp > info->temp_alert_max * 10)
+		*health = POWER_SUPPLY_HEALTH_OVERHEAT;
+	else
+		*health = POWER_SUPPLY_HEALTH_GOOD;
+	return 0;
+}
+#endif
+
 static int mt6357_gauge_get_property(struct power_supply *psy,
 				     enum power_supply_property psp,
 				     union power_supply_propval *val)
 {
 	struct mt6357_gauge *gauge = power_supply_get_drvdata(psy);
 
-	switch (psp) {
 #if IS_ENABLED(CONFIG_BATTERY_MT6357_R1_SOC)
-	case POWER_SUPPLY_PROP_CAPACITY:
-		return mt6357_soc_read_capacity(gauge, &val->intval);
+	if (gauge->soc.enabled) {
+		switch (psp) {
+		case POWER_SUPPLY_PROP_CAPACITY:
+			return mt6357_soc_read_capacity(gauge, &val->intval);
+		case POWER_SUPPLY_PROP_CHARGE_COUNTER:
+		case POWER_SUPPLY_PROP_CHARGE_FULL:
+			return mt6357_soc_read(gauge, psp, &val->intval);
+		case POWER_SUPPLY_PROP_HEALTH:
+			return mt6357_gauge_read_health(gauge, psy->battery_info,
+							&val->intval);
+		default:
+			break;
+		}
+	}
 #endif
+	switch (psp) {
 	case POWER_SUPPLY_PROP_STATUS:
 		return mt6357_gauge_read_status(gauge, &val->intval);
 	case POWER_SUPPLY_PROP_PRESENT:
@@ -1101,6 +1184,7 @@ static const enum power_supply_property mt6357_gauge_soc_properties[] = {
 	POWER_SUPPLY_PROP_PRESENT, POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CHARGE_COUNTER, POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_TEMP, POWER_SUPPLY_PROP_STATUS, POWER_SUPPLY_PROP_CAPACITY,
+	POWER_SUPPLY_PROP_CHARGE_FULL, POWER_SUPPLY_PROP_HEALTH,
 };
 #endif
 

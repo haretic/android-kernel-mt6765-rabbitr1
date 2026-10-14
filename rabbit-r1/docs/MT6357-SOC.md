@@ -54,6 +54,15 @@ old-cache validity after I/O, so expiry during a valid capture still notifies a
 same-percent fresh recovery. Reads do not send notifications themselves: there is
 no separate timer-bounded expiry uevent if the worker or hardware is stalled.
 
+With the model enabled, CHARGE_COUNTER and CHARGE_FULL follow Android's meaning:
+remaining charge (usable minus discharged midpoint, clamped to 0..usable) and the
+modeled usable capacity, both in uAh and from the same fresh estimate as CAPACITY.
+The raw CAR accumulator stays the CHARGE_COUNTER of the model-less descriptors.
+HEALTH is GOOD, COLD or OVERHEAT against the `monitored-battery` node's
+`alert-celsius` (stock 0-55 C), or UNKNOWN without one. The `simple-battery` node
+also publishes TECHNOLOGY, CHARGE_FULL_DESIGN (1000 mAh) and VOLTAGE_MAX_DESIGN
+(stock 4.4 V) through the power-supply core.
+
 Integer CAPACITY uses `(soc_basis_points + 50) / 100` after checking 0..10000.
 This is uniform nearest-percent rounding, ties upward: 0, 1 and 49 bp become 0%;
 50 bp becomes 1%; 9949 bp becomes 99%; 9950..10000 bp become 100%. There is no

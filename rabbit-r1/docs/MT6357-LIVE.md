@@ -63,8 +63,9 @@ indices identify ISENSE, BAT_TEMP and VBIF (0–2), with raw code/errno,
 scale-format:numerator/denominator, scale errno and converted integer mV/errno.
 Zero values next to nonzero errnos are placeholders, not measurements.
 
-Current is positive for charging. CHARGE_COUNTER is a signed accumulator since
-hardware reset, **not remaining capacity**. Existing stock sign/special-code
+Current is positive for charging. Without the experimental model, CHARGE_COUNTER
+is a signed accumulator since hardware reset, **not remaining capacity**; with it,
+see MT6357-SOC.md. Existing stock sign/special-code
 handling and staged rounding are unchanged. Board shunt/gain and thermistor
 calibration are reused. The supported ADC descriptor is unsigned and offset-free,
 with `IIO_VAL_INT` raw results and positive `IIO_VAL_FRACTIONAL` scale:
