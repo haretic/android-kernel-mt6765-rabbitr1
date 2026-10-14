@@ -909,5 +909,23 @@
         "after_sha256": "9e8c1ab426e20c4e74fc0415ca1d9129570332ba2f882d4e0363affd8c290903"
       }
     ]
+  },
+  {
+    "project": "vendor/lineage",
+    "base_commit": "b3d63c6da0df32d283ce339b48f8fd5bacce6660",
+    "patch": "0018-bootanimation-accept-a-device-module.patch",
+    "sha256": "56d21e0ba376f6d8c6ad7bc7131b1933cc32733860ab547cd95f1e72189592ef",
+    "files": [
+      {
+        "path": "bootanimation/Android.bp",
+        "before_sha256": "37842c2da9e07676a705c4c19c27a8c083e05681c405e2e091dfdcd81cd7d33c",
+        "after_sha256": "135cc916c1337c681588e50bc3fbd2f84bdb445b826462b22c7f549d414412ba"
+      },
+      {
+        "path": "config/BoardConfigSoong.mk",
+        "before_sha256": "8c3f0d1117d7b7fb717b42fae63eede85012c253c9fe096a51360476398fb9ff",
+        "after_sha256": "5dd841bfa9abb56ce46adce6365a5c8c8ded69faf792605fca22ce55192220e6"
+      }
+    ]
   }
 ]

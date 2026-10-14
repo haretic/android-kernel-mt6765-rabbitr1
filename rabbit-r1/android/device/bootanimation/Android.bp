@@ -1,0 +1,8 @@
+// SPDX-License-Identifier: Apache-2.0
+
+// Lineage's animation with the outro ending on the finished logo instead of
+// fading it to black (rabbit-r1/scripts/trim-bootanimation.py).
+filegroup {
+    name: "bootanimation-r1",
+    srcs: ["bootanimation.zip"],
+}
