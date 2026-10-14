@@ -114,12 +114,13 @@ PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/logging/r1-logcat-kmsg.sh:$(TARGET_COPY_OUT_SYSTEM_EXT)/bin/r1-logcat-kmsg.sh \
     $(LOCAL_PATH)/logging/init.r1-logcat-kmsg.rc:$(TARGET_COPY_OUT_SYSTEM_EXT)/etc/init/init.r1-logcat-kmsg.rc
 
-# Match the physical panel. Revisit density after UI testing on the device.
+# 140 matches the panel's physical density but made the UI too small to use;
+# 186 is the display size picked on the device.
 TARGET_SCREEN_WIDTH := 480
 TARGET_SCREEN_HEIGHT := 640
 PRODUCT_AAPT_CONFIG := normal
 PRODUCT_AAPT_PREF_CONFIG := hdpi
-PRODUCT_VENDOR_PROPERTIES += ro.sf.lcd_density=140
+PRODUCT_VENDOR_PROPERTIES += ro.sf.lcd_density=186
 
 # MT6765 AFE + MT6357 codec + AW87390 speaker amplifier.
 $(call inherit-product, $(LOCAL_PATH)/audio/audio.mk)
