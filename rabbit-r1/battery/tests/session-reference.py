@@ -34,6 +34,7 @@ def floor(x): return x.numerator // x.denominator
 def ceil(x): return -floor(-x)
 
 def whole_c(x): return (1 if x >= 0 else -1) * (abs(x) // 10)
+def profile_c(c): return min(max(c, min(PROFILES)), max(PROFILES))  # outer tables clamp
 
 def raw_class(x): return (x >> 31, (x >> 11) & 0xfffff in (0, 0xfffff), (x >> 11) & 0xfffff == 0xfffff)
 
@@ -68,7 +69,7 @@ def observed(p, o):
                  (not special or not e['car']) and
                  (e['car'] <= 0 if sign else e['car'] >= 0))
         require(valid, 'INPUT')
-        require(-100 <= e['t'] <= 500, 'TEMPERATURE')
+        require(-400 <= e['t'] <= 900, 'TEMPERATURE')
         require(abs(e['i']) <= p['observed'], 'LIMIT')
     a, b = endpoints
     temp = whole_c(a['t'])
@@ -79,13 +80,13 @@ def observed(p, o):
     require(possible(p, a['car'], b['car'], end-start), 'COUNTER_RATE')
     roots = []
     for e in endpoints:
-        error, root = MODEL.seed(PROFILES[temp], F(e['v'], 100),
+        error, root = MODEL.seed(PROFILES[profile_c(temp)], F(e['v'], 100),
                                  (F(e['i'], 100), p['shunt'], p['meter'], p['dc']))
         require(not error, 'MODEL', error)
         roots.append(hull_root(root[0], p['model_error'] + temporal(p, end-start)))
     q = overlap(*roots)
     require(q is not None, 'DISAGREEMENT', -6)
-    error, cutoff = MODEL.cutoff(PROFILES[temp], p['minimum'],
+    error, cutoff = MODEL.cutoff(PROFILES[profile_c(temp)], p['minimum'],
                                  (-p['discharge'], p['shunt'], p['meter'], p['dc']))
     require(not error, 'CUTOFF', error)
     require(cutoff[3] != 2, 'CUTOFF', -4)
@@ -191,7 +192,7 @@ def counter(magnitude, negative=False):
 
 
 def voltage(temp, q_uah, current):
-    points = PROFILES[whole_c(temp)]
+    points = PROFILES[profile_c(whole_c(temp))]
     q = F(q_uah, 100)
     for a, b in zip(points, points[1:]):
         if a[0] <= q <= b[0] and a[0] != b[0]:
@@ -230,7 +231,7 @@ def main():
         lines.append('R '+' '.join(map(str, [now]+session.read(now))))
     # Grid includes both CAR signs, charging/discharging/zero/near-zero current,
     # cold/interpolated/hot profiles and recovery after real invalid roots.
-    for temp in (-100, -50, 0, 90, 250, 370, 500):
+    for temp in (-300, -100, -50, 0, 90, 250, 370, 500, 560, 650):
         for current in (-500000, -100000, -100, 0, 100, 100000, 500000):
             for q in (10000, 150000, 400000, 750000, 900000):
                 for negative in (False, True):
