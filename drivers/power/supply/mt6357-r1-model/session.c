@@ -300,7 +300,10 @@ int r1_battery_session_step(struct r1_battery_session *state,
         why = R1_BATTERY_REASON_INPUT;
         if (v->present != 1 || !valid_endpoint(v)) goto failed;
         why = R1_BATTERY_REASON_TEMPERATURE;
-        if (v->temperature_decic < -100 || v->temperature_decic > 500) goto failed;
+        /* Plausible sensor range only. Profiles clamp to their outer tables
+         * (-10..50 C); rejecting a hot or cold pack here left capacity
+         * unavailable, which Android startup treats as a failed battery. */
+        if (v->temperature_decic < -400 || v->temperature_decic > 900) goto failed;
         why = R1_BATTERY_REASON_ARITHMETIC;
         if ((ret = distance(v->current_ua, 0, &value))) goto failed;
         why = R1_BATTERY_REASON_LIMIT;
