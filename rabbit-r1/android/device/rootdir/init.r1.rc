@@ -34,3 +34,9 @@ on post-fs
 on boot
     chown system system /sys/class/backlight/mt6370-backlight/brightness
     chown system system /sys/class/backlight/mt6370-backlight/bl_power
+
+# The Lineage health HAL (system) sets the charging policy's level limit.
+# The charge current cap belongs to r1-charging (android/charging).
+on boot
+    chown system system /sys/devices/platform/charging-policy/charge_start_level
+    chown system system /sys/devices/platform/charging-policy/charge_stop_level
