@@ -5,8 +5,12 @@ on post-fs-data
 
 # HealthLoop serves Binder only once bpf.progs_loaded=1, which load-bpf-programs
 # sets after post-fs-data; blocking post-fs-data on the check would deadlock.
+# The check runs alongside boot: the service registers only once primed from
+# a real capacity and system_server waits for it (waitForDeclaredService), so
+# holding init here only delayed SurfaceFlinger and the HALs (~4 s). Failure
+# still shuts down through reboot_on_failure.
 on zygote-start
-    exec_start r1-health-initial-ready
+    start r1-health-initial-ready
 
 service vendor.health-default /vendor/bin/hw/android.hardware.health-service.r1
     class hal
