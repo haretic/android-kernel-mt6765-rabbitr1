@@ -28,7 +28,19 @@ on property:init.svc.adbd=running
 # ueventd sets /dev/pvr_sync's owner and mode (ueventd.r1.rc). Its node can
 # appear seconds after the probe, so waiting here only delayed boot.
 on post-fs
-    exec u:r:vendor_modprobe:s0 -- /vendor/bin/modprobe -a -d /vendor/lib/modules pvrsrvkm
+    # Loads alongside the other drivers instead of holding init.
+    start vendor.modprobe-pvr
+
+# gralloc and the composer start with class hal at boot.
+on early-boot
+    wait /sys/module/pvrsrvkm 5
+
+service vendor.modprobe-pvr /vendor/bin/modprobe -a -d /vendor/lib/modules pvrsrvkm
+    disabled
+    oneshot
+    user root
+    group root
+    seclabel u:r:vendor_modprobe:s0
 
 # drmfb (system) dims and blanks the panel through the MT6370 backlight.
 on boot

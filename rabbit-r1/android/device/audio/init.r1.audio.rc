@@ -1,7 +1,19 @@
 # SPDX-License-Identifier: Apache-2.0
 # AW87390 speaker amplifier: a module so its ACF firmware comes from
 # /vendor/firmware. Binding it completes the deferred rabbit-r1 sound card.
+# Loads alongside the other drivers instead of holding init.
 on post-fs
-    # Pulls in snd-soc-aw88395-lib and crc8 (no prompt in 7.1, so it stays a
-    # module selected by the AW library) from modules.dep.
-    exec u:r:vendor_modprobe:s0 -- /vendor/bin/modprobe -a -d /vendor/lib/modules snd-soc-aw87390
+    start vendor.modprobe-aw87390
+
+# The audio HAL starts with class hal at boot.
+on early-boot
+    wait /sys/module/snd_soc_aw87390 5
+
+# Pulls in snd-soc-aw88395-lib and crc8 (no prompt in 7.1, so it stays a
+# module selected by the AW library) from modules.dep.
+service vendor.modprobe-aw87390 /vendor/bin/modprobe -a -d /vendor/lib/modules snd-soc-aw87390
+    disabled
+    oneshot
+    user root
+    group root
+    seclabel u:r:vendor_modprobe:s0
