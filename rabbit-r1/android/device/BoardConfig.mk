@@ -115,3 +115,7 @@ BOARD_VENDOR_KERNEL_MODULES := $(filter-out %/r1-md-probe.ko,$(BOARD_VENDOR_KERN
 
 # Properties whose values contain spaces, which PRODUCT_*_PROPERTIES would split.
 TARGET_VENDOR_PROP += $(DEVICE_PATH)/vendor.prop
+
+# Lineage's animation with the outro ending on the finished logo
+# (rabbit-r1/scripts/trim-bootanimation.py).
+TARGET_BOOTANIMATION := $(DEVICE_PATH)/bootanimation/bootanimation.zip
