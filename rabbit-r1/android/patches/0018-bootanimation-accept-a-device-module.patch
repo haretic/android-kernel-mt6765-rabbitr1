@@ -1,0 +1,61 @@
+From: itskenny0 <0@kenny.cat>
+Subject: [PATCH] vendor/lineage: let a device supply its boot animation as a module
+
+TARGET_BOOTANIMATION copies a path the genrule never declares, so the
+build sandbox hides it and the copy fails. Add
+TARGET_BOOTANIMATION_MODULE: the named module becomes a declared input.
+---
+diff --git a/bootanimation/Android.bp b/bootanimation/Android.bp
+index bcd8e3f..675a83f 100644
+--- a/bootanimation/Android.bp
++++ b/bootanimation/Android.bp
+@@ -16,13 +16,23 @@ genrule {
+     ],
+     out: ["bootanimation.zip"],
+ 
+-    cmd: select((soong_config_variable("lineage_bootanimation", "height"),
++    // A device animation given as a module is a declared input, so the
++    // sandbox can see it; prebuilt_file paths are not.
++    srcs: select(soong_config_variable("lineage_bootanimation", "prebuilt_module"), {
++        any @ module: [module],
++        default: [],
++    }),
++
++    cmd: select((soong_config_variable("lineage_bootanimation", "prebuilt_module"),
++                 soong_config_variable("lineage_bootanimation", "height"),
+                  soong_config_variable("lineage_bootanimation", "width"),
+                  soong_config_variable("lineage_bootanimation", "half_res"),
+                  soong_config_variable("lineage_bootanimation", "prebuilt_file")), {
+-        (any @ height, any @ width, any @ half_res, any @ prebuilt_file):
++        (any, default, default, default, default):
++            "cp $(in) $(out)",
++        (default, any @ height, any @ width, any @ half_res, any @ prebuilt_file):
+             "cp ../../../../../" + prebuilt_file + " $(out)",
+-        (any @ height, any @ width, any @ half_res, default):
++        (default, any @ height, any @ width, any @ half_res, default):
+             "$(location gen-bootanimation.sh)" +
+             " $(out)" +
+             " $(genDir)" +
+@@ -33,7 +43,7 @@ genrule {
+             " " + height +
+             " " + width +
+             " " + half_res,
+-        (default, default, default, default):
++        (default, default, default, default, default):
+             "$(location gen-bootanimation.sh)" +
+             " $(out)" +
+             " $(genDir)" +
+diff --git a/config/BoardConfigSoong.mk b/config/BoardConfigSoong.mk
+index 9b0598d..93bb13f 100644
+--- a/config/BoardConfigSoong.mk
++++ b/config/BoardConfigSoong.mk
+@@ -28,6 +28,9 @@ $(call soong_config_set,lineage_bootanimation,height,$(TARGET_SCREEN_HEIGHT))
+ $(call soong_config_set,lineage_bootanimation,width,$(TARGET_SCREEN_WIDTH))
+ $(call soong_config_set,lineage_bootanimation,half_res,$(TARGET_BOOTANIMATION_HALF_RES))
+ 
++ifneq ($(TARGET_BOOTANIMATION_MODULE),)
++$(call soong_config_set,lineage_bootanimation,prebuilt_module,$(TARGET_BOOTANIMATION_MODULE))
++endif
+ ifneq ($(TARGET_BOOTANIMATION),)
+ $(call soong_config_set,lineage_bootanimation,prebuilt_file,$(TARGET_BOOTANIMATION))
+ endif
