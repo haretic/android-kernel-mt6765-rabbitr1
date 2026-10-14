@@ -1313,7 +1313,7 @@ static void msdc_recheck_sdio_irq(struct msdc_host *host)
 	}
 }
 
-/* r1 bring-up: dump controller state to compare LK, Linux init and failure. */
+/* r1: dump controller state once on the first command error. */
 static void msdc_r1_dump(struct msdc_host *host, const char *when)
 {
 	char prefix[48];
@@ -3168,9 +3168,7 @@ static int msdc_drv_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Cannot ungate clocks!\n");
 		goto release_clk;
 	}
-	msdc_r1_dump(host, "lk");
 	msdc_init_hw(host);
-	msdc_r1_dump(host, "init");
 
 	if (mmc->caps2 & MMC_CAP2_CQE) {
 		host->cq_host = devm_kzalloc(mmc->parent,
@@ -3438,33 +3436,6 @@ static struct platform_driver mt_msdc_driver = {
 		.pm = pm_ptr(&msdc_dev_pm_ops),
 	},
 };
-
-/* r1 bring-up: record the bootloader's MSDC0 pin and top-block setup before probe rewrites it. */
-static int __init msdc_r1_lk_state(void)
-{
-	static const struct { const char *name; phys_addr_t base; size_t len; } r[] = {
-		{ "gpio-mode", 0x10005300, 0x200 },
-		{ "iocfg4", 0x10002000, 0x200 },
-		{ "top0", 0x11cd0000, 0x100 },
-	};
-	char prefix[48];
-	void __iomem *va;
-	int i;
-
-	if (!of_machine_is_compatible("rabbit,r1"))
-		return 0;
-	for (i = 0; i < ARRAY_SIZE(r); i++) {
-		va = ioremap(r[i].base, r[i].len);
-		if (!va)
-			continue;
-		snprintf(prefix, sizeof(prefix), "r1-lk %s ", r[i].name);
-		print_hex_dump(KERN_INFO, prefix, DUMP_PREFIX_OFFSET, 16, 4,
-			       (__force const void *)va, r[i].len, false);
-		iounmap(va);
-	}
-	return 0;
-}
-subsys_initcall(msdc_r1_lk_state);
 
 module_platform_driver(mt_msdc_driver);
 MODULE_LICENSE("GPL v2");
