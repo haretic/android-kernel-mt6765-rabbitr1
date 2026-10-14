@@ -106,12 +106,17 @@ extern struct MIB_INFO_STAT g_arMibInfo[ENUM_BAND_NUM];
 #define DBG_CLASS_TEMP          BIT(7)
 #define DBG_CLASS_MASK          BITS(0, 7)
 
+#ifdef CFG_DEFAULT_DBG_LEVEL
+/* Also the level a userspace "default" log-level request restores. */
+#define DBG_LOG_LEVEL_DEFAULT CFG_DEFAULT_DBG_LEVEL
+#else
 #define DBG_LOG_LEVEL_DEFAULT \
 	(DBG_CLASS_ERROR | \
 	DBG_CLASS_WARN | \
 	DBG_CLASS_STATE | \
 	DBG_CLASS_EVENT | \
 	DBG_CLASS_INFO)
+#endif
 #define DBG_LOG_LEVEL_MORE \
 	(DBG_LOG_LEVEL_DEFAULT | \
 	DBG_CLASS_TRACE)

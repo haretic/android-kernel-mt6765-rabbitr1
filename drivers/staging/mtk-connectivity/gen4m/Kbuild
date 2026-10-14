@@ -45,6 +45,10 @@ ccflags-y += -DCFG_SUPPORT_DUAL_STA=0
 ccflags-y += -DCFG_MTK_ANDROID_WMT=1
 ccflags-y += -DCFG_SUPPORT_CONNINFRA=0
 ccflags-y += -DCFG_ANDORID_CONNINFRA_COREDUMP_SUPPORT=0
+# ERROR | WARN | STATE | EVENT. The vendor default adds INFO, which logs
+# every power-own handshake, parsed ARP/ICMP packet and per-second link
+# statistics and overwrites the kernel log within minutes.
+ccflags-y += -DCFG_DEFAULT_DBG_LEVEL=0x0f
 ccflags-y += -DCFG_SUPPORT_PRE_ON_PHY_ACTION=0
 ccflags-y += -DWMT_IDC_SUPPORT=0
 ccflags-y += -DMTK_WCN_WMT_STP_EXP_SYMBOL_ABSTRACT
