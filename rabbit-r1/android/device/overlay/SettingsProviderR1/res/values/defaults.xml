@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <!-- Default device name, otherwise just the model. Only used when the
+         setting is first created. -->
+    <string name="def_device_name_simple" translatable="false">haretic rabbit r1</string>
+</resources>

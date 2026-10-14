@@ -67,6 +67,7 @@ PRODUCT_PACKAGES += \
     android.hardware.boot-service.r1_recovery \
     FrameworksResR1 \
     SettingsR1 \
+    SettingsProviderR1 \
     LineageSdkR1 \
     r1-expdb
 
