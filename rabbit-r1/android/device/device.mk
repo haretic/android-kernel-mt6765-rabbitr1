@@ -122,6 +122,12 @@ PRODUCT_AAPT_CONFIG := normal
 PRODUCT_AAPT_PREF_CONFIG := hdpi
 PRODUCT_VENDOR_PROPERTIES += ro.sf.lcd_density=186
 
+# Build.SOC_MANUFACTURER / SOC_MODEL. The mainline arm64 kernel has no
+# /proc/cpuinfo Hardware line, so apps have nothing else to identify the SoC.
+PRODUCT_VENDOR_PROPERTIES += \
+    ro.soc.manufacturer=Mediatek \
+    ro.soc.model=MT6765
+
 # MT6765 AFE + MT6357 codec + AW87390 speaker amplifier.
 $(call inherit-product, $(LOCAL_PATH)/audio/audio.mk)
 
