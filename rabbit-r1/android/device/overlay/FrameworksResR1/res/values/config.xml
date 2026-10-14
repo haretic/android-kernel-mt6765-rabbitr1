@@ -8,8 +8,10 @@
          Without a navigation bar SystemUI also never attaches the back gesture. -->
     <bool name="config_showNavigationBar">true</bool>
 
-    <!-- The panel runs at 85 Hz (panel-rabbit-r1); the 60 Hz default made the
-         framework render at 85 / 2 = 42.5 Hz. -->
-    <integer name="config_defaultRefreshRate">85</integer>
-    <integer name="config_defaultPeakRefreshRate">85</integer>
+    <!-- The panel offers 60 to 100 Hz (panel-rabbit-r1). A non-zero default rate caps
+         rendering below the user's peak (60 made 85 Hz render at 42.5 Hz); 0 lets the
+         peak rate act as the default. 100 Hz is the panel's preferred mode, so boot
+         needs no mode switch. -->
+    <integer name="config_defaultRefreshRate">0</integer>
+    <integer name="config_defaultPeakRefreshRate">100</integer>
 </resources>

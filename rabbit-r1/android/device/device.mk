@@ -57,6 +57,7 @@ PRODUCT_PACKAGES += \
     android.hardware.boot-service.r1 \
     android.hardware.boot-service.r1_recovery \
     FrameworksResR1 \
+    SettingsR1 \
     r1-expdb
 
 # The logger validates expdb and bounds its mapping before loading pstore.
