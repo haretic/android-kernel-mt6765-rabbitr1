@@ -6,6 +6,10 @@ parallel_restorecon_dir /sys
 parallel_restorecon_dir /sys/devices
 parallel_restorecon_dir /sys/devices/platform
 parallel_restorecon_dir /sys/devices/platform/soc
+# virtual/block alone holds ~11k files (APEX loop devices, dm, zram) and took
+# 7.7 s as one queue entry.
+parallel_restorecon_dir /sys/devices/virtual
+parallel_restorecon_dir /sys/devices/virtual/block
 
 # PowerVR sync device: opened by every EGL/Vulkan client.
 /dev/pvr_sync             0666   system     graphics
