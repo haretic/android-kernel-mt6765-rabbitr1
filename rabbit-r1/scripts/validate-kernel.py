@@ -64,10 +64,12 @@ def check_mainline(dtb):
     mmc = nodes['/soc/mmc@11230000']
     # mtk-sd requires both states before registering even a legacy-speed host.
     assert mmc['pinctrl-names'] == b'default\0state_uhs\0', 'Missing mandatory MMC pin states'
-    assert mmc['pinctrl-0'] == mmc['pinctrl-1'] == nodes['/soc/pin-controller@10005000/mmc0-pins']['phandle'], 'MMC states must preserve the existing pad configuration'
-    assert mmc['max-frequency'] == struct.pack('>I', 52000000)
-    assert 'cap-mmc-highspeed' in mmc
-    assert not any(key.startswith(('sd-uhs-', 'mmc-hs200-', 'mmc-hs400-', 'mmc-ddr-')) for key in mmc), 'Untested MMC timing enabled'
+    pins = '/soc/pin-controller@10005000/'
+    assert mmc['pinctrl-0'] == nodes[pins+'mmc0-pins']['phandle'], 'MMC default state must keep the LK pad configuration'
+    assert mmc['pinctrl-1'] == nodes[pins+'mmc0-pins-hs200']['phandle'], 'MMC 1.8 V state must use the HS200 pads'
+    assert mmc['max-frequency'] == struct.pack('>I', 200000000)
+    assert 'cap-mmc-highspeed' in mmc and 'mmc-hs200-1_8v' in mmc
+    assert not any(key.startswith(('sd-uhs-', 'mmc-hs400-', 'mmc-ddr-')) for key in mmc), 'Untested MMC timing enabled'
     assert nodes['/soc/usb@11200000']['dr_mode'] == b'peripheral\0'
     secure_ids = {'11009000': 2, '1100f000': 3, '11011000': 4, '1100d000': 6}
     for addr in ['11007000', '11008000', '11009000', '1100f000', '11011000', '11016000', '1100d000']:
