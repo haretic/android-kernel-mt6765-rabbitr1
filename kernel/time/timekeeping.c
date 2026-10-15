@@ -2061,11 +2061,13 @@ void __init timekeeping_init(void)
 	 */
 	wall_to_mono = timespec64_sub(boot_offset, wall_time);
 
+	/* Registering the jiffies clocksource takes clocksource_mutex: not under tk_core.lock. */
+	clock = clocksource_default_clock();
+
 	guard(raw_spinlock_irqsave)(&tk_core.lock);
 
 	ntp_init();
 
-	clock = clocksource_default_clock();
 	if (clock->enable)
 		clock->enable(clock);
 	tk_setup_internals(tks, clock);
