@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <!-- The r1 has no volume keys: media volume sits with brightness in quick settings. -->
+    <bool name="config_qsMediaVolumeSlider">true</bool>
+</resources>

@@ -69,6 +69,7 @@ PRODUCT_PACKAGES += \
     SettingsR1 \
     SettingsProviderR1 \
     LineageSdkR1 \
+    SystemUIR1 \
     r1-expdb
 
 # "gadget" in place of the product="tablet" strings in these apps
