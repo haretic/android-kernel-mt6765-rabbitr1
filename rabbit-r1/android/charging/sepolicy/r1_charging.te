@@ -6,6 +6,11 @@ init_daemon_domain(r1_charging)
 
 type r1_charging_app, domain, coredomain;
 app_domain(r1_charging_app)
+# As platform_app: app_domain() alone cannot even find the activity
+# manager, so the app died in ActivityThread.attach() when opened.
+allow r1_charging_app { app_api_service system_api_service }:service_manager find;
+allow r1_charging_app app_data_file:dir create_dir_perms;
+allow r1_charging_app app_data_file:{ file lnk_file } create_file_perms;
 
 type sysfs_r1_charging, fs_type, sysfs_type;
 system_internal_prop(r1_charging_prop)
