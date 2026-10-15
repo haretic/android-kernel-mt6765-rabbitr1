@@ -186,7 +186,11 @@ static int mtk_musb_power_init(struct device *dev, struct mtk_musb_power *power)
 	power->desc.name = devm_kasprintf(dev, GFP_KERNEL, "%s-gadget", dev_name(dev));
 	if (!power->desc.name)
 		return -ENOMEM;
-	power->desc.type = POWER_SUPPLY_TYPE_USB;
+	/*
+	 * A current budget, not a power source: without VBUS sensing an unplug reads as
+	 * bus suspend, so a USB type would keep Android reporting USB power.
+	 */
+	power->desc.type = POWER_SUPPLY_TYPE_UNKNOWN;
 	power->desc.properties = mtk_musb_power_properties;
 	power->desc.num_properties = ARRAY_SIZE(mtk_musb_power_properties);
 	power->desc.get_property = mtk_musb_power_get;

@@ -74,7 +74,7 @@ struct usb_phy { struct usb_otg *otg; };
 #define MUSB_DEV_MODE(m) ((m)->is_host=false)
 #define dev_err(...) ((void)0)
 enum power_supply_property { POWER_SUPPLY_PROP_ONLINE, POWER_SUPPLY_PROP_CURRENT_MAX, POWER_SUPPLY_PROP_SCOPE };
-enum { POWER_SUPPLY_SCOPE_DEVICE=2, POWER_SUPPLY_TYPE_USB=4 };
+enum { POWER_SUPPLY_SCOPE_DEVICE=2, POWER_SUPPLY_TYPE_UNKNOWN=0, POWER_SUPPLY_TYPE_USB=4 };
 union power_supply_propval { int intval; };
 struct power_supply;
 struct power_supply_desc {
@@ -118,7 +118,7 @@ static struct power_supply *devm_power_supply_register(struct device *dev,const 
  assert(!held && !supply_live && config->fwnode == dev->fwnode);
  if (registration_error) return ERR_PTR(registration_error);
  supply_live=true; supply=(struct power_supply){.desc=desc,.data=config->drv_data};
- assert(!strcmp(desc->name,"11200000.usb-gadget") && desc->type == POWER_SUPPLY_TYPE_USB);
+ assert(!strcmp(desc->name,"11200000.usb-gadget") && desc->type == POWER_SUPPLY_TYPE_UNKNOWN);
  assert(desc->num_properties == 3 && !desc->set_property && !desc->property_is_writeable);
  /* Model callbacks during publication, before the caller has the handle. */
  for (unsigned int i=0; i<desc->num_properties; i++) {
