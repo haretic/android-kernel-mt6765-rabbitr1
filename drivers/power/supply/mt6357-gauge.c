@@ -91,8 +91,8 @@ struct mt6357_r1_soc {
 	struct mt6357_live_observation live;
 	struct r1_battery_observation observation;
 	u64 event_token;
-	bool enabled, running, stopping, notified, notified_valid;
-	int error, notified_capacity;
+	bool enabled, running, stopping, notified, notified_valid, shown_valid;
+	int error, notified_capacity, shown;
 };
 #endif
 
@@ -608,12 +608,32 @@ static int mt6357_soc_errno(const struct r1_battery_estimate *estimate)
 	return -ENODATA;
 }
 
-static int mt6357_soc_percent(r1_battery_int basis_points, int *out)
+/*
+ * An estimate resting on a percent boundary rounded to alternate values on
+ * every 2 s update: a flickering level and a battery uevent each time. Keep
+ * the shown percent until the estimate is 0.75 % away from it.
+ */
+#define MT6357_SOC_HYSTERESIS_BP 75
+
+static int mt6357_soc_percent(struct mt6357_r1_soc *soc, r1_battery_int basis_points,
+			      int *out)
 {
+	r1_battery_int shown_bp;
+
 	if (basis_points < 0 || basis_points > 10000)
 		return -ERANGE;
+	if (soc->shown_valid) {
+		shown_bp = (r1_battery_int)soc->shown * 100;
+		if (basis_points > shown_bp - MT6357_SOC_HYSTERESIS_BP &&
+		    basis_points < shown_bp + MT6357_SOC_HYSTERESIS_BP) {
+			*out = soc->shown;
+			return 0;
+		}
+	}
 	/* Uniform nearest percent, including genuine zero; no positive floor. */
 	*out = (basis_points + 50) / 100;
+	soc->shown = *out;
+	soc->shown_valid = true;
 	return 0;
 }
 
@@ -648,7 +668,7 @@ static int mt6357_soc_capacity_locked(struct mt6357_gauge *gauge, u64 now, int *
 	ret = mt6357_soc_estimate_locked(gauge, now, &estimate);
 	if (ret)
 		return ret;
-	return mt6357_soc_percent(estimate.soc_point_bp, out);
+	return mt6357_soc_percent(&gauge->soc, estimate.soc_point_bp, out);
 }
 
 /*
