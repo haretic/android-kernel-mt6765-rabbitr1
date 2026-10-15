@@ -26,3 +26,5 @@ vendor      /vendor     erofs ro  wait,logical,first_stage_mount,slotselect,avb
 # the default fstab (GetEntryForMountPoint) to find the block devices.
 /dev/block/by-name/nvram   /nvram   emmc defaults defaults
 /dev/block/by-name/proinfo /proinfo emmc defaults defaults
+# Compressed swap in RAM (lz4); enabled by swapon_all once boot completes.
+/dev/block/zram0 none swap defaults zramsize=50%

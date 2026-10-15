@@ -19,6 +19,7 @@ service watchdogd /system/bin/watchdogd 10 20
 
 on property:sys.boot_completed=1
     start watchdogd
+    swapon_all /vendor/etc/fstab.r1
 
 # With the gadget HAL (sys.usb.configfs=2) init never sets sys.usb.state.
 on property:init.svc.adbd=running
