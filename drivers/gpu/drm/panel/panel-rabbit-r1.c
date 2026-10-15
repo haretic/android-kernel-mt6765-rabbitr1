@@ -32,7 +32,6 @@ struct r1_panel_command {
 
 /* Preserve payload lengths, including the extra zero on 0x11 and 0x29. */
 static const struct r1_panel_command r1_panel_init[] = {
-	{ .delay_ms = 120 },
 	{ .len = 6, .data = { 0xff, 0x77, 0x01, 0x00, 0x00, 0x13 } },
 	{ .len = 2, .data = { 0xef, 0x08 } },
 	{ .len = 6, .data = { 0xff, 0x77, 0x01, 0x00, 0x00, 0x10 } },
@@ -85,7 +84,6 @@ static const struct r1_panel_command r1_panel_init[] = {
 	{ .len = 2, .data = { 0x35, 0x00 } },
 	{ .len = 2, .data = { 0x36, 0x00 } },
 	{ .len = 2, .data = { 0x29, 0x00 } },
-	{ .delay_ms = 60 },
 };
 
 static inline struct r1_panel *to_r1_panel(struct drm_panel *panel)
@@ -114,13 +112,17 @@ static int r1_panel_prepare(struct drm_panel *panel)
 	unsigned int i;
 	int ret;
 
-	/* Active-low descriptor: physical high 50ms, low 50ms, high 150ms. */
-	ret = gpiod_direction_output(ctx->reset, 0);
+	/*
+	 * ST7701S timing as in panel-sitronix-st7701: a 20 ms reset pulse,
+	 * then 150 ms, which covers the 120 ms a reset from sleep-out mode
+	 * (LK leaves the panel on) takes to blank. Stock's descriptor held
+	 * 50/50/150 ms plus another 120 ms and 60 ms after display-on:
+	 * 550 ms of every boot and screen-on.
+	 */
+	ret = gpiod_direction_output(ctx->reset, 1);
 	if (ret)
 		return ret;
-	msleep(50);
-	gpiod_set_value_cansleep(ctx->reset, 1);
-	msleep(50);
+	msleep(20);
 	gpiod_set_value_cansleep(ctx->reset, 0);
 	msleep(150);
 
@@ -151,11 +153,10 @@ static int r1_panel_unprepare(struct drm_panel *panel)
 	int ret, sleep_ret;
 
 	ret = r1_panel_write(ctx, display_off, sizeof(display_off));
-	msleep(50);
 	/* Still attempt sleep and reset when display-off fails. */
 	sleep_ret = r1_panel_write(ctx, sleep_in, sizeof(sleep_in));
-	msleep(250);
-	msleep(50);
+	/* Sleep-in takes 120 ms; so does a reset that starts in sleep-out. */
+	msleep(120);
 	gpiod_set_value_cansleep(ctx->reset, 1);
 	msleep(120);
 
