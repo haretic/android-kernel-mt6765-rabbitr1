@@ -16,7 +16,7 @@ The pure API pins these exact SHA-256 values:
 | Prefix | SHA-256 |
 | --- | --- |
 | RabbitOS v0.8.293 stock | `534c72bea2bbb2173786594f650c2c1ec454258aefaa05de699349e26b71417e` |
-| Reviewed patched prefix | `e4299344da5d5dd1a202b4964de764c43557f97203799e77bab55ac962973de0` |
+| Reviewed patched prefix | `9cf223eb1829294f3f8b6e52fdfaec291a76072289ddba09a7cb8248d417ffb1` |
 
 “Current patched” refers to this one hash, not any later file in `dist/lk`.
 A new build that changes the prefix requires a reviewed pin update. Neither a
