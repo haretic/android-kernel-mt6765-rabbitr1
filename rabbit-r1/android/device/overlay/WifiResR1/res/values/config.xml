@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <!-- Userdebug builds otherwise force Wi-Fi verbose logging on, with no
+         way to turn it off: thousands of WifiThroughputPredictor,
+         WifiScoreCard and WifiDataStall lines an hour. The developer option
+         still turns it on. -->
+    <integer name="config_wifiVerboseLoggingAlwaysOnLevel">0</integer>
+</resources>
