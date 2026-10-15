@@ -67,3 +67,8 @@ endif
 # unconfigured and the mainline set_bdaddr service programs one via MGMT.
 PRODUCT_PACKAGES += \
     bdaddr
+
+# The HAL's prebuilt.xml declares only android.hardware.bluetooth; the
+# MT6765 CONSYS controller is dual mode, and apps look for this one to scan.
+PRODUCT_COPY_FILES += \
+    frameworks/native/data/etc/android.hardware.bluetooth_le.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.bluetooth_le.xml
