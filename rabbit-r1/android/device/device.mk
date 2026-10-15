@@ -140,6 +140,14 @@ PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/logging/r1-logcat-kmsg.sh:$(TARGET_COPY_OUT_SYSTEM_EXT)/bin/r1-logcat-kmsg.sh \
     $(LOCAL_PATH)/logging/init.r1-logcat-kmsg.rc:$(TARGET_COPY_OUT_SYSTEM_EXT)/etc/init/init.r1-logcat-kmsg.rc
 
+# Default attestation keybox for the KeyMint HAL. The owner can override it at runtime by
+# dropping a replacement at /data/vendor/keymint/keybox.xml; this is the built-in fallback.
+# It is private, next to the release keys; without it KeyMint signs with its software keys.
+ifneq ($(wildcard vendor/lineage-priv/keymint/keybox.xml),)
+PRODUCT_COPY_FILES += \
+    vendor/lineage-priv/keymint/keybox.xml:$(TARGET_COPY_OUT_VENDOR)/etc/keymint/keybox.xml
+endif
+
 # 140 matches the panel's physical density but made the UI too small to use;
 # 186 is the display size picked on the device.
 TARGET_SCREEN_WIDTH := 480
