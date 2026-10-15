@@ -31,3 +31,10 @@ genfscon sysfs /devices/platform/soc/18000000.wifi/wakeup u:object_r:sysfs_wakeu
 # Charge level limit, written by the Lineage health HAL.
 genfscon sysfs /devices/platform/charging-policy/charge_start_level u:object_r:sysfs_r1_charge_level:s0
 genfscon sysfs /devices/platform/charging-policy/charge_stop_level u:object_r:sysfs_r1_charge_level:s0
+
+# Thermal zones, their hwmon views and the AP NTC: sysfs_thermal, so that apps
+# can read temperatures (system_ext/untrusted_app_thermal.te). The thermal HAL
+# uses thermal netlink, not these files.
+genfscon sysfs /class/thermal u:object_r:sysfs_thermal:s0
+genfscon sysfs /devices/virtual/thermal u:object_r:sysfs_thermal:s0
+genfscon sysfs /devices/platform/thermal-sensor-ap/hwmon u:object_r:sysfs_thermal:s0

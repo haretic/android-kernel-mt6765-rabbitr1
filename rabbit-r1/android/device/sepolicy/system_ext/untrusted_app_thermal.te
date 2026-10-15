@@ -1,0 +1,3 @@
+# Temperature readers (CPU-Z, DevCheck...) read /sys/class/thermal and hwmon.
+# Read only: app_neverallows.te forbids writes to sysfs.
+r_dir_file(untrusted_app_all, sysfs_thermal)
