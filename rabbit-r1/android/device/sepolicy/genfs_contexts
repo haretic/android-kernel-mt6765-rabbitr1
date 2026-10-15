@@ -38,3 +38,5 @@ genfscon sysfs /devices/platform/charging-policy/charge_stop_level u:object_r:sy
 genfscon sysfs /class/thermal u:object_r:sysfs_thermal:s0
 genfscon sysfs /devices/virtual/thermal u:object_r:sysfs_thermal:s0
 genfscon sysfs /devices/platform/thermal-sensor-ap/hwmon u:object_r:sysfs_thermal:s0
+# The UDC node; system_server watches its state for USB connection changes.
+genfscon sysfs /devices/platform/soc/11200000.usb/musb-hdrc.0/udc u:object_r:sysfs_udc:s0
