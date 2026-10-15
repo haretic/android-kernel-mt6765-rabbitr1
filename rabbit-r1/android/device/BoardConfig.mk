@@ -95,7 +95,10 @@ BOARD_BUILD_SUPER_IMAGE_BY_DEFAULT := true
 
 # Development images use the Android build's test keys. LK must remain unlocked.
 BOARD_AVB_ENABLE := true
-BOARD_AVB_MAKE_VBMETA_IMAGE_ARGS += --flags 3
+# Hashtree off (dm-verity) only. With verification also off, LK's libavb
+# reads every partition it asks for in full: boot plus the unused 64 MiB
+# vendor_boot, 1.2 s. Verified, it reads only the hashed 29 MiB of boot.
+BOARD_AVB_MAKE_VBMETA_IMAGE_ARGS += --flags 1
 
 TARGET_ENABLE_MEDIADRM_64 := true
 TARGET_LMKD_STATS_LOG := true
