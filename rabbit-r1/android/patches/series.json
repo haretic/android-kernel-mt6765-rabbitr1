@@ -927,5 +927,33 @@
         "after_sha256": "5dd841bfa9abb56ce46adce6365a5c8c8ded69faf792605fca22ce55192220e6"
       }
     ]
+  },
+  {
+    "project": "frameworks/base",
+    "base_commit": "a886ea52ddd7ebe77ddce9cbf38e9d65c1a81ea2",
+    "patch": "0019-quick-settings-media-volume-slider.patch",
+    "sha256": "2acbbbdd4550d36091b49572e863ebac14c5713816c52daa5a37c03e554f43e2",
+    "files": [
+      {
+        "path": "packages/SystemUI/res/values/config.xml",
+        "before_sha256": "66f5c10a5207734b3fc955fbea7c048afdd029460d8f7f5c40d20d189e4a0df8",
+        "after_sha256": "2daf7468bb68bac5db56b0cb5444e5174049eb3cab4e6901d25e507683bf5508"
+      },
+      {
+        "path": "packages/SystemUI/src/com/android/systemui/qs/composefragment/QSFragmentCompose.kt",
+        "before_sha256": "53c27214e2ab9e47bb42c2df991ae460067505f6f8f65fbc82c02c6362bb5682",
+        "after_sha256": "6d1303910aa835cafd3ff01cb055b042d154056268544af868e8a630ed785bd4"
+      },
+      {
+        "path": "packages/SystemUI/src/com/android/systemui/qs/ui/viewmodel/QuickSettingsContainerViewModel.kt",
+        "before_sha256": "cbd690653284b2e9e7d0e4c5c03c6a553187a37de0db531817c27b3fac3274cf",
+        "after_sha256": "3bbbdd895ca596d4468a3fefb40c98d249b16d2b153469b2ab7bcc7141fa545e"
+      },
+      {
+        "path": "packages/SystemUI/tests/utils/src/com/android/systemui/qs/ui/viewmodel/QuickSettingsContainerViewModelKosmos.kt",
+        "before_sha256": "9e63c6658ebf877592e849c894efff7d6d631c46add85913e22162a6b895d33a",
+        "after_sha256": "7ee62425c2147d9bc16814c8f3bb800874601c494621a1a558fd23f6e697c661"
+      }
+    ]
   }
 ]
