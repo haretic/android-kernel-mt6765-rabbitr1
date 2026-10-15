@@ -133,7 +133,7 @@ static void boundaries(void)
     struct r1_battery_policy p = base_policy(), bad;
     struct r1_battery_observation o = base_observation();
     struct r1_battery_session s = {0}, saved, zero = {0};
-    struct r1_battery_estimate e, output, untouched;
+    struct r1_battery_estimate e, output, untouched, first;
     unsigned int i;
     r1_battery_int offsets_positive[] = {
 #define OFF(field) (r1_battery_int)offsetof(struct r1_battery_policy,field)
@@ -212,8 +212,24 @@ static void boundaries(void)
     CHECK(e.discharged_uah.low==20099 && e.discharged_uah.high==20201);
     s=zero; o=base_observation(); o.finished_ns+=p.max_capture_ns;
     e=step(&s,&p,&o); CHECK(e.validity==R1_BATTERY_FRESH);
+    /* A capture that moved is skipped: no estimate from nothing... */
     s=zero; o.finished_ns++;
-    e=step(&s,&p,&o); CHECK(e.reason==R1_BATTERY_REASON_LIMIT);
+    e=step(&s,&p,&o);
+    CHECK(e.validity==R1_BATTERY_UNAVAILABLE && e.reason==R1_BATTERY_REASON_INITIAL);
+    /* ...and an accepted one stays exactly as it was. */
+    s=zero; o=base_observation();
+    first=step(&s,&p,&o);
+    CHECK(first.validity==R1_BATTERY_FRESH);
+    o.sequence++; o.started_ns+=1000000000; o.finished_ns+=1000000000;
+    o.endpoint[1].current_ua=o.endpoint[0].current_ua+p.current_motion_ua+100;
+    e=step(&s,&p,&o);
+    CHECK(e.validity==R1_BATTERY_FRESH && e.reason==first.reason &&
+          e.accepted_ns==first.accepted_ns && e.soc_point_bp==first.soc_point_bp);
+    o.sequence++; o.started_ns+=1000000000; o.finished_ns+=1000000000;
+    o.endpoint[1].current_ua=o.endpoint[0].current_ua;
+    o.endpoint[1].temperature_decic=o.endpoint[0].temperature_decic+10;
+    e=step(&s,&p,&o);
+    CHECK(e.validity==R1_BATTERY_FRESH && e.accepted_ns==first.accepted_ns);
     /* Duration product splitting: exactly one hour at 2 A means 2,000,000 uAh;
      * explicit test budget permits the wide interval; this is not board policy. */
     s=zero; o=base_observation(); bad=p;
