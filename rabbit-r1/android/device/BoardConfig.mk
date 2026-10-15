@@ -55,15 +55,12 @@ BOARD_MKBOOTIMG_ARGS += \
 BOARD_KERNEL_CMDLINE += $(filter-out binder.impl=rust,$(MAINLINE_COMMON_KERNEL_PARAMS))
 BOARD_KERNEL_CMDLINE += $(MAINLINE_COMMON_ANDROIDBOOT_PARAMS)
 BOARD_KERNEL_CMDLINE += bootopt=64S3,32N2,64N2 androidboot.fstab_suffix=r1
-BOARD_KERNEL_CMDLINE += earlycon=uart8250,mmio32,0x11002000 console=ttyS0,921600n8
-BOARD_KERNEL_CMDLINE += clk_ignore_unused regulator_ignore_unused
 # Reboot on panic; the kernel default would hang.
 BOARD_KERNEL_CMDLINE += panic=-1
-# The stock ATF offers PSCI SYSTEM_SUSPEND, but it runs SPM firmware that only
-# the stock kernel hands over. "mem" must mean suspend-to-idle.
-BOARD_KERNEL_CMDLINE += mem_sleep_default=s2idle
-# fbcon shows the LK splash from display bind until Android draws.
-BOARD_KERNEL_CMDLINE += fbcon=logo-pos:center,logo-count:1 vt.global_cursor_default=0
+# The rest comes from the DT bootargs, which LK passes ahead of this: earlycon
+# and console, clk/regulator_ignore_unused, mem_sleep_default=s2idle (the stock
+# ATF's SYSTEM_SUSPEND needs SPM firmware only the stock kernel hands over) and
+# the fbcon logo settings. LK's combined command line has little room left.
 
 BOARD_USES_RECOVERY_AS_BOOT := true
 TARGET_NO_RECOVERY := false
