@@ -10,7 +10,9 @@ import hashlib
 PARTITION_BYTES = 1048576
 PAYLOAD_BYTES = 864000
 STOCK_SHA256 = '534c72bea2bbb2173786594f650c2c1ec454258aefaa05de699349e26b71417e'
-PATCHED_SHA256 = 'e4299344da5d5dd1a202b4964de764c43557f97203799e77bab55ac962973de0'
+PATCHED_SHA256 = '9cf223eb1829294f3f8b6e52fdfaec291a76072289ddba09a7cb8248d417ffb1'
+# Before the vendor_boot request patch; still on devices until rewritten.
+PREVIOUS_PATCHED_SHA256 = 'e4299344da5d5dd1a202b4964de764c43557f97203799e77bab55ac962973de0'
 SLOTS = ('lk_a', 'lk_b')
 
 
@@ -35,6 +37,8 @@ def profile(original):
         return 'stock-v0.8.293'
     if prefix == PATCHED_SHA256:
         return 'current-patched'
+    if prefix == PREVIOUS_PATCHED_SHA256:
+        return 'previous-patched'
     if original == bytes(PARTITION_BYTES):
         return 'blank-zero'
     if original == b'\xff' * PARTITION_BYTES:
@@ -61,7 +65,8 @@ def prepare(original_a, original_b, patched):
             sha(patched) == PATCHED_SHA256, 'Unreviewed patched LK payload')
     originals = (original_a, original_b)
     profiles = tuple(profile(item) for item in originals)
-    require(any(item in ('stock-v0.8.293', 'current-patched') for item in profiles),
+    require(any(item in ('stock-v0.8.293', 'current-patched', 'previous-patched')
+                for item in profiles),
             'At least one recognized LK prefix is required')
     images = tuple((name, patched + original[PAYLOAD_BYTES:])
                    for name, original in zip(SLOTS, originals))
@@ -84,7 +89,8 @@ def validate(prepared, original_a, original_b, patched):
             sha(patched) == PATCHED_SHA256, 'Unreviewed patched LK payload')
     originals = (original_a, original_b)
     profiles = tuple(profile(item) for item in originals)
-    require(any(item in ('stock-v0.8.293', 'current-patched') for item in profiles),
+    require(any(item in ('stock-v0.8.293', 'current-patched', 'previous-patched')
+                for item in profiles),
             'At least one recognized LK prefix is required')
     require(prepared.originals == tuple((name, sha(original))
             for name, original in zip(SLOTS, originals)), 'Original LK binding differs')
