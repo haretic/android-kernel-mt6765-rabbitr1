@@ -27,6 +27,7 @@ It combines the requested cap with these independent constraints:
 * A charge level limit (`charge_start_level`/`charge_stop_level`) stops charging
   at the stop level and resumes at the start level. Meanwhile the input keeps
   powering the system with charging inhibited, so the battery holds its level.
+  A momentarily unknown level keeps the previous decision.
   **Settings → Battery → Charging control** sets it through the LineageOS
   health HAL in "limit" mode (50–100 %, resuming 10 % below the limit).
 * BC1.2 DCP/CDP permit at most 1 A. SDP uses the gadget's actual enumeration and
@@ -54,8 +55,10 @@ uses the 500 mA ICHG floor and the ramp-down before clearing CHG_EN, but not the
 RT5081/MT6370 hidden-register current workaround.
 
 `richtek,managed-charging` makes the charger start with input isolated. Successful
-policy enable calls renew a ten-second software lease. Expiry requests input
-isolation and charge inhibition; a failed isolation is retried. Ordinary telemetry
+policy enable calls renew a ten-second software lease. Expiry with charging
+enabled requests input isolation and charge inhibition; a failed isolation is
+retried. With charging already inhibited, as during a charge level hold, the
+input stays up and keeps powering the system. Ordinary telemetry
 reads do not renew it. The stock hardware watchdog is disabled, as in Rabbit's
 initialization: arbitrary I2C traffic feeds that watchdog, so it cannot establish
 policy freshness. The software lease cannot protect against a stalled kernel,

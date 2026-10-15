@@ -435,6 +435,10 @@ static int devm_add_action_or_reset(struct device *d, void (*fn)(void *), void *
     assert((fn == mt6370_chg_quiesce || fn == mt6370_chg_inhibit) && arg == &priv);
     int ret=step(); if (ret) fn(arg); else add(fn == mt6370_chg_quiesce ? RES_QUIESCE : RES_INHIBIT); return ret;
 }
+/* The VBUS wake IRQ: device-managed wakeup state with no bus or charger effect. */
+static int devm_device_init_wakeup(struct device *d) { return 0; }
+static int devm_pm_set_wake_irq(struct device *d, int irq)
+{ assert(irq == 100+MT6370_IRQ_UVP_D_EVT); return 0; }
 static int platform_get_irq_byname(struct platform_device *p, const char *name)
 {
     if (step()) return -ENOMEM;
@@ -684,7 +688,8 @@ static void check_controls(void)
         unsigned int request=priv.ichg_request;
         int ret=set_behaviour(POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE);
         assert(ret == (enabled && sel>49 ? -ERANGE : 0));
-        assert(!(regs[0x112]&1) && !priv.ichg_lock.owner && notifications == 1);
+        /* Only a change or a failure is reported. */
+        assert(!(regs[0x112]&1) && !priv.ichg_lock.owner && notifications == (ret || enabled));
         assert(priv.ichg_request == request && priv.ichg_valid == !ret);
         for (unsigned int i=0; i<ARRAY_SIZE(regs); i++)
             if (i != 0x112 && i != STOCK_CURRENT_REG) assert(regs[i] == before[i]);
@@ -695,10 +700,12 @@ static void check_controls(void)
         int got=123; assert(!get_behaviour(&got) && got == POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE); reads++;
         unsigned int prior_nops=nops, prior_time=slept_us;
         assert(!set_behaviour(POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE));
-        assert(nops == prior_nops+1 && slept_us == prior_time); stops_checked++;
+        /* CHG_EN is read before and after to report only changes. */
+        assert(nops == prior_nops+3 && slept_us == prior_time); stops_checked++;
         if (ret) {
             unsigned int start=nops;
-            assert(set_behaviour(POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO) == -EAGAIN && nops == start); rejected++;
+            /* Only the CHG_EN read that precedes the change report. */
+            assert(set_behaviour(POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO) == -EAGAIN && nops == start+1); rejected++;
             assert(!set_current(request));
         }
         assert(!set_behaviour(POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO));
@@ -729,7 +736,7 @@ static void check_controls(void)
         }
     }
     control_setup(false,4); priv.ichg_valid=false;
-    assert(set_behaviour(POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO) == -EAGAIN && !nops && !(regs[0x112]&1)); rejected++;
+    assert(set_behaviour(POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO) == -EAGAIN && nops == 1 && !(regs[0x112]&1)); rejected++;
     assert(!set_current(500000) && priv.ichg_valid);
     assert(!set_behaviour(POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO) && (regs[0x112]&1));
     assert(current_value() == 500000 && !(regs[STOCK_HIDDEN_REG]&0x60)); resumes++;
@@ -744,7 +751,9 @@ static void check_controls(void)
         control_setup(mode == POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE,9);
         assert(!set_behaviour(mode)); unsigned int count=nops;
         struct bus_op initial[32]; assert(count<=ARRAY_SIZE(initial)); memcpy(initial,trace,count*sizeof(*trace));
-        for (unsigned int primary=0; primary<count; primary++) {
+        /* The first and last operations are the change report's CHG_EN reads. */
+        assert(count>=2 && initial[0].type == 'r' && initial[count-1].type == 'r');
+        for (unsigned int primary=1; primary+1<count; primary++) {
             if (initial[primary].type == 'd') continue;
             for (unsigned int effect=0; effect<2; effect++)
             for (unsigned int accepted=0; accepted<=4; accepted++) {
@@ -760,7 +769,7 @@ static void check_controls(void)
                 unsigned int completed=nops;
                 struct bus_op first_trace[32]; assert(completed<=ARRAY_SIZE(first_trace)); memcpy(first_trace,trace,completed*sizeof(*trace));
                 unsigned int start=nops;
-                assert(set_behaviour(POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO) == -EAGAIN && nops == start);
+                assert(set_behaviour(POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO) == -EAGAIN && nops == start+1);
                 /* Recovery requires a successful current-setting request; it never enables by itself. */
                 memset(errors,0,sizeof(errors)); nops=0;
                 assert(!set_behaviour(POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE) && !(regs[0x112]&1));
@@ -776,7 +785,7 @@ static void check_controls(void)
                     /* A failed stop may leave charging active. Do not claim otherwise. */
                     if (regs[0x112]&1) assert(first_trace[second].reg == 0x112);
                     unsigned int start=nops;
-                    assert(set_behaviour(POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO) == -EAGAIN && nops == start);
+                    assert(set_behaviour(POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO) == -EAGAIN && nops == start+1);
                     memset(errors,0,sizeof(errors)); nops=0;
                     assert(!set_behaviour(POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE) && !(regs[0x112]&1));
                     assert(!set_current(1000000) && !(regs[0x112]&1));
@@ -796,7 +805,8 @@ static void check_controls(void)
     for (uintptr_t i=0; i<ARRAY_SIZE(threads); i++) assert(!pthread_create(&threads[i],NULL,control_worker,(void *)(i+2)));
     for (unsigned int i=0; i<ARRAY_SIZE(threads); i++) assert(!pthread_join(threads[i],NULL));
     assert(!gate && !priv.ichg_lock.owner && !(regs[0x112]&1) && priv.ichg_valid);
-    assert(notifications == 600);
+    /* 200 current writes, plus one per CHG_EN change: on at the start, off at the end. */
+    assert(notifications > 200 && notifications <= 600 && (notifications-200)%2 == 1);
     /* No bus transaction can cross into another thread while a ramp delay is pending. */
     for (unsigned int i=0; i<nops; i++) if (trace[i].type == 'd') {
         assert(i && i+2<nops);
@@ -867,9 +877,9 @@ static void check_powerpath(void)
         assert(!input_set(POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,0) && irq_disables == 1);
         assert(!set_current(500000));
         unsigned int before=nops;
-        assert(set_behaviour(POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO) == -EAGAIN && nops == before);
+        assert(set_behaviour(POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO) == -EAGAIN && nops == before+1);
         assert(!input_set(POWER_SUPPLY_PROP_INPUT_VOLTAGE_LIMIT,4600001));
-        assert(nops == before && priv.mivr_request == 4700000 && (regs[0x116]>>1) == 95);
+        assert(nops == before+1 && priv.mivr_request == 4700000 && (regs[0x116]>>1) == 95);
         unsigned int request=100000+selector*50000;
         if (selector<63) request+=49999;
         assert(!input_set(POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,request));
@@ -917,7 +927,7 @@ static void check_powerpath(void)
                 unsigned int completed=nops;
                 struct bus_op failed[256]; assert(completed<ARRAY_SIZE(failed)); memcpy(failed,trace,completed*sizeof(*trace));
                 clear_io(); assert(!set_current(1000000)); unsigned int start=nops;
-                assert(set_behaviour(POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO) == -EAGAIN && nops == start);
+                assert(set_behaviour(POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO) == -EAGAIN && nops == start+1);
                 assert(!input_set(POWER_SUPPLY_PROP_INPUT_VOLTAGE_LIMIT,4400000));
                 assert(!input_set(POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,100000));
                 assert(!priv.input_suspended && !(regs[0x111]&8) && !(regs[0x112]&1));
@@ -1232,10 +1242,23 @@ static void check_policy_guard(void)
     mt6370_chg_policy_watchdog(&priv.policy_watchdog.work); // Early publication: no handle yet.
     priv.psy=&psy;
     assert(priv.input_suspended && (regs[0x111]&8) && !(regs[0x112]&1));
+    /* With charging inhibited (a charge level hold) the input stays: nothing charges. */
+    assert(!input_set(POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,500000));
+    assert(!set_current(500000)); assert(!set_behaviour(POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO));
+    assert(!set_behaviour(POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE));
+    jiffies=priv.policy_deadline; before=nops;
+    mt6370_chg_policy_watchdog(&priv.policy_watchdog.work);
+    assert(!priv.input_suspended && !(regs[0x111]&8) && !(regs[0x112]&1));
+    /* An unreadable CHG_EN isolates. */
+    assert(!set_behaviour(POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO));
+    jiffies=priv.policy_deadline; errors[nops]=EIO;
+    mt6370_chg_policy_watchdog(&priv.policy_watchdog.work);
+    assert(priv.input_suspended && (regs[0x111]&8) && !(regs[0x112]&1));
+    memset(errors,0,sizeof(errors));
     /* A failed timeout write still attempts stop and schedules another isolation. */
     assert(!input_set(POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,500000));
     assert(!set_current(500000)); assert(!set_behaviour(POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO));
-    jiffies=priv.policy_deadline; errors[nops]=EIO;
+    jiffies=priv.policy_deadline; errors[nops+1]=EIO;
     mt6370_chg_policy_watchdog(&priv.policy_watchdog.work);
     assert(watchdog_delay==HZ && !(regs[0x112]&1)); memset(errors,0,sizeof(errors));
     mt6370_chg_policy_watchdog(&priv.policy_watchdog.work);

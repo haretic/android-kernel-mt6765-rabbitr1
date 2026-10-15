@@ -44,9 +44,10 @@ struct r1_charge_policy {
     struct delayed_work work;
     struct notifier_block notifier;
     atomic_t generation;
-    bool stopping, suspended, cold, hot, full, session, timeout, notifier_registered, awake;
+    bool stopping, suspended, cold, hot, full, session, timeout, notifier_registered, awake, level_hold;
     unsigned long session_start;
     int requested_ua, measured_ua, error;
+    int charge_start_level, charge_stop_level;
     struct { int reason; } applied;
 };
 static struct platform_device consumer, providers[4];

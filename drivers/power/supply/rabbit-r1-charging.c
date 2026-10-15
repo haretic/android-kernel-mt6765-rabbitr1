@@ -144,10 +144,14 @@ static struct r1_charge_target r1_charge_decide(struct r1_charge_policy *p,
 	 * Charge level limit: stop at charge_stop_level, resume once the
 	 * level falls to charge_start_level. The input keeps powering the
 	 * system meanwhile, so the battery holds its level. An unknown level
-	 * charges normally; the voltage limits above still end the charge.
+	 * keeps the previous decision: the gauge drops its estimate for a few
+	 * seconds at times, and charging in each gap pulsed the battery. With
+	 * no level yet it charges; the voltage limits above still end that.
 	 */
-	if (p->charge_stop_level >= 100 || s->capacity < 0)
+	if (p->charge_stop_level >= 100)
 		p->level_hold = false;
+	else if (s->capacity < 0)
+		; /* unknown: keep */
 	else if (s->capacity >= p->charge_stop_level)
 		p->level_hold = true;
 	else if (s->capacity <= p->charge_start_level)

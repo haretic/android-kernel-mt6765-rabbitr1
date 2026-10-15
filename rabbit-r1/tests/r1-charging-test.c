@@ -169,7 +169,8 @@ static void levels(void)
         for (int step=0; step<=300; step++) {
             int cap = step<=100 ? step : step<=200 ? 200-step : (step%7 ? step-200 : -1);
             s=good(); s.capacity=cap; t=r1_charge_decide(&p,&s);
-            if (stop>=100 || cap<0) held=false;
+            if (stop>=100) held=false;
+            else if (cap<0) ; /* unknown keeps the decision */
             else if (cap>=stop) held=true;
             else if (cap<=start) held=false;
             assert((t.reason==R1_LEVEL_LIMIT)==held);
@@ -177,6 +178,9 @@ static void levels(void)
             cases++;
         }
     }
+    /* Before any known level, an unknown one charges. */
+    reset(); p.charge_stop_level=50; s=good(); s.capacity=-1;
+    assert(r1_charge_decide(&p,&s).charge_ua==1000000);
     reset(); p.charge_stop_level=50; s=good(); s.capacity=60; s.plugged=0;
     assert(r1_charge_decide(&p,&s).reason==R1_UNPLUGGED);
     s=good(); s.capacity=60; s.temperature=10; assert(r1_charge_decide(&p,&s).reason==R1_TEMPERATURE);
