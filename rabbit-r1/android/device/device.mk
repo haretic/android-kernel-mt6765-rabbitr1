@@ -71,6 +71,20 @@ PRODUCT_PACKAGES += \
     LineageSdkR1 \
     r1-expdb
 
+# "gadget" in place of the product="tablet" strings in these apps
+# (rabbit-r1/scripts/gen-gadget-overlays.py).
+PRODUCT_PACKAGES += \
+    GadgetCompanionDeviceManagerR1 \
+    GadgetFrameworkResR1 \
+    GadgetPackageInstallerR1 \
+    GadgetSettingsR1 \
+    GadgetSetupWizardR1 \
+    GadgetStorageManagerR1 \
+    GadgetSystemUIR1
+
+PRODUCT_PACKAGES += \
+    WifiResR1
+
 # The logger validates expdb and bounds its mapping before loading pstore.
 PRODUCT_VENDOR_PROPERTIES += ro.vendor.r1.expdb.enabled=1
 
