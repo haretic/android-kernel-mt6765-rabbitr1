@@ -936,8 +936,8 @@
  {
   "project": "frameworks/base",
   "base_commit": "a886ea52ddd7ebe77ddce9cbf38e9d65c1a81ea2",
-  "patch": "0019-quick-settings-media-volume-slider.patch",
-  "sha256": "2acbbbdd4550d36091b49572e863ebac14c5713816c52daa5a37c03e554f43e2",
+  "patch": "0019-quick-settings-media-volume-slider-and-udc-usb-device-manager.patch",
+  "sha256": "c12325481d81b2f41540cba6623a6f0d0cceaa0baf44f52ebaacc8a87600ce02",
   "files": [
    {
     "path": "packages/SystemUI/res/values/config.xml",
@@ -958,6 +958,11 @@
     "path": "packages/SystemUI/tests/utils/src/com/android/systemui/qs/ui/viewmodel/QuickSettingsContainerViewModelKosmos.kt",
     "before_sha256": "9e63c6658ebf877592e849c894efff7d6d631c46add85913e22162a6b895d33a",
     "after_sha256": "7ee62425c2147d9bc16814c8f3bb800874601c494621a1a558fd23f6e697c661"
+   },
+   {
+    "path": "services/usb/java/com/android/server/usb/UsbService.java",
+    "before_sha256": "7735afea26ad9b72bdb7d9ff9c18835dbd07b8b1ee093a42b0d1e244b6c6fc52",
+    "after_sha256": "6f6f90b5e066eb0e63e7cf070b4039b8c68c053b181ceee7c8de08dd7ed5377c"
    }
   ]
  },

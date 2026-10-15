@@ -23,4 +23,7 @@
         <item>0.75</item>
         <item>1.0</item>
     </string-array>
+    <!-- The mainline kernel has no android_usb class; UsbDeviceManager follows the
+         gadget through /sys/class/udc/<udc>/state instead. -->
+    <bool name="config_enableUdcSysfsUsbStateUpdate">true</bool>
 </resources>
