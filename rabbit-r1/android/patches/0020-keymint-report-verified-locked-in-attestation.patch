@@ -1,0 +1,20 @@
+diff --git a/ta/src/cert.rs b/ta/src/cert.rs
+index ce07450..5f1cb80 100644
+--- a/ta/src/cert.rs
++++ b/ta/src/cert.rs
+@@ -1325,8 +1325,13 @@ impl<'a> From<&'a keymint::BootInfo> for RootOfTrust<'a> {
+         };
+         RootOfTrust {
+             verified_boot_key,
+-            device_locked: info.device_boot_locked,
+-            verified_boot_state: info.verified_boot_state.into(),
++            // r1: report a verified, locked boot in the attestation Root of Trust regardless of
++            // the real boot state. This affects ONLY the attestation certificate extension; the
++            // keyblob key-encryption-key derives from self.rot_data (set_boot_info) via
++            // tag::hidden, which keeps the real orange/unlocked values, so FBE/keystore are
++            // unaffected. The bootloader stays honestly unlocked.
++            device_locked: true,
++            verified_boot_state: VerifiedBootState::Verified,
+             verified_boot_hash: &info.verified_boot_hash[..],
+         }
+     }
