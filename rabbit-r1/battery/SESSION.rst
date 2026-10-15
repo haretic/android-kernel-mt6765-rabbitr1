@@ -76,7 +76,13 @@ and publication width. There are no hidden fallback values:
   violations discard continuity and permit a new, complete live seed.
 * Observed absolute-current ceiling and endpoint voltage/current/temperature
   motion limits. Both endpoint temperatures must map to the same whole-C
-  profile, within -10..50 C **before** truncation/clamping.
+  profile, within -10..50 C **before** truncation/clamping. A capture that
+  breaks a motion limit, the whole-C match or the maximum capture duration
+  moved while it was taken; it is skipped, not rejected. The ordering
+  watermark advances, the current estimate is kept unchanged and keeps
+  widening until its own expiry. Near full, constant-voltage regulation swings
+  the current across zero between endpoints; rejecting those captures blanked
+  the capacity until the next steady one.
 * A separately justified absolute-current envelope over the entire unsampled
   interval, model/sensor charge error per endpoint, cutoff-model charge error,
   and CAR-delta error over the bounded epoch. These error budgets include

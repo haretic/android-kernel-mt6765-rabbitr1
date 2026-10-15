@@ -57,6 +57,14 @@ def require(condition, why, detail=0):
     if not condition: raise Reject(why, detail)
 
 
+class Skip(Exception):
+    """The capture moved while it was taken: no evidence either way."""
+
+
+def steady(condition):
+    if not condition: raise Skip()
+
+
 def observed(p, o):
     start, end, endpoints = o['start'], o['end'], o['ep']
     require(not o['error'], 'ACQUISITION', o['error'])
@@ -73,9 +81,9 @@ def observed(p, o):
         require(abs(e['i']) <= p['observed'], 'LIMIT')
     a, b = endpoints
     temp = whole_c(a['t'])
-    require(temp == whole_c(b['t']), 'TEMPERATURE')
-    require(end-start <= p['capture'], 'LIMIT')
-    for name in ('v', 'i', 't'): require(abs(a[name]-b[name]) <= p[name+'_motion'], 'LIMIT')
+    steady(temp == whole_c(b['t']))
+    steady(end-start <= p['capture'])
+    for name in ('v', 'i', 't'): steady(abs(a[name]-b[name]) <= p[name+'_motion'])
     require(raw_class(a['raw']) == raw_class(b['raw']), 'COUNTER_AMBIGUOUS')
     require(possible(p, a['car'], b['car'], end-start), 'COUNTER_RATE')
     roots = []
@@ -162,6 +170,8 @@ class Session:
                            min(o['end']+p['expiry'], self.seed['end']+p['age']), c['temp'], *fields]
             self.last, self.policy = deepcopy(o), deepcopy(p)
             self.active = True
+        except Skip:
+            pass
         except Reject as failure:
             self.result[0] = 2 if self.result[4] else 0
             self.result[1:4] = R[failure.why], failure.detail, o['event']

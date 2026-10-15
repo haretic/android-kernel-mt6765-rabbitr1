@@ -316,17 +316,18 @@ int r1_battery_session_step(struct r1_battery_session *state,
         why = R1_BATTERY_REASON_LIMIT;
         if (value > p->observed_current_limit_ua) goto failed;
     }
-    why = R1_BATTERY_REASON_TEMPERATURE;
+    /* A capture that moved while it was taken (the charger's constant-voltage
+     * regulation swings the current near full) is no evidence either way:
+     * skip it and keep the current estimate, which still widens and expires
+     * on its own. Rejecting it blanked the capacity until the next capture. */
     if (r1_battery_whole_celsius(o->endpoint[0].temperature_decic) !=
-        r1_battery_whole_celsius(o->endpoint[1].temperature_decic)) goto failed;
+        r1_battery_whole_celsius(o->endpoint[1].temperature_decic)) goto publish;
     duration = o->finished_ns - o->started_ns;
-    why = R1_BATTERY_REASON_LIMIT;
-    if (duration > p->max_capture_ns) goto failed;
+    if (duration > p->max_capture_ns) goto publish;
 #define MOTION(field, limit) do { \
     why = R1_BATTERY_REASON_ARITHMETIC; \
     if ((ret = distance(o->endpoint[0].field, o->endpoint[1].field, &value))) goto failed; \
-    why = R1_BATTERY_REASON_LIMIT; \
-    if (value > p->limit) goto failed; \
+    if (value > p->limit) goto publish; \
 } while (0)
     MOTION(voltage_uv, voltage_motion_uv);
     MOTION(current_ua, current_motion_ua);
