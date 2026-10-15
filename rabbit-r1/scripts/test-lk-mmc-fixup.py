@@ -121,7 +121,7 @@ def main():
             subprocess.run(['fdtput', '-t', 's', str(dtb), MMC, 'status', status], check=True)
             data = dtb.read_bytes()
             expected = validate.fdt_nodes(data)
-            assert expected[MMC]['pinctrl-names'] == b'default\0'
+            assert expected[MMC]['pinctrl-names'] == b'default\0state_uhs\0'
             for mux in (0, 0x2000, 0x4000, 0xffffe000):
                 for stale in (False, True):
                     before, after, trace = emulate(stock, data, mux, stale)
@@ -134,7 +134,10 @@ def main():
                         assert not trace['fdt_writes']
                     else:
                         broken = {name: dict(props) for name, props in expected.items()}
-                        broken[MMC]['pinctrl-names'] = b'stale3\0' if stale else b'\0'
+                        # Stock rewrites every name slot: blanks, or stale stack text.
+                        count = expected[MMC]['pinctrl-names'].count(b'\0')
+                        broken[MMC]['pinctrl-names'] = (b''.join(b'stale%d\0' % (3+i) for i in range(count))
+                                                        if stale else b'\0'*count)
                         assert nodes == broken, 'Unexpected stock fixup result'
                         assert trace['fdt_writes'] and before != after
                     cases.append({'image': 'stock', 'profile': profile, 'mux': mux,
