@@ -1041,7 +1041,7 @@ static void mt6370_chg_policy_watchdog(struct work_struct *work)
 					      struct mt6370_priv, policy_watchdog);
 	struct power_supply *psy;
 	unsigned long now;
-	int ret;
+	int behaviour, ret;
 
 	guard(mutex)(&priv->psy_lock);
 	if (priv->stopping)
@@ -1052,6 +1052,15 @@ static void mt6370_chg_policy_watchdog(struct work_struct *work)
 				 priv->policy_deadline - now);
 		return;
 	}
+	/*
+	 * The lease covers enabled charging only. The policy inhibits charging
+	 * and keeps the input powering the system while it holds a charge level
+	 * limit; isolating then ran the system from the battery while plugged.
+	 * A started isolation is still completed.
+	 */
+	if (!priv->input_suspended && !mt6370_chg_get_behaviour(priv, &behaviour) &&
+	    behaviour == POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE)
+		return;
 	ret = mt6370_chg_suspend_input(priv);
 	if (ret) {
 		dev_err_ratelimited(priv->dev, "Policy timeout isolation failed: %d\n", ret);
@@ -1082,10 +1091,13 @@ static int mt6370_chg_set_property(struct power_supply *psy,
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR: {
 		int before, after;
-		bool known;
+		bool report, known;
 
 		/* The policy renews its lease every 2 s; only report changes. */
-		known = !mt6370_chg_get_behaviour(priv, &before);
+		report = priv->charge_control &&
+			 (val->intval == POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO ||
+			  val->intval == POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE);
+		known = report && !mt6370_chg_get_behaviour(priv, &before);
 		ret = mt6370_chg_set_behaviour(priv, val->intval);
 		if (!ret && priv->managed_charging &&
 		    val->intval == POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO) {
@@ -1093,9 +1105,7 @@ static int mt6370_chg_set_property(struct power_supply *psy,
 			mod_delayed_work(system_highpri_wq, &priv->policy_watchdog,
 					 MT6370_POLICY_LEASE);
 		}
-		if (priv->charge_control &&
-		    (val->intval == POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO ||
-		     val->intval == POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE) &&
+		if (report &&
 		    (ret || !known || mt6370_chg_get_behaviour(priv, &after) || after != before))
 			power_supply_changed(psy);
 		return ret;
