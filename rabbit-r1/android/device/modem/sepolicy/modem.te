@@ -40,6 +40,7 @@ allow r1_modem_nvcheck vendor_shell_exec:file rx_file_perms;
 allow r1_modem_nvcheck vendor_toolbox_exec:file rx_file_perms;
 allow r1_modem_nvcheck proc_mounts:file r_file_perms;
 set_prop(r1_modem_nvcheck, vendor_r1_modem_prop)
+allow r1_modem_nvcheck { ccci_device ccci_monitor_device }:chr_file getattr;
 
 # Devices
 type ccci_device, dev_type;
