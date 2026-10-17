@@ -55,8 +55,11 @@ BOARD_MKBOOTIMG_ARGS += \
 BOARD_KERNEL_CMDLINE += $(filter-out binder.impl=rust,$(MAINLINE_COMMON_KERNEL_PARAMS))
 BOARD_KERNEL_CMDLINE += $(MAINLINE_COMMON_ANDROIDBOOT_PARAMS)
 BOARD_KERNEL_CMDLINE += bootopt=64S3,32N2,64N2 androidboot.fstab_suffix=r1
-# Reboot on panic; the kernel default would hang.
-BOARD_KERNEL_CMDLINE += panic=-1
+# Reboot on panic; the kernel default would hang. A soft lockup panics too.
+BOARD_KERNEL_CMDLINE += panic=-1 softlockup_panic=1
+# Boot deadman: the hardware watchdog runs from its probe, and the kernel feeds
+# it for 240 s (normal boot ~70 s, first boot ~105 s) unless watchdogd opens it.
+BOARD_KERNEL_CMDLINE += mtk_wdt.start_at_probe=1 watchdog.open_timeout=240
 # The rest comes from the DT bootargs, which LK passes ahead of this: earlycon
 # and console, clk/regulator_ignore_unused, mem_sleep_default=s2idle (the stock
 # ATF's SYSTEM_SUSPEND needs SPM firmware only the stock kernel hands over) and

@@ -132,6 +132,7 @@ PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/rootdir/fstab.r1:$(TARGET_COPY_OUT_VENDOR)/etc/fstab.r1 \
     $(LOCAL_PATH)/rootdir/fstab.r1:$(TARGET_COPY_OUT_ROOT)/first_stage_ramdisk/fstab.r1 \
     $(LOCAL_PATH)/rootdir/init.r1.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/init.r1.rc \
+    $(LOCAL_PATH)/rootdir/init.recovery.r1.rc:$(TARGET_COPY_OUT_RECOVERY)/root/init.recovery.mt6765.rc \
     $(LOCAL_PATH)/rootdir/ueventd.r1.rc:$(TARGET_COPY_OUT_VENDOR)/etc/ueventd.mt6765.rc \
     $(LOCAL_PATH)/rootdir/init.mt6765.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/hw/init.mt6765.rc
 
