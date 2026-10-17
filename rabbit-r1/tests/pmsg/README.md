@@ -17,8 +17,9 @@ The runner compiles the actual pmsg reader and writer from
 using the minimal header closure from that revision and
 [`cutils/list.h` at `7c3f32fe89c52b4176fd288ba5bb4f907809c202`](https://github.com/LineageOS/android_system_core/blob/7c3f32fe89c52b4176fd288ba5bb4f907809c202/libcutils/include/cutils/list.h).
 Every input has a commit URL, byte count and SHA-256 in `sources.lock.json` under
-`downloads/pmsg-ci/`. The canonical Android patch is applied only to temporary
-copies, with original and resulting hashes checked against `series.json`.
+`downloads/pmsg-ci/`. The changed files come from the pinned commit of the
+`haretic/android_system_logging` fork in `series.json`, pinned the same way under
+`downloads/pmsg-ci-fork/`; they replace the originals only in temporary copies.
 
 `pmsg.cpp` replaces only the six I/O and clock functions named by the linker
 wrappers. These wrappers enforce expected paths and flags and use in-memory

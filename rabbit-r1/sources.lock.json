@@ -309,6 +309,46 @@
       "url": "https://raw.githubusercontent.com/LineageOS/android_frameworks_native/46018f54b42489de960c62c3db9de131abce43ea/cmds/dumpstate/dumpstate.cpp",
       "bytes": 191432,
       "sha256": "b3503963a70396094c830b5fbb5898f9b92352df4cf830fdfcb9cca4adb1db47"
+    },
+    "downloads/pmsg-ci-fork/system/logging/liblog/pmsg_reader.cpp": {
+      "url": "https://raw.githubusercontent.com/haretic/android_system_logging/ff2d3a23d14ff3628ffee3e70206bba273285414/liblog/pmsg_reader.cpp",
+      "bytes": 16008,
+      "sha256": "4e7da38ec7abc23636e02f491156ded3f0a83e1b2aa4916fbf100cc5df69da53"
+    },
+    "downloads/pmsg-ci-fork/system/logging/liblog/pmsg_writer.cpp": {
+      "url": "https://raw.githubusercontent.com/haretic/android_system_logging/ff2d3a23d14ff3628ffee3e70206bba273285414/liblog/pmsg_writer.cpp",
+      "bytes": 7552,
+      "sha256": "7c497333c80eb68a2585a05535516444b882d69aa2e22d40360db94c6cdadfc0"
+    },
+    "downloads/pmsg-ci-fork/system/logging/liblog/include/private/android_logger.h": {
+      "url": "https://raw.githubusercontent.com/haretic/android_system_logging/ff2d3a23d14ff3628ffee3e70206bba273285414/liblog/include/private/android_logger.h",
+      "bytes": 5316,
+      "sha256": "8c3d540a2f18154c5edd44a2214374d5b6a8cface1efa7b9ad9b0645d541b860"
+    },
+    "downloads/pmsg-ci-fork/system/logging/liblog/liblog.map.txt": {
+      "url": "https://raw.githubusercontent.com/haretic/android_system_logging/ff2d3a23d14ff3628ffee3e70206bba273285414/liblog/liblog.map.txt",
+      "bytes": 2834,
+      "sha256": "6b4c47e3891a7d4a5113667bc0f268159457a40440dbab355d94f07bfb682845"
+    },
+    "downloads/pstore-collection-ci-fork/bootable/recovery/recovery-persist.cpp": {
+      "url": "https://raw.githubusercontent.com/haretic/android_bootable_recovery/dffb8f76c61870d8c1f0046d8be5c304743874b0/recovery-persist.cpp",
+      "bytes": 10313,
+      "sha256": "1421f03e5fbaf7b6e5a7fae07c9dd6adb3d57bf72ba516d09cde19dff93b32c6"
+    },
+    "downloads/pstore-collection-ci-fork/bootable/recovery/volume_manager/PublicVolume.cpp": {
+      "url": "https://raw.githubusercontent.com/haretic/android_bootable_recovery/dffb8f76c61870d8c1f0046d8be5c304743874b0/volume_manager/PublicVolume.cpp",
+      "bytes": 4535,
+      "sha256": "7281faeb8bfee4bc3c7ca6b79f62556682e924f0c18bc563b0b49c47f92cda60"
+    },
+    "downloads/pstore-collection-ci-fork/bootable/recovery/volume_manager/include/volume_manager/VolumeManager.h": {
+      "url": "https://raw.githubusercontent.com/haretic/android_bootable_recovery/dffb8f76c61870d8c1f0046d8be5c304743874b0/volume_manager/include/volume_manager/VolumeManager.h",
+      "bytes": 3573,
+      "sha256": "ca05ed6002eb73c7fa7bcee4bb3903b8e0bdc50421198b5ae11cf5b8cb63b7f8"
+    },
+    "downloads/pstore-collection-ci-fork/frameworks/native/cmds/dumpstate/dumpstate.cpp": {
+      "url": "https://raw.githubusercontent.com/haretic/android_frameworks_native/56aeb4eacd20dbb5b4e94682adad9b0919c16922/cmds/dumpstate/dumpstate.cpp",
+      "bytes": 191739,
+      "sha256": "7a771cd8ff02257f0eaf5316953d0e919bd4aa1c9ff4ed3979b396199d0d6727"
     }
   }
 }

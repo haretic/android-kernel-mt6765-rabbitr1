@@ -33,6 +33,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--inputs', type=Path, default=ROOT / 'downloads/pstore-collection-ci')
     parser.add_argument('--pmsg-inputs', type=Path, default=ROOT / 'downloads/pmsg-ci')
+    parser.add_argument('--fork-inputs', type=Path, default=ROOT / 'downloads/pstore-collection-ci-fork')
+    parser.add_argument('--pmsg-fork-inputs', type=Path, default=ROOT / 'downloads/pmsg-ci-fork')
     parser.add_argument('--out', type=Path, default=ROOT / 'out/android-pstore-collection')
     parser.add_argument('--cxx', default='clang++')
     args = parser.parse_args()
@@ -44,14 +46,33 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     roots = {'downloads/pmsg-ci/': patches.confined(args.pmsg_inputs),
              'downloads/pstore-collection-ci/': patches.confined(args.inputs)}
-    records = {r['project']: r for r in patches.load_series(R1 / 'android/patches/series.json')
+    fork_roots = {'downloads/pmsg-ci-fork/': patches.confined(args.pmsg_fork_inputs),
+                  'downloads/pstore-collection-ci-fork/': patches.confined(args.fork_inputs)}
+    records = {r['project']: r for r in patches.load_forks(R1 / 'android/patches/series.json')
                if r['project'] in PROJECTS}
     if set(records) != set(PROJECTS):
-        raise ValueError('Missing pinned collector project')
-    for project, paths in PROJECTS.items():
-        if {item['path'] for item in records[project]['files']} != paths:
-            raise ValueError('Unexpected collector patch scope: ' + project)
+        raise ValueError('Missing pinned collector fork')
     lock = json.loads((R1 / 'sources.lock.json').read_text())
+    forked, fork_pins = {}, {}
+    for key, pin in lock['ci_files'].items():
+        prefix = next((p for p in fork_roots if key.startswith(p)), None)
+        if prefix is None:
+            continue
+        name = patches.relative_name(key.removeprefix(prefix))
+        project = next((p for p in PROJECTS if name.startswith(p + '/')), None)
+        if project is None or name.removeprefix(project + '/') not in PROJECTS[project]:
+            raise ValueError('Unexpected collector fork input: ' + name)
+        repository = records[project]['repository'].removeprefix('https://github.com/').removesuffix('.git')
+        expected_url = ('https://raw.githubusercontent.com/' + repository + '/' +
+                        records[project]['commit'] + '/' + name.removeprefix(project + '/'))
+        data = patches.confined(fork_roots[prefix] / name).read_bytes()
+        if (pin['url'] != expected_url or len(data) != pin['bytes'] or
+                digest(data) != pin['sha256'] or name in forked):
+            raise ValueError('Fork input URL/hash/size mismatch or duplicate: ' + name)
+        forked[name], fork_pins[name] = data, pin
+    for project, paths in PROJECTS.items():
+        if {name.removeprefix(project + '/') for name in forked if name.startswith(project + '/')} != paths:
+            raise ValueError('Unexpected collector fork scope: ' + project)
     verified, pins = {}, {}
     for key, pin in lock['ci_files'].items():
         prefix = next((p for p in roots if key.startswith(p)), None)
@@ -70,10 +91,9 @@ def main():
         if len(data) != pin['bytes'] or digest(data) != pin['sha256'] or name in verified:
             raise ValueError('Input hash/size mismatch or duplicate: ' + name)
         verified[name], pins[name] = data, pin
-    for project, record in records.items():
-        for item in record['files']:
-            if digest(verified[project + '/' + item['path']]) != item['before_sha256']:
-                raise ValueError('Input does not match original patch hash: ' + item['path'])
+    for name, data in forked.items():
+        if name not in verified or verified[name] == data:
+            raise ValueError('Fork input does not change a pinned original: ' + name)
 
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     env = os.environ.copy()
@@ -89,15 +109,8 @@ def main():
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(data)
         shutil.copytree(original, patched)
-        for project, record in records.items():
-            dest = patched / project
-            patches.git(dest, 'init', '-q')
-            patches.check_patch_paths(dest, record)
-            patches.git(dest, 'apply', '--check', '-', data=record['data'])
-            patches.git(dest, 'apply', '-', data=record['data'])
-            for item in record['files']:
-                if digest((dest / item['path']).read_bytes()) != item['after_sha256']:
-                    raise ValueError('Unexpected patched file: ' + project + '/' + item['path'])
+        for name, data in forked.items():
+            (patched / name).write_bytes(data)
 
         flags = [args.cxx, '-std=c++20', '-O1', '-g', '-Wall', '-Wextra', '-Werror',
                  '-fsanitize=address,undefined', '-fno-omit-frame-pointer']
@@ -154,9 +167,9 @@ def main():
                  str(fixture / 'reader.cpp'), '-Wl,--wrap=open,--wrap=close,--wrap=read,--wrap=lseek'],
                 '26 actual liblog reader cases')
 
-    report = {'projects': {p: {'base_commit': r['base_commit'], 'patch': r['patch'],
-                               'patch_sha256': r['sha256']} for p, r in records.items()},
-              'inputs': pins, 'results': results,
+    report = {'projects': {p: {'base_commit': r['base_commit'], 'fork_repository': r['repository'],
+                               'fork_commit': r['commit']} for p, r in records.items()},
+              'inputs': pins, 'fork_inputs': fork_pins, 'results': results,
               'fixtures': {str(p.relative_to(fixture)): digest(p.read_bytes())
                            for p in sorted(fixture.rglob('*')) if p.is_file()},
               'sanitizers': ['address', 'undefined'], 'hardware_tested': False,

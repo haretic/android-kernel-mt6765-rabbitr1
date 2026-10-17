@@ -2,8 +2,10 @@ Android pstore collection checks
 ================================
 
 Run ``python3 scripts/test-android-pstore-collection.py`` after the pinned CI
-inputs have been fetched. The runner applies the actual recovery, dumpstate and
-liblog patches in a temporary directory. It needs no Android checkout, device,
+inputs have been fetched. The runner overlays the recovery, dumpstate and liblog
+files from the pinned haretic fork commits in ``series.json`` (pinned under
+``downloads/*-ci-fork/``) on the pinned originals in a temporary directory. It
+needs no Android checkout, device,
 mount or driver. All fixture files stay under /rabbitr1.
 
 The checks compile the complete recovery-persist source, the exact DoKmsg body,

@@ -67,6 +67,8 @@ requirements. Runtime APEX/linker behavior still needs testing.
 `android/local_manifests/r1.xml` pins the common mainline device tree and its ten
 direct and transitive dependencies, plus Linaro's generic thermal HAL that
 `device/thermal/product.mk` selects. Use it with the LineageOS manifest commit in `sources.lock.json`.
+Its mesa, device and hardware mainline projects point at our forks under
+`github.com/haretic`, pinned to the same commits as `android/patches/series.json`.
 The upstream manifest uses the Android 17 release tag for AOSP projects and
 moving Lineage branches for other projects; record a resolved manifest after
 sync and account for any local source edits when recording build provenance.
@@ -107,7 +109,7 @@ logs. To reproduce the earlier development configuration explicitly, use
 Changing the release selects its complete pinned configuration; the helper does
 not override version, codename or security-patch properties.
 
-The helper checks and applies the pinned Android compatibility patches, stages
+The helper pins the forked Android projects and applies the remaining patches, stages
 the device files and kernel, records the resolved manifest, selects the product
 and builds charging controls, the expdb logger, both boot services and policy.
 It defaults to eight jobs (`R1_ANDROID_JOBS` overrides this) and accepts explicit
@@ -190,13 +192,14 @@ allocator passes: its actual compile commands exclude i915/xe and retain the
 ARM and generic backends. The complete filesystem build and artifact audit now pass.
 
 The next full-image attempt reached 66% before `system/vold` failed to compile:
-`PublicVolume.cpp` uses `std::replace` without including `<algorithm>`. Patch
-`0008-include-vold-algorithm.patch` adds that header. The preserved failure and
+`PublicVolume.cpp` uses `std::replace` without including `<algorithm>`. The
+`haretic/android_system_vold` fork commit (formerly patch 0008) adds that header. The preserved failure and
 targeted compile are recorded in [vold-include-build.json](../android/vold-include-build.json).
 The complete build now also verifies this fix beyond the targeted compilation.
 
 The following attempt stopped in the audio HAL: `ChildInterface.h` uses
-`SCHED_NORMAL` without including `<sched.h>`. Patch 0009 adds that public header.
+`SCHED_NORMAL` without including `<sched.h>`. The `haretic/android_hardware_interfaces`
+fork (formerly patch 0009) adds that public header.
 The [compiler replay](../android/audio-scheduler-include-build.json) reproduced
 the failure and then compiled the actual translation unit without diagnostics.
 The complete image build now passes with this fix applied.
@@ -214,26 +217,40 @@ by stopping before the build. The pinned Siso tool cannot load an absolute
 config directory, while Soong test packaging rejects paths containing `..`.
 The source-relative alias satisfies both and keeps the cache in the workspace.
 
-The pinned vendor image libraries need vendor builds of several dependencies.
-The compatibility patches enable the required library variants. Patch
-application checks repository commits, patch hashes and exact touched-file
-contents before changing anything; it accepts its already-applied changes and
-refuses unrecognized edits. A resolved manifest identifies repository commits;
-the patch series records the intentional differences from those commits.
-Unrelated local edits are preserved; review and record them separately before
-a release build. New text files require pinned absence in the base and index,
-a fixed resulting hash, and a regular non-executable file; conflicting local
-files are preserved. The helper completes all project checks before applying
-any patch.
+Our Android changes live as commits on forks of the LineageOS repositories,
+in the style of `github.com/andr36oid`: each fork under `github.com/haretic`
+keeps the LineageOS name (`haretic/android_frameworks_base`, ...) and carries
+our commits on its default `lineage-24.0` branch, on top of the Lineage (or, for
+skia and keymint, AOSP) revision this tree was built from. `haretic/android`
+is the manifest fork; its `lineage-24.0` branch is the pinned LineageOS manifest
+plus one commit that points the forked projects at `haretic/`. The forks section
+of [`series.json`](../android/patches/series.json) pins every fork commit with
+its base. `apply-android-patches.py --apply` fetches a missing commit from the
+fork and checks it out detached. A checkout whose files already equal the fork
+commit, such as one with the old patches applied, only has HEAD and the index
+moved. Edits to the files a fork changes are refused, as are staged or partial
+states; unrelated local edits are preserved. Check mode changes nothing.
+
+`external/google-highway` and `external/XMP-Toolkit-SDK` have no LineageOS
+repository to fork, so they keep the patch path. Their patches enable the vendor
+library variants the pinned vendor image needs (the skia fork does the same for
+skcms). Patch application checks repository commits, patch hashes and exact
+touched-file contents before changing anything; it accepts its already-applied
+changes and refuses unrecognized edits. New text files require pinned absence in
+the base and index, a fixed resulting hash, and a regular non-executable file;
+conflicting local files are preserved. The helper completes all fork and patch
+checks before changing any project. A resolved manifest identifies repository
+commits; review and record unrelated local edits separately before a release build.
 
 The graphics sources include the complete [Mesa 26.2.4 release](https://docs.mesa3d.org/relnotes/26.2.4.html)
 delta on the pinned Lineage tree. The [initial import record](../android/patches/mesa-26.2.4.json)
 preserves its six Android/integration differences and records that original
 patch hash. The later [PowerVR filename mapping](../tests/gpu/android-library-mapping.json)
 adds `imagination` → `powervr_mesa` to `android/Android.mk`; its source and patch
-hashes are separate from the initial import. The current 118-file patch also
-propagates libui, libdrm and Android headers to the targets that use them; all
-declared output hashes match a fresh patch replay. Make resolves the correct
+hashes are separate from the initial import. The current 118-file
+`haretic/android_external_mesa` fork commit also propagates libui, libdrm and
+Android headers to the targets that use them; its tree equals a replay of the
+former series patch. Make resolves the correct
 library and HAL names.
 
 The PowerVR Vulkan library passed an ARM64/Android build, full shared-library
@@ -308,12 +325,9 @@ installation staging, not membership in a completed SOC vendor image. The earlie
 full-image audit covers the default product with SOC disabled. Physical startup,
 enforcing runtime behavior, battery calibration and complete SOC images remain open.
 
-Patch 0009 now also includes the Health priming wrapper, and patch 0010 adds
-the internal BatteryMonitor method. An existing checkout with the older
-audio-only 0009 must first reverse that exact patch after checking its hashes;
-the patch helper rejects the intermediate mixed state. Fresh pinned checkouts
-can apply the complete series directly. Stop any Android build before changing
-these inputs.
+The `haretic/android_hardware_interfaces` fork carries the Health priming
+wrapper and the `haretic/android_system_core` fork the internal BatteryMonitor
+method, as separate commits. Stop any Android build before changing these inputs.
 
 The [boot-control adapter](BOOT-CONTROL.md) implements the stock A/B record
 format, eMMC boot-region selection and clearing the `avbbctl` flag. Its core
