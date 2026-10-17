@@ -79,6 +79,17 @@ config MTK_SVS
 	  chip process corner, temperatures and other factors. Then DVFS
 	  driver could apply SVS bank voltage to PMIC/Buck.
 
+config MTK_MT6765_MCDI
+	bool "MediaTek MT6765 MCDI CPU power-down"
+	depends on ARM_PSCI_FW && OF
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	help
+	  On MT6765 the SSPM, not ATF, powers CPU cores off for PSCI
+	  CPU_SUSPEND and CPU_OFF. This tells it which CPUs to manage and
+	  powers down CPUs that go offline, so that they can be brought
+	  back. Deep cpuidle states stay off until the "enable" parameter
+	  is set.
+
 config MTK_SOCINFO
 	tristate "MediaTek SoC Information"
 	default y

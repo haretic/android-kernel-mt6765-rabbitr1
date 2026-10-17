@@ -61,8 +61,8 @@ BOARD_KERNEL_CMDLINE += panic=-1 softlockup_panic=1
 # it for 240 s (normal boot ~70 s, first boot ~105 s) unless watchdogd opens it.
 BOARD_KERNEL_CMDLINE += mtk_wdt.start_at_probe=1 watchdog.open_timeout=240
 # The rest comes from the DT bootargs, which LK passes ahead of this: earlycon
-# and console, clk/regulator_ignore_unused, mem_sleep_default=s2idle (the stock
-# ATF's SYSTEM_SUSPEND needs SPM firmware only the stock kernel hands over) and
+# and console, clk/regulator_ignore_unused, mem_sleep_default=s2idle (deep
+# suspend needs the stock kernel's SPM/SSPM sleep sequence, not yet ported) and
 # the fbcon logo settings. LK's combined command line has little room left.
 
 BOARD_USES_RECOVERY_AS_BOOT := true

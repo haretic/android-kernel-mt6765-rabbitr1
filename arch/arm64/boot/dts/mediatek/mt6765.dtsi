@@ -82,6 +82,7 @@
 			compatible = "arm,cortex-a53";
 			reg = <0x000>;
 			enable-method = "psci";
+			cpu-idle-states = <&cpu_off_b>;
 			capacity-dmips-mhz = <1024>;
 			clock-frequency = <2300000000>;
 			#cooling-cells = <2>;
@@ -99,6 +100,7 @@
 			compatible = "arm,cortex-a53";
 			reg = <0x001>;
 			enable-method = "psci";
+			cpu-idle-states = <&cpu_off_b>;
 			capacity-dmips-mhz = <1024>;
 			clock-frequency = <2300000000>;
 			#cooling-cells = <2>;
@@ -116,6 +118,7 @@
 			compatible = "arm,cortex-a53";
 			reg = <0x002>;
 			enable-method = "psci";
+			cpu-idle-states = <&cpu_off_b>;
 			capacity-dmips-mhz = <1024>;
 			clock-frequency = <2300000000>;
 			#cooling-cells = <2>;
@@ -133,6 +136,7 @@
 			compatible = "arm,cortex-a53";
 			reg = <0x003>;
 			enable-method = "psci";
+			cpu-idle-states = <&cpu_off_b>;
 			capacity-dmips-mhz = <1024>;
 			clock-frequency = <2300000000>;
 			#cooling-cells = <2>;
@@ -150,6 +154,7 @@
 			compatible = "arm,cortex-a53";
 			reg = <0x100>;
 			enable-method = "psci";
+			cpu-idle-states = <&cpu_off_l>;
 			capacity-dmips-mhz = <740>;
 			clock-frequency = <1800000000>;
 			#cooling-cells = <2>;
@@ -167,6 +172,7 @@
 			compatible = "arm,cortex-a53";
 			reg = <0x101>;
 			enable-method = "psci";
+			cpu-idle-states = <&cpu_off_l>;
 			capacity-dmips-mhz = <740>;
 			clock-frequency = <1800000000>;
 			#cooling-cells = <2>;
@@ -184,6 +190,7 @@
 			compatible = "arm,cortex-a53";
 			reg = <0x102>;
 			enable-method = "psci";
+			cpu-idle-states = <&cpu_off_l>;
 			capacity-dmips-mhz = <740>;
 			clock-frequency = <1800000000>;
 			#cooling-cells = <2>;
@@ -201,6 +208,7 @@
 			compatible = "arm,cortex-a53";
 			reg = <0x103>;
 			enable-method = "psci";
+			cpu-idle-states = <&cpu_off_l>;
 			capacity-dmips-mhz = <740>;
 			clock-frequency = <1800000000>;
 			#cooling-cells = <2>;
@@ -211,6 +219,33 @@
 			d-cache-line-size = <64>;
 			d-cache-sets = <256>;
 			next-level-cache = <&l2_1>;
+		};
+
+		idle-states {
+			entry-method = "psci";
+
+			/*
+			 * Core power-down (stock mcdi-cpu). The SSPM does the
+			 * power-off, so mt6765-mcdi gates these until it is
+			 * enabled. Residencies are the stock cpuidle driver's.
+			 */
+			cpu_off_b: cpu-off-b {
+				compatible = "arm,idle-state";
+				arm,psci-suspend-param = <0x00010001>;
+				local-timer-stop;
+				entry-latency-us = <100>;
+				exit-latency-us = <200>;
+				min-residency-us = <1500>;
+			};
+
+			cpu_off_l: cpu-off-l {
+				compatible = "arm,idle-state";
+				arm,psci-suspend-param = <0x00010001>;
+				local-timer-stop;
+				entry-latency-us = <100>;
+				exit-latency-us = <200>;
+				min-residency-us = <4500>;
+			};
 		};
 
 		l2_0: l2-cache0 {
@@ -691,6 +726,12 @@
 			#mbox-cells = <2>;
 			clocks = <&infracfg CLK_IFR_GCE>;
 			clock-names = "gce";
+		};
+
+		/* SSPM mailbox 3: the MCDI task's slots. */
+		mcdi: mcdi@10480000 {
+			compatible = "mediatek,mt6765-mcdi";
+			reg = <0 0x10480000 0 0x100>;
 		};
 
 		apdma: dma-controller@11000680 {
