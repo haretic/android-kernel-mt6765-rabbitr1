@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Check pinned Android patches, or apply them with --apply, under /rabbitr1."""
+"""Check pinned Android fork commits and patches, or check them out and apply them with --apply.
+
+Forked projects are pinned to a commit on a haretic fork of the LineageOS repository; the
+remaining projects, which have no LineageOS repository to fork, carry a patch. Everything
+stays under /rabbitr1.
+"""
 import argparse
 import hashlib
 import json
@@ -11,6 +16,8 @@ import subprocess
 import tempfile
 
 ROOT = Path('/rabbitr1')
+FORK_REPOSITORY = re.compile(r'https://github\.com/haretic/android_[A-Za-z0-9_.-]+\.git')
+FORK_BRANCH = re.compile(r'(?!.*\.\.)[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*')
 DEFAULT_SERIES = Path(__file__).resolve().parents[1] / 'android/patches/series.json'
 
 
@@ -63,10 +70,46 @@ def hex_value(value, size):
     return value
 
 
+def read_series(series):
+    document = json.loads(series.read_text())
+    if not isinstance(document, dict) or set(document) != {'forks', 'patches'}:
+        raise ValueError('Series must be an object with forks and patches lists')
+    if not isinstance(document['forks'], list) or not isinstance(document['patches'], list):
+        raise ValueError('Series forks and patches must be lists')
+    if not document['forks'] and not document['patches']:
+        raise ValueError('Series must pin at least one fork or patch')
+    return document
+
+
+def load_forks(series):
+    """Return the pinned fork commits: one haretic fork commit per project."""
+    records = read_series(series)['forks']
+    projects = set()
+    for record in records:
+        if not isinstance(record, dict) or set(record) != {
+                'project', 'repository', 'branch', 'base_commit', 'commit'}:
+            raise ValueError('Invalid fork record fields')
+        project = relative_name(record['project'])
+        if project in projects:
+            raise ValueError('Only one fork per project is supported: ' + project)
+        projects.add(project)
+        if not isinstance(record['repository'], str) or not FORK_REPOSITORY.fullmatch(
+                record['repository']):
+            raise ValueError('Fork repository must be a haretic GitHub fork: ' + project)
+        if not isinstance(record['branch'], str) or not FORK_BRANCH.fullmatch(record['branch']):
+            raise ValueError('Invalid fork branch: ' + project)
+        hex_value(record['base_commit'], 40)
+        hex_value(record['commit'], 40)
+        if record['base_commit'] == record['commit']:
+            raise ValueError('Fork commit must differ from its base: ' + project)
+    return records
+
+
 def load_series(series):
-    records = json.loads(series.read_text())
-    if not isinstance(records, list) or not records:
-        raise ValueError('Patch series must be a nonempty list')
+    """Return the patch records, for projects that have no fork."""
+    document = read_series(series)
+    records = document['patches']
+    forked = {record.get('project') for record in document['forks'] if isinstance(record, dict)}
     projects = set()
     for record in records:
         if not isinstance(record, dict) or set(record) != {
@@ -75,6 +118,8 @@ def load_series(series):
         project = relative_name(record['project'])
         if project in projects:
             raise ValueError('Only one patch per project is supported: ' + project)
+        if project in forked:
+            raise ValueError('Project is both forked and patched: ' + project)
         projects.add(project)
         hex_value(record['base_commit'], 40)
         hex_value(record['sha256'], 64)
@@ -215,6 +260,130 @@ def check_result(record, originals):
                 raise ValueError('Patch result hash mismatch: ' + record['project'] + '/' + item['path'])
 
 
+def checkout_root(tree, name):
+    project = confined(tree / name)
+    top = git(project, 'rev-parse', '--show-toplevel').decode().strip()
+    if Path(top) != project:
+        raise ValueError('Project must be a Git checkout root: ' + str(project))
+    return project
+
+
+def has_commit(project, commit):
+    try:
+        return git(project, 'cat-file', '-t', commit).strip() == b'commit'
+    except ValueError:
+        return False
+
+
+def names(output):
+    return [relative_name(name.decode()) for name in output.split(b'\0') if name]
+
+
+def fork_paths(project, old, new):
+    return names(git(project, 'diff', '--name-only', '--no-renames', '-z', old, new, '--'))
+
+
+def tree_entry(project, commit, name):
+    row = git(project, 'ls-tree', '-z', commit, '--', name).rstrip(b'\0')
+    if not row:
+        return None
+    info, path = row.split(b'\t', 1)
+    mode, kind, oid = info.decode().split()
+    if path.decode() != name or kind != 'blob' or mode not in ('100644', '100755', '120000'):
+        raise ValueError('Unsupported fork entry: ' + name)
+    return mode, oid
+
+
+def worktree_matches(project, name, entry):
+    """Compare one checkout path with a tree entry: absence, mode and content."""
+    path = project / name
+    confined(path.parent)
+    if not os.path.lexists(path):
+        return entry is None
+    if entry is None:
+        return False
+    mode, oid = entry
+    info = os.lstat(path)
+    if mode == '120000':
+        return (stat.S_ISLNK(info.st_mode) and git(
+            project, 'hash-object', '--no-filters', '--stdin',
+            data=os.fsencode(os.readlink(path))).decode().strip() == oid)
+    if not stat.S_ISREG(info.st_mode) or bool(info.st_mode & 0o100) != (mode == '100755'):
+        return False
+    return git(project, 'hash-object', '--', name).decode().strip() == oid
+
+
+def local_changes(project, paths):
+    """Tracked changes in the index or work tree, limited to paths when given."""
+    scope = ['--', *paths] if paths is not None else []
+    return set(names(git(project, 'diff', '--name-only', '-z', 'HEAD', *scope)) +
+               names(git(project, 'diff', '--cached', '--name-only', '-z', 'HEAD', *scope)))
+
+
+def fork_state(tree, record):
+    """Classify a forked project: pinned, ready (clean checkout), content-matches, or fetch-needed."""
+    project = checkout_root(tree, record['project'])
+    head = git(project, 'rev-parse', 'HEAD').decode().strip()
+    commit = record['commit']
+    if not has_commit(project, commit):
+        return 'fetch-needed', head
+    if head == commit:
+        # Edits to files the fork changes are refused, like edits to patched files.
+        touched = (fork_paths(project, record['base_commit'], commit)
+                   if has_commit(project, record['base_commit']) else None)
+        if touched == []:
+            raise ValueError('Fork commit does not change its base: ' + record['project'])
+        if local_changes(project, touched):
+            raise ValueError('Preserving local edits at the pinned fork commit: ' + record['project'])
+        return 'pinned', head
+    paths = fork_paths(project, head, commit)
+    if paths and git(project, 'diff', '--cached', '--name-only', '-z', 'HEAD', '--', *paths):
+        raise ValueError('Preserving staged changes in fork paths: ' + record['project'])
+    if all(worktree_matches(project, name, tree_entry(project, commit, name)) for name in paths):
+        return 'content-matches', head
+    if all(worktree_matches(project, name, tree_entry(project, head, name)) for name in paths):
+        return 'ready', head
+    raise ValueError('Preserving edited files in fork paths: ' + record['project'])
+
+
+def fetch_fork(tree, record):
+    project = checkout_root(tree, record['project'])
+    depth = (['--depth=1'] if git(project, 'rev-parse', '--is-shallow-repository').strip() == b'true'
+             else [])
+    git(project, 'fetch', '--quiet', '--no-tags', '--no-write-fetch-head', *depth,
+        record['repository'], record['commit'])
+    if not has_commit(project, record['commit']):
+        raise ValueError('Fork commit missing after fetch: ' + record['project'])
+    print('FETCHED: ' + record['project'])
+
+
+def pin_fork(tree, record, current, head):
+    project = checkout_root(tree, record['project'])
+    commit = record['commit']
+    if current == 'ready':
+        git(project, 'checkout', '--quiet', '--detach', commit)
+    else:
+        # The checkout already holds the fork's files: move HEAD and the index only.
+        paths = fork_paths(project, head, commit)
+        git(project, 'update-ref', '--no-deref', '-m', 'r1: pin fork commit', 'HEAD', commit, head)
+        try:
+            if paths:
+                git(project, 'reset', '--quiet', commit, '--pathspec-from-file=-',
+                    '--pathspec-file-nul', data=b'\0'.join(p.encode() for p in paths))
+            if fork_state(tree, record)[0] != 'pinned':
+                raise ValueError('Fork content changed while pinning: ' + record['project'])
+        except ValueError:
+            git(project, 'update-ref', '--no-deref', '-m', 'r1: restore before fork pin',
+                'HEAD', head, commit)
+            if paths:
+                git(project, 'reset', '--quiet', head, '--pathspec-from-file=-',
+                    '--pathspec-file-nul', data=b'\0'.join(p.encode() for p in paths))
+            raise
+    if fork_state(tree, record)[0] != 'pinned':
+        raise ValueError('Fork verification failed after checkout: ' + record['project'])
+    print('PINNED: ' + record['project'])
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--tree', type=Path, default=ROOT / 'src/android')
@@ -225,20 +394,39 @@ def main():
     args = parser.parse_args()
     try:
         tree, series = confined(args.tree), confined(args.series)
+        forks = load_forks(series)
         records = load_series(series)
+        fork_plans = []
         plans = []
-        # Finish every project and patch check before the first source mutation.
+        # Finish every project, fork and patch check before the first source mutation.
+        for record in forks:
+            fork_plans.append([record, *fork_state(tree, record)])
         for record in records:
             current, originals = state(tree, record)
             check_result(record, originals)
             plans.append((record, current))
+        for record, current, _ in fork_plans:
+            print('FORK-' + current.upper() + ': ' + record['project'] + ' @ ' + record['commit'])
         for record, current in plans:
             print(current.upper() + ': ' + record['project'])
         if args.apply:
+            # Fetching only adds objects; classify those projects again afterwards.
+            for plan in fork_plans:
+                if plan[1] == 'fetch-needed':
+                    fetch_fork(tree, plan[0])
+                    plan[1:] = fork_state(tree, plan[0])
+                    if plan[1] == 'fetch-needed':
+                        raise ValueError('Fork commit still missing: ' + plan[0]['project'])
             # Recheck all inputs after preflight; concurrent source editing is unsupported.
+            for record, expected, head in fork_plans:
+                if list(fork_state(tree, record)) != [expected, head]:
+                    raise ValueError('Source state changed during preflight: ' + record['project'])
             for record, expected in plans:
                 if state(tree, record)[0] != expected:
                     raise ValueError('Source state changed during preflight: ' + record['project'])
+            for record, current, head in fork_plans:
+                if current != 'pinned':
+                    pin_fork(tree, record, current, head)
             for record, current in plans:
                 if current == 'already-applied':
                     continue
@@ -249,7 +437,7 @@ def main():
                 if state(tree, record)[0] != 'already-applied':
                     raise ValueError('Source verification failed after apply: ' + record['project'])
                 print('APPLIED: ' + record['project'])
-        print(f'Checked {len(plans)} pinned Android patches')
+        print(f'Checked {len(fork_plans)} pinned Android forks and {len(plans)} pinned Android patches')
     except (OSError, UnicodeError, ValueError) as error:
         parser.exit(1, 'error: ' + str(error) + '\n')
 

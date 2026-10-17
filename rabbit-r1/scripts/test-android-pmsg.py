@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test the pinned liblog pmsg patch without an Android checkout or device I/O."""
+"""Test the pinned liblog pmsg fork commit without an Android checkout or device I/O."""
 import argparse
 import hashlib
 import importlib.util
@@ -16,6 +16,7 @@ import tempfile
 ROOT = Path('/rabbitr1')
 R1 = Path(__file__).resolve().parents[1]
 INPUT_PREFIX = 'downloads/pmsg-ci/'
+FORK_PREFIX = 'downloads/pmsg-ci-fork/'
 SOURCES = ('liblog/pmsg_reader.cpp', 'liblog/pmsg_writer.cpp')
 PATCH_FILES = (*SOURCES, 'liblog/include/private/android_logger.h', 'liblog/liblog.map.txt')
 
@@ -27,6 +28,7 @@ def digest(data):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--inputs', type=Path, default=ROOT / 'downloads/pmsg-ci')
+    parser.add_argument('--fork-inputs', type=Path, default=ROOT / 'downloads/pmsg-ci-fork')
     parser.add_argument('--out', type=Path, default=ROOT / 'out/android-pmsg')
     parser.add_argument('--cxx', default='clang++')
     args = parser.parse_args()
@@ -35,6 +37,7 @@ def main():
     patches = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(patches)
     inputs = patches.confined(args.inputs)
+    fork_inputs = patches.confined(args.fork_inputs)
     output = patches.confined(args.out)
     output.mkdir(parents=True, exist_ok=True)
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
@@ -42,24 +45,29 @@ def main():
     env.update(TMPDIR=str(ROOT / '.tmp'), ASAN_OPTIONS='detect_leaks=1:abort_on_error=1',
                UBSAN_OPTIONS='halt_on_error=1')
 
-    records = patches.load_series(patches.confined(R1 / 'android/patches/series.json'))
-    logging = [record for record in records if record['project'] == 'system/logging']
-    if len(logging) != 1 or {item['path'] for item in logging[0]['files']} != set(PATCH_FILES):
-        raise ValueError('Expected one system/logging patch for the pmsg reader, writer and private API')
-    patch = logging[0]
+    forks = patches.load_forks(patches.confined(R1 / 'android/patches/series.json'))
+    logging = [record for record in forks if record['project'] == 'system/logging']
+    if len(logging) != 1:
+        raise ValueError('Expected one system/logging fork for the pmsg reader, writer and private API')
+    fork = logging[0]
+    fork_repository = fork['repository'].removeprefix('https://github.com/').removesuffix('.git')
     lock = json.loads((R1 / 'sources.lock.json').read_text())
     pins = {name.removeprefix(INPUT_PREFIX): value for name, value in lock['ci_files'].items()
             if name.startswith(INPUT_PREFIX)}
+    fork_pins = {name.removeprefix(FORK_PREFIX): value for name, value in lock['ci_files'].items()
+                 if name.startswith(FORK_PREFIX)}
     if not pins:
         raise ValueError('No pinned pmsg CI inputs')
+    if set(fork_pins) != {'system/logging/' + name for name in PATCH_FILES}:
+        raise ValueError('Fork inputs must be exactly the pmsg reader, writer and private API')
     verified = {}
     for name, pin in pins.items():
         patches.relative_name(name)
         if name.startswith('system/logging/'):
             expected = ('https://raw.githubusercontent.com/LineageOS/android_system_logging/' +
-                        patch['base_commit'] + '/' + name.removeprefix('system/logging/'))
+                        fork['base_commit'] + '/' + name.removeprefix('system/logging/'))
             if pin['url'] != expected:
-                raise ValueError('Input revision differs from patch base: ' + name)
+                raise ValueError('Input revision differs from fork base: ' + name)
         elif name != 'system/core/libcutils/include/cutils/list.h':
             raise ValueError('Unexpected pmsg input: ' + name)
         path = patches.confined(inputs / name)
@@ -67,9 +75,18 @@ def main():
         if len(data) != pin['bytes'] or digest(data) != pin['sha256']:
             raise ValueError('Pinned input mismatch: ' + name)
         verified[name] = data
-    for item in patch['files']:
-        if digest(verified['system/logging/' + item['path']]) != item['before_sha256']:
-            raise ValueError('Original source differs from patch metadata: ' + item['path'])
+    forked = {}
+    for name, pin in fork_pins.items():
+        expected = ('https://raw.githubusercontent.com/' + fork_repository + '/' + fork['commit'] +
+                    '/' + name.removeprefix('system/logging/'))
+        if pin['url'] != expected:
+            raise ValueError('Fork input revision differs from the pinned fork commit: ' + name)
+        data = patches.confined(fork_inputs / name).read_bytes()
+        if len(data) != pin['bytes'] or digest(data) != pin['sha256']:
+            raise ValueError('Pinned fork input mismatch: ' + name)
+        if name not in verified or data == verified[name]:
+            raise ValueError('Fork input does not change a pinned original: ' + name)
+        forked[name.removeprefix('system/logging/')] = data
 
     fixture = patches.confined(R1 / 'tests/pmsg/pmsg.cpp')
     results = []
@@ -83,13 +100,8 @@ def main():
         library = original / 'system/logging/liblog'
         patched = scratch / 'patched'
         shutil.copytree(original / 'system/logging', patched)
-        patches.git(patched, 'init', '-q')
-        patches.check_patch_paths(patched, patch)
-        patches.git(patched, 'apply', '--check', '-', data=patch['data'])
-        patches.git(patched, 'apply', '-', data=patch['data'])
-        for item in patch['files']:
-            if digest((patched / item['path']).read_bytes()) != item['after_sha256']:
-                raise ValueError('Patched source hash mismatch: ' + item['path'])
+        for name, data in forked.items():
+            (patched / name).write_bytes(data)
 
         flags = [args.cxx, '-std=gnu++20', '-O1', '-g', '-Wall', '-Wextra', '-Werror',
                  # These warnings concern existing upstream initializers and a VLA.
@@ -137,13 +149,14 @@ def main():
                             'expected_failure': expected_failure, 'returncode': result.returncode,
                             'compile_command': command})
 
-    report = {'source_base': patch['base_commit'], 'patch': patch['patch'],
-              'patch_sha256': patch['sha256'], 'inputs': pins,
+    report = {'source_base': fork['base_commit'], 'fork_repository': fork['repository'],
+              'fork_commit': fork['commit'], 'inputs': pins, 'fork_inputs': fork_pins,
               'fixture_sha256': digest(fixture.read_bytes()), 'results': results,
               'sanitizers': ['address', 'undefined'], 'hardware_tested': False,
               'limitations': 'Host syscall mocks; no target ABI, SELinux, or persistence validation.'}
     patches.confined(output / 'result.json').write_text(json.dumps(report, indent=2) + '\n')
-    print(f'PASS: {len(verified)} pinned inputs; no Android checkout or host device I/O')
+    print(f'PASS: {len(verified)} pinned inputs and {len(forked)} pinned fork files; '
+          'no Android checkout or host device I/O')
 
 
 if __name__ == '__main__':

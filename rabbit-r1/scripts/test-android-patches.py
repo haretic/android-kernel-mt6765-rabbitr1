@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise the Android patch CLI against isolated real Git repositories."""
+"""Exercise the Android fork and patch CLI against isolated real Git repositories."""
 import difflib
 import hashlib
 import json
@@ -32,6 +32,7 @@ class PatchTests(unittest.TestCase):
         self.series_dir.mkdir()
         self.series = self.series_dir / 'series.json'
         self.records = []
+        self.forks = []
         self.before = {}
         self.after = {}
         self.env = os.environ.copy()
@@ -74,7 +75,48 @@ class PatchTests(unittest.TestCase):
                                        stderr=subprocess.STDOUT)
 
     def save(self):
-        self.series.write_text(json.dumps(self.records))
+        self.series.write_text(json.dumps({'forks': self.forks, 'patches': self.records}))
+
+    def add_fork(self, shallow=False):
+        """Create a haretic fork remote (base + fork commit) and a checkout at the base."""
+        remote = self.root / 'remote/android_external_fork.git'
+        work = self.root / 'fork-work'
+        work.mkdir()
+        self.git(work, 'init', '-q')
+        self.git(work, 'config', 'user.name', 'itskenny0')
+        self.git(work, 'config', 'user.email', '0@kenny.cat')
+        (work / 'Android.bp').write_text('fork: base\n')
+        (work / 'old.txt').write_text('removed by the fork\n')
+        (work / 'tool.sh').write_text('#!/bin/sh\n')
+        (work / 'unrelated.txt').write_text('unrelated\n')
+        self.git(work, 'add', '.')
+        self.git(work, '-c', 'commit.gpgsign=false', 'commit', '-qm', 'Base')
+        base = self.git(work, 'rev-parse', 'HEAD').decode().strip()
+        (work / 'Android.bp').write_text('fork: changed\n')
+        (work / 'old.txt').unlink()
+        (work / 'tool.sh').chmod(0o755)
+        (work / 'new/dir').mkdir(parents=True)
+        (work / 'new/dir/file.txt').write_text('added by the fork\n')
+        self.git(work, 'add', '-A')
+        self.git(work, '-c', 'commit.gpgsign=false', 'commit', '-qm', 'Fork change')
+        commit = self.git(work, 'rev-parse', 'HEAD').decode().strip()
+        remote.parent.mkdir(exist_ok=True)
+        self.git(self.root, 'clone', '-q', '--bare', str(work), str(remote))
+        checkout = self.tree / 'external/fork'
+        # The checkout only has the base, like a sync of the pinned upstream revision.
+        self.git(work, 'branch', 'upstream', base)
+        self.git(self.root, 'clone', '-q', '--single-branch', '--branch', 'upstream',
+                 *(['--depth=1'] if shallow else []), 'file://' + str(work), str(checkout))
+        self.git(checkout, 'checkout', '-q', '--detach')
+        self.env.update(GIT_CONFIG_COUNT='1',
+                        GIT_CONFIG_KEY_0='url.file://' + str(remote.parent) + '/.insteadOf',
+                        GIT_CONFIG_VALUE_0='https://github.com/haretic/')
+        self.fork = {'project': 'external/fork',
+                     'repository': 'https://github.com/haretic/android_external_fork.git',
+                     'branch': 'lineage-24.0', 'base_commit': base, 'commit': commit}
+        self.forks.append(self.fork)
+        self.save()
+        return checkout, base, commit
 
     def run_helper(self, *args, success=True):
         result = subprocess.run([sys.executable, str(HELPER), '--tree', str(self.tree),
@@ -457,6 +499,160 @@ class PatchTests(unittest.TestCase):
                                                       b'+Incorrect release note.'))
         self.assertIn('--reverse', self.run_helper('--check', success=False).stderr)
         self.assertEqual(path.read_bytes(), content)
+
+
+    def fork_head(self, checkout):
+        return self.git(checkout, 'rev-parse', 'HEAD').decode().strip()
+
+    def assert_fork_clean(self, checkout, commit):
+        self.assertEqual(self.fork_head(checkout), commit)
+        self.assertEqual(self.git(checkout, 'status', '--porcelain', '--untracked-files=all'), b'')
+        self.assertEqual((checkout / 'Android.bp').read_text(), 'fork: changed\n')
+        self.assertFalse((checkout / 'old.txt').exists())
+        self.assertEqual((checkout / 'tool.sh').stat().st_mode & 0o777, 0o755)
+
+    def test_fork_fetch_checkout_and_repeat(self):
+        for shallow in (False, True):
+            with self.subTest(shallow=shallow):
+                if shallow:
+                    self.tearDown_fork()
+                checkout, base, commit = self.add_fork(shallow=shallow)
+                result = self.run_helper('--check')
+                self.assertIn('FORK-FETCH-NEEDED: external/fork', result.stdout)
+                self.assertEqual(self.fork_head(checkout), base)
+                self.assert_original()
+                result = self.run_helper('--apply')
+                self.assertIn('FETCHED: external/fork', result.stdout)
+                self.assertIn('PINNED: external/fork', result.stdout)
+                self.assertEqual(result.stdout.count('APPLIED: external/project'), 2)
+                self.assert_fork_clean(checkout, commit)
+                for flags in (('--check',), ('--apply',)):
+                    result = self.run_helper(*flags)
+                    self.assertIn('FORK-PINNED: external/fork', result.stdout)
+                    self.assertNotIn('FETCHED', result.stdout)
+                    self.assert_fork_clean(checkout, commit)
+
+    def tearDown_fork(self):
+        import shutil
+        for path in (self.tree / 'external/fork', self.root / 'fork-work', self.root / 'remote'):
+            shutil.rmtree(path)
+        self.forks.clear()
+        for record in self.records:
+            checkout = self.tree / record['project']
+            self.git(checkout, 'checkout', '-q', '--', '.')
+
+    def fetch_fork(self, checkout):
+        self.git(checkout, 'fetch', '-q', 'https://github.com/haretic/android_external_fork.git',
+                 self.fork['commit'])
+
+    def write_fork_content(self, checkout):
+        (checkout / 'Android.bp').write_text('fork: changed\n')
+        (checkout / 'old.txt').unlink()
+        (checkout / 'tool.sh').chmod(0o755)
+        (checkout / 'new/dir').mkdir(parents=True)
+        (checkout / 'new/dir/file.txt').write_text('added by the fork\n')
+
+    def test_fork_matching_content_moves_head_and_index_only(self):
+        checkout, base, commit = self.add_fork()
+        self.fetch_fork(checkout)
+        self.write_fork_content(checkout)
+        (checkout / 'untracked.txt').write_text('keep me\n')
+        stamps = {name: (checkout / name).stat().st_mtime_ns
+                  for name in ('Android.bp', 'tool.sh', 'new/dir/file.txt')}
+        self.assertIn('FORK-CONTENT-MATCHES: external/fork', self.run_helper('--check').stdout)
+        self.assertEqual(self.fork_head(checkout), base)
+        result = self.run_helper('--apply')
+        self.assertIn('PINNED: external/fork', result.stdout)
+        self.assertNotIn('FETCHED', result.stdout)
+        self.assertEqual(self.fork_head(checkout), commit)
+        self.assertEqual(self.git(checkout, 'status', '--porcelain'), b'?? untracked.txt\n')
+        for name, stamp in stamps.items():
+            self.assertEqual((checkout / name).stat().st_mtime_ns, stamp)
+        self.assertIn('FORK-PINNED: external/fork', self.run_helper('--apply').stdout)
+
+    def test_fork_partial_content_is_preserved(self):
+        checkout, base, _ = self.add_fork()
+        self.fetch_fork(checkout)
+        (checkout / 'Android.bp').write_text('fork: changed\n')
+        result = self.run_helper('--apply', success=False)
+        self.assertIn('Preserving edited files in fork paths', result.stderr)
+        self.assertEqual(self.fork_head(checkout), base)
+        self.assertEqual((checkout / 'Android.bp').read_text(), 'fork: changed\n')
+        self.assert_original()
+
+    def test_fork_untracked_collision_is_preserved(self):
+        checkout, base, _ = self.add_fork()
+        self.fetch_fork(checkout)
+        (checkout / 'new/dir').mkdir(parents=True)
+        (checkout / 'new/dir/file.txt').write_text('user file\n')
+        self.assertIn('Preserving edited files in fork paths',
+                      self.run_helper('--apply', success=False).stderr)
+        self.assertEqual((checkout / 'new/dir/file.txt').read_text(), 'user file\n')
+        self.assertEqual(self.fork_head(checkout), base)
+
+    def test_fork_staged_change_is_preserved(self):
+        checkout, base, _ = self.add_fork()
+        self.fetch_fork(checkout)
+        self.write_fork_content(checkout)
+        self.git(checkout, 'add', 'Android.bp')
+        index = self.git(checkout, 'ls-files', '--stage')
+        self.assertIn('Preserving staged changes in fork paths',
+                      self.run_helper('--apply', success=False).stderr)
+        self.assertEqual(self.git(checkout, 'ls-files', '--stage'), index)
+        self.assertEqual(self.fork_head(checkout), base)
+
+    def test_fork_edits_at_pinned_commit(self):
+        checkout, _, commit = self.add_fork()
+        self.run_helper('--apply')
+        (checkout / 'unrelated.txt').write_text('unrelated local edit\n')
+        self.assertIn('FORK-PINNED: external/fork', self.run_helper('--apply').stdout)
+        (checkout / 'Android.bp').write_text('local edit\n')
+        self.assertIn('Preserving local edits at the pinned fork commit',
+                      self.run_helper('--check', success=False).stderr)
+        self.assertEqual((checkout / 'Android.bp').read_text(), 'local edit\n')
+        self.assertEqual(self.fork_head(checkout), commit)
+
+    def test_fork_fetch_failure_changes_nothing(self):
+        checkout, base, _ = self.add_fork()
+        self.fork['commit'] = '1' * 40
+        self.save()
+        self.run_helper('--apply', success=False)
+        self.assertEqual(self.fork_head(checkout), base)
+        self.assertEqual((checkout / 'Android.bp').read_text(), 'fork: base\n')
+        self.assert_original()
+
+    def test_fork_record_validation(self):
+        self.add_fork()
+        for key, value, message in (
+                ('repository', 'https://github.com/LineageOS/android_external_fork.git',
+                 'haretic GitHub fork'),
+                ('repository', 'file:///rabbitr1/.tmp/android_external_fork.git', 'haretic GitHub fork'),
+                ('commit', 'main', 'Invalid pinned hash'),
+                ('branch', '../lineage', 'Invalid fork branch'),
+                ('project', '../escape', 'Unsafe relative path')):
+            with self.subTest(key=key, value=value):
+                saved = self.fork[key]
+                self.fork[key] = value
+                self.save()
+                self.assertIn(message, self.run_helper('--check', success=False).stderr)
+                self.fork[key] = saved
+        self.fork['commit'] = self.fork['base_commit']
+        self.save()
+        self.assertIn('must differ from its base', self.run_helper('--check', success=False).stderr)
+        self.assert_original()
+
+    def test_forked_project_cannot_also_be_patched(self):
+        self.add_fork()
+        self.fork['project'] = self.records[0]['project']
+        self.save()
+        self.assertIn('both forked and patched', self.run_helper('--apply', success=False).stderr)
+        self.assert_original()
+
+    def test_series_must_be_forks_and_patches(self):
+        self.series.write_text(json.dumps(self.records))
+        self.assertIn('forks and patches', self.run_helper('--check', success=False).stderr)
+        self.series.write_text(json.dumps({'forks': [], 'patches': []}))
+        self.assertIn('at least one', self.run_helper('--check', success=False).stderr)
 
 
 if __name__ == '__main__':
