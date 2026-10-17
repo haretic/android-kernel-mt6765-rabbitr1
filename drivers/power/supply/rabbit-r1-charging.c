@@ -35,7 +35,7 @@ static const char * const r1_reason_names[] = {
 struct r1_charge_sample {
 	bool valid;
 	int present, plugged, health, temperature, voltage, current_ua, capacity;
-	int usb_type, gadget_ua;
+	int usb_type;
 	int typec_online, typec_type, typec_ua, typec_uv;
 	bool timer_expired;
 };
@@ -124,12 +124,13 @@ static struct r1_charge_target r1_charge_decide(struct r1_charge_policy *p,
 	} else if (s->usb_type == POWER_SUPPLY_USB_TYPE_DCP ||
 		   s->usb_type == POWER_SUPPLY_USB_TYPE_CDP) {
 		budget = R1_CHARGE_MAX_UA;
-	} else if (s->usb_type == POWER_SUPPLY_USB_TYPE_SDP) {
-		budget = clamp(s->gadget_ua, 0, 500000);
-	} else if (s->usb_type == POWER_SUPPLY_USB_TYPE_UNKNOWN) {
+	} else if (s->usb_type == POWER_SUPPLY_USB_TYPE_SDP ||
+		   s->usb_type == POWER_SUPPLY_USB_TYPE_UNKNOWN) {
 		/*
-		 * Nothing on the r1 starts BC1.2 detection, so every source reads
-		 * as unknown. The USB 2.0 default current is safe on any of them.
+		 * Not the gadget's enumerated budget: a plug with floating data
+		 * lines reads as SDP and never enumerates, off-mode charging has
+		 * no gadget, and an idle host suspends the bus. The USB 2.0
+		 * default current is safe on any of them.
 		 */
 		budget = 500000;
 	}
@@ -237,7 +238,6 @@ static int r1_charge_sample(struct r1_charge_policy *p, struct r1_charge_sample 
 	if (r1_get(p->battery, POWER_SUPPLY_PROP_CAPACITY, &s->capacity))
 		s->capacity = -1;
 	READ_SAMPLE(charger, USB_TYPE, usb_type);
-	READ_SAMPLE(gadget, CURRENT_MAX, gadget_ua);
 	if (p->typec) {
 		READ_SAMPLE(typec, ONLINE, typec_online);
 		READ_SAMPLE(typec, USB_TYPE, typec_type);

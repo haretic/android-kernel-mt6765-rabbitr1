@@ -88,7 +88,7 @@ static struct r1_charge_sample good(void)
 {
     return (struct r1_charge_sample){.valid=true, .present=1, .plugged=1,
         .health=POWER_SUPPLY_HEALTH_GOOD, .temperature=250, .voltage=3800000,
-        .usb_type=POWER_SUPPLY_USB_TYPE_DCP, .gadget_ua=0, .capacity=50};
+        .usb_type=POWER_SUPPLY_USB_TYPE_DCP, .capacity=50};
 }
 static void reset(void)
 {
@@ -117,7 +117,7 @@ static void decisions(void)
     for (int usb=0; usb<=3; usb++) {
         struct r1_charge_sample s=good();
         p.cold=p.hot=p.full=false; p.requested_ua=cap;
-        s.temperature=temp; s.voltage=voltage; s.usb_type=usb; s.gadget_ua=500000;
+        s.temperature=temp; s.voltage=voltage; s.usb_type=usb;
         struct r1_charge_target t=r1_charge_decide(&p,&s);
         assert(t.charge_ua<=cap && t.charge_ua<=1000000 && t.input_ua<=1000000);
         assert(t.charge_ua==0 || (t.charge_ua>=500000 && t.charge_ua%100000==0));
@@ -131,12 +131,11 @@ static void decisions(void)
         cases++;
     }
     reset(); struct r1_charge_sample s=good();
-    s.usb_type=POWER_SUPPLY_USB_TYPE_SDP;
-    const int budgets[]={-1,0,2000,8000,100000,499999,500000};
-    for (unsigned int i=0;i<sizeof(budgets)/sizeof(budgets[0]);i++) {
-        s.gadget_ua=budgets[i]; struct r1_charge_target t=r1_charge_decide(&p,&s);
-        assert(t.charge_ua==(budgets[i]>=500000 ? 500000 : 0));
-        if (!t.charge_ua) assert(!t.input_ua);
+    /* A standard port charges whether or not anything enumerates. */
+    const int unclassified[]={POWER_SUPPLY_USB_TYPE_SDP,POWER_SUPPLY_USB_TYPE_UNKNOWN};
+    for (unsigned int i=0;i<sizeof(unclassified)/sizeof(unclassified[0]);i++) {
+        s.usb_type=unclassified[i]; struct r1_charge_target t=r1_charge_decide(&p,&s);
+        assert(t.charge_ua==500000 && t.input_ua==500000 && t.reason==R1_USB_BUDGET);
     }
     s=good(); s.typec_online=1; s.typec_type=POWER_SUPPLY_USB_TYPE_PD;
     s.typec_ua=3000000; s.typec_uv=5000000;

@@ -35,7 +35,7 @@ subprocess.run([str(OUT / 'test')], check=True, timeout=60)
 mutations = {
     'invalid-sensor': ('if (!s->valid)', 'if (false)'),
     'charger-fault': ('if (s->health != POWER_SUPPLY_HEALTH_GOOD)', 'if (false)'),
-    'sdp-budget': ('budget = clamp(s->gadget_ua, 0, 500000);', 'budget = 500000;'),
+    'sdp-budget': ('budget = 500000;\n\t}', 'budget = 0;\n\t}'),
     'late-budget-change': ('return r1_charge_fresh(p, start, generation) ? 0 : -EAGAIN;', 'return 0;'),
 }
 for name, (before, after) in mutations.items():
