@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# Recovery takes over the boot deadman too (init.r1.rc).
+on boot
+    start watchdogd
+
+service watchdogd /system/bin/watchdogd 10 20
+    user root
+    oneshot
+    disabled
+    seclabel u:r:watchdogd:s0
