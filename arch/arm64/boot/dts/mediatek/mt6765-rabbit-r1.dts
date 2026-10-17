@@ -221,13 +221,44 @@
 	 *
 	 * LK leaves L 1500 MHz, LL 920 MHz and CCI 600 MHz at 0.800 V. CCI is
 	 * not scaled; the stock CCI table needs 0.8125 V for 600 MHz, so no OPP
-	 * below 0.8125 V is listed. The OPPs above 0.85 V were turbo-mode until
+	 * goes below 0.8125 V. The stock frequencies under that point keep it:
+	 * more than their stock voltage, but light loads still run slower. The OPPs above 0.85 V were turbo-mode until
 	 * throttling was checked on hardware (see ap-ntc-thermal); schedutil
 	 * never selects boost OPPs, so they have to be ordinary entries.
 	 */
 	cluster0_opp: opp-table-cluster0 {
 		compatible = "operating-points-v2";
 		opp-shared;
+
+		opp-900000000 {
+			opp-hz = /bits/ 64 <900000000>;
+			opp-microvolt = <812500>;
+		};
+
+		opp-979000000 {
+			opp-hz = /bits/ 64 <979000000>;
+			opp-microvolt = <812500>;
+		};
+
+		opp-1085000000 {
+			opp-hz = /bits/ 64 <1085000000>;
+			opp-microvolt = <812500>;
+		};
+
+		opp-1218000000 {
+			opp-hz = /bits/ 64 <1218000000>;
+			opp-microvolt = <812500>;
+		};
+
+		opp-1351000000 {
+			opp-hz = /bits/ 64 <1351000000>;
+			opp-microvolt = <812500>;
+		};
+
+		opp-1484000000 {
+			opp-hz = /bits/ 64 <1484000000>;
+			opp-microvolt = <812500>;
+		};
 
 		opp-1617000000 {
 			opp-hz = /bits/ 64 <1617000000>;
@@ -283,6 +314,36 @@
 	cluster1_opp: opp-table-cluster1 {
 		compatible = "operating-points-v2";
 		opp-shared;
+
+		opp-400000000 {
+			opp-hz = /bits/ 64 <400000000>;
+			opp-microvolt = <812500>;
+		};
+
+		opp-501000000 {
+			opp-hz = /bits/ 64 <501000000>;
+			opp-microvolt = <812500>;
+		};
+
+		opp-542000000 {
+			opp-hz = /bits/ 64 <542000000>;
+			opp-microvolt = <812500>;
+		};
+
+		opp-643000000 {
+			opp-hz = /bits/ 64 <643000000>;
+			opp-microvolt = <812500>;
+		};
+
+		opp-745000000 {
+			opp-hz = /bits/ 64 <745000000>;
+			opp-microvolt = <812500>;
+		};
+
+		opp-846000000 {
+			opp-hz = /bits/ 64 <846000000>;
+			opp-microvolt = <812500>;
+		};
 
 		opp-948000000 {
 			opp-hz = /bits/ 64 <948000000>;

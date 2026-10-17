@@ -294,7 +294,7 @@
 	thermal-zones {
 		soc_thermal: soc-thermal {
 			polling-delay-passive = <200>;
-			polling-delay = <500>;
+			polling-delay = <1000>;
 			thermal-sensors = <&thermal 0>;
 
 			trips {
@@ -329,7 +329,7 @@
 		/* TS1, at cores 0-3 */
 		cpu_big_thermal: cpu-big-thermal {
 			polling-delay-passive = <200>;
-			polling-delay = <500>;
+			polling-delay = <1000>;
 			thermal-sensors = <&thermal 1>;
 
 			trips {
@@ -360,7 +360,7 @@
 		/* TS2, at cores 4-7 */
 		cpu_little_thermal: cpu-little-thermal {
 			polling-delay-passive = <200>;
-			polling-delay = <500>;
+			polling-delay = <1000>;
 			thermal-sensors = <&thermal 2>;
 
 			trips {
@@ -391,7 +391,7 @@
 		/* TS3, at the GPU, which has no cooling device yet */
 		gpu_thermal: gpu-thermal {
 			polling-delay-passive = <200>;
-			polling-delay = <500>;
+			polling-delay = <1000>;
 			thermal-sensors = <&thermal 3>;
 
 			trips {
