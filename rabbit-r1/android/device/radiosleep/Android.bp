@@ -1,0 +1,12 @@
+// SPDX-License-Identifier: Apache-2.0
+android_app {
+    name: "R1RadioSleep",
+    system_ext_specific: true,
+    certificate: "platform",
+    sdk_version: "system_current",
+    min_sdk_version: "35",
+    srcs: ["src/**/*.java"],
+    resource_dirs: ["res"],
+    manifest: "AndroidManifest.xml",
+    optimize: { enabled: false },
+}

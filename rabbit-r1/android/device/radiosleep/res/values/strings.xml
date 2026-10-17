@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Radios in sleep</string>
+    <string name="tile_summary">Turn off Wi‑Fi, Bluetooth and mobile radio while the screen stays off</string>
+    <string name="after">Turn radios off after</string>
+    <string name="never">Never</string>
+    <string name="minutes">%d min</string>
+    <string name="on_charger">Also while charging</string>
+    <string name="explanation">Once the screen has been off this long, airplane mode switches the radios off. Turning the screen on ends it, and Wi‑Fi and Bluetooth come back as they were. Airplane mode you turned on yourself is left alone.</string>
+</resources>
