@@ -804,6 +804,12 @@ static void md_ccif_traffic_work_func(struct work_struct *work)
 		CCCI_C2K_AT8,
 		md_ctrl->traffic_info.logic_ch_pkt_cnt[CCCI_C2K_AT8]);
 	} else {
+		/* An idle modem would repeat the same counts every interval. */
+		if (md_ctrl->traffic_info.isr_cnt ==
+		    md_ctrl->traffic_info.reported_isr_cnt)
+			goto err_exit1;
+		md_ctrl->traffic_info.reported_isr_cnt =
+			md_ctrl->traffic_info.isr_cnt;
 		string = kmalloc(1024, GFP_ATOMIC);
 		string_temp = kmalloc(1024, GFP_ATOMIC);
 		if (string == NULL || string_temp == NULL) {

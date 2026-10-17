@@ -56,6 +56,8 @@ struct ccci_hif_traffic {
 		unsigned long long tx_other_isr_cnt[MAX_TXQ_NUM];
 #endif
 		unsigned long long isr_cnt;
+		/* isr_cnt at the last periodic report */
+		unsigned long long reported_isr_cnt;
 
 #ifdef DEBUG_FOR_CCB
 		unsigned long long latest_ccb_isr_time;
