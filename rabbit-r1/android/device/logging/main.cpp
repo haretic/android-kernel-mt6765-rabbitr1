@@ -11,6 +11,19 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
     std::string error;
+    haretic::logging::Kedump kedump;
+    if (!haretic::logging::ConsumeKedump(&kedump, &error)) {
+        LOG(ERROR) << "haretic expdb: LK KEdump not consumed: " << error;
+        return EXIT_FAILURE;
+    }
+    if (kedump == haretic::logging::Kedump::Consumed) {
+        LOG(INFO) << "haretic expdb: consumed LK KEdump; ramoops already holds its console";
+        return EXIT_SUCCESS;
+    }
+    if (kedump == haretic::logging::Kedump::Absent) {
+        LOG(INFO) << "haretic expdb: no LK KEdump; ramoops is the pstore backend";
+        return EXIT_SUCCESS;
+    }
     if (!haretic::logging::StartExpdb(&error)) {
         LOG(ERROR) << "haretic expdb unavailable: " << error;
         return EXIT_FAILURE;
