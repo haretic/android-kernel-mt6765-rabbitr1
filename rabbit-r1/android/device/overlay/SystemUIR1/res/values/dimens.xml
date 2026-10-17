@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <!-- The lock icon's touch area is 72dp across, 82 px at density 186; the
+         default 48 px padding is sized for ~420 dpi phones and leaves next to
+         nothing of the icon here. 21 px keeps the phones' proportion, an icon
+         about half the touch area. -->
+    <dimen name="lock_icon_padding">21px</dimen>
+</resources>
