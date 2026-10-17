@@ -35,6 +35,7 @@ prelude, body, model = ns['prelude'], ns['body'], ns['model']
 prelude += '\n#include "'+str(PROJECT.parent/'drivers/power/supply/mt6357-r1-model/session.h')+'"\n'
 prelude += r'''
 #define S64_MAX INT64_MAX
+#define NSEC_PER_SEC 1000000000L
 #define WRITE_ONCE(x,v) mock_write_once(&(x),(v))
 static void mock_write_once(bool *p, bool value);
 #define system_freezable_power_efficient_wq ((void *)1)
@@ -157,6 +158,9 @@ for line in result.stdout.splitlines():
     if not line.startswith('GRID '): continue
     mv,ret,capacity,qlo,qhi,ulo,uhi,bp,accepted,elapsed,margin=map(int,line.split()[1:])
     error,root=oracle_ns['seed'](points,mv*10,(0,100,75,100))
+    if error==-8:
+        # Above the first row: the driver seeds the pack as that full.
+        error,root=0,tuple(x.numerator//x.denominator for x in map(F,points[0]))
     if error:
         assert ret<0 and capacity==-777,(mv,error,line)
         continue

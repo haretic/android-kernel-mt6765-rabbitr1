@@ -93,6 +93,7 @@ struct mt6357_r1_soc {
 	u64 event_token;
 	bool enabled, running, stopping, notified, notified_valid, shown_valid;
 	int error, notified_capacity, shown;
+	u64 shown_step_ns, estimate_ns;
 };
 #endif
 
@@ -609,31 +610,50 @@ static int mt6357_soc_errno(const struct r1_battery_estimate *estimate)
 }
 
 /*
- * An estimate resting on a percent boundary rounded to alternate values on
- * every 2 s update: a flickering level and a battery uevent each time. Keep
- * the shown percent until the estimate is 0.75 % away from it.
+ * The point estimate moves several percent between 2 s updates as the load
+ * changes, most at low charge where the curve is steep, and a rejected
+ * observation leaves no estimate for a few seconds. Show a level that steps one
+ * percent at a time and no faster than a 1 C current moves the charge (~36 s
+ * per percent), only in the direction the battery current flows, and that
+ * rides out short gaps. Near empty it follows faster so that Android shuts
+ * down before the cell does.
  */
-#define MT6357_SOC_HYSTERESIS_BP 75
+#define MT6357_SOC_STEP_NS (20 * NSEC_PER_SEC)
+#define MT6357_SOC_EMPTY_STEP_NS (5 * NSEC_PER_SEC)
+#define MT6357_SOC_EMPTY_PERCENT 5
+#define MT6357_SOC_HOLD_NS (60 * NSEC_PER_SEC)
+#define MT6357_SOC_FLOW_UA 50000
 
-static int mt6357_soc_percent(struct mt6357_r1_soc *soc, r1_battery_int basis_points,
-			      int *out)
+static int mt6357_soc_percent(struct mt6357_r1_soc *soc, u64 now, r1_battery_int basis_points,
+			      int current_ua, int *out)
 {
-	r1_battery_int shown_bp;
+	u64 step_ns;
+	int target;
 
 	if (basis_points < 0 || basis_points > 10000)
 		return -ERANGE;
-	if (soc->shown_valid) {
-		shown_bp = (r1_battery_int)soc->shown * 100;
-		if (basis_points > shown_bp - MT6357_SOC_HYSTERESIS_BP &&
-		    basis_points < shown_bp + MT6357_SOC_HYSTERESIS_BP) {
-			*out = soc->shown;
-			return 0;
+	/* Uniform nearest percent, including genuine zero; no positive floor. */
+	target = (basis_points + 50) / 100;
+	soc->estimate_ns = now;
+	if (!soc->shown_valid) {
+		soc->shown = target;
+		soc->shown_valid = true;
+		soc->shown_step_ns = now;
+	} else if (target > soc->shown) {
+		if (current_ua > -MT6357_SOC_FLOW_UA &&
+		    now - soc->shown_step_ns >= MT6357_SOC_STEP_NS) {
+			soc->shown++;
+			soc->shown_step_ns = now;
+		}
+	} else if (target < soc->shown) {
+		step_ns = target <= MT6357_SOC_EMPTY_PERCENT ? MT6357_SOC_EMPTY_STEP_NS :
+			  MT6357_SOC_STEP_NS;
+		if (current_ua < MT6357_SOC_FLOW_UA && now - soc->shown_step_ns >= step_ns) {
+			soc->shown--;
+			soc->shown_step_ns = now;
 		}
 	}
-	/* Uniform nearest percent, including genuine zero; no positive floor. */
-	*out = (basis_points + 50) / 100;
-	soc->shown = *out;
-	soc->shown_valid = true;
+	*out = soc->shown;
 	return 0;
 }
 
@@ -662,13 +682,22 @@ static int mt6357_soc_estimate_locked(struct mt6357_gauge *gauge, u64 now,
 
 static int mt6357_soc_capacity_locked(struct mt6357_gauge *gauge, u64 now, int *out)
 {
+	struct mt6357_r1_soc *soc = &gauge->soc;
 	struct r1_battery_estimate estimate;
 	int ret;
 
 	ret = mt6357_soc_estimate_locked(gauge, now, &estimate);
-	if (ret)
+	if (ret) {
+		/* Not across an event (suspend, reset, removal) or a stop. */
+		if (ret != -EAGAIN && ret != -ENODEV && soc->shown_valid &&
+		    now - soc->estimate_ns < MT6357_SOC_HOLD_NS) {
+			*out = soc->shown;
+			return 0;
+		}
 		return ret;
-	return mt6357_soc_percent(&gauge->soc, estimate.soc_point_bp, out);
+	}
+	return mt6357_soc_percent(soc, now, estimate.soc_point_bp,
+				  soc->observation.endpoint[1].current_ua, out);
 }
 
 /*
@@ -955,9 +984,10 @@ static int mt6357_soc_init(struct mt6357_gauge *gauge)
 static int mt6357_soc_seed(struct mt6357_gauge *gauge)
 {
 	struct mt6357_r1_soc *soc = &gauge->soc;
+	struct r1_battery_estimate estimate;
 	u64 start, now;
 	unsigned int attempt;
-	int ret = -ENODATA, capacity;
+	int ret = -ENODATA;
 
 	if (!soc->enabled)
 		return 0;
@@ -970,10 +1000,13 @@ static int mt6357_soc_seed(struct mt6357_gauge *gauge)
 		mutex_lock(&soc->lock);
 		ret = mt6357_soc_consume_locked(gauge);
 		now = ktime_get_boottime_ns();
-		/* Check a two-second publication margin without renewing the seed. */
+		/*
+		 * Check a two-second publication margin without renewing the seed
+		 * or stepping the shown level at a future time.
+		 */
 		if (!ret)
 			ret = now > S64_MAX - 2000000000ULL ? -ERANGE :
-				mt6357_soc_capacity_locked(gauge, now + 2000000000ULL, &capacity);
+				mt6357_soc_estimate_locked(gauge, now + 2000000000ULL, &estimate);
 		mutex_unlock(&soc->lock);
 		if (!ret)
 			return 0;
