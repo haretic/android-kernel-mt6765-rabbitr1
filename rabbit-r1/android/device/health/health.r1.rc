@@ -32,7 +32,10 @@ service vendor.charger /vendor/bin/hw/android.hardware.health-service.r1 --charg
     class charger
     seclabel u:r:charger_vendor:s0
     user system
-    group system wakelock input
+    # graphics opens /dev/graphics/fb0; SELinux keeps charger_type off /dev/dri.
+    # Without it gr_init fails, the charger never draws over the boot logo and
+    # its loop spins with a zero timeout.
+    group system wakelock input graphics
     capabilities SYS_BOOT
     file /dev/kmsg w
     file /sys/fs/pstore/console-ramoops-0 r
