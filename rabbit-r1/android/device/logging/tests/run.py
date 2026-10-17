@@ -13,7 +13,8 @@ out.mkdir(parents=True, exist_ok=True)
 os.environ['TMPDIR'] = str(root / '.tmp')
 os.environ['ASAN_OPTIONS'] = 'detect_leaks=1:abort_on_error=1'
 wrappers = ['open', 'close', 'read', 'fstat', 'lstat', 'opendir', 'readdir', 'closedir',
-            'clock_gettime', 'nanosleep', 'realpath', 'getrandom', 'ioctl', 'syscall']
+            'clock_gettime', 'nanosleep', 'realpath', 'getrandom', 'ioctl', 'syscall',
+            'pread', 'pwrite', 'fsync']
 command = ['g++', '-std=c++17', '-Wall', '-Wextra', '-Werror', '-g',
            '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-I', str(source),
            str(source/'Expdb.cpp'), str(source/'tests/loader.cpp'),

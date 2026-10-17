@@ -2,6 +2,7 @@
 #include "Expdb.h"
 #include "ExpdbLayout.h"
 
+#include <algorithm>
 #include <array>
 #include <cerrno>
 #include <climits>
@@ -23,6 +24,9 @@ namespace {
 constexpr const char* kBackend = "/sys/module/pstore/parameters/backend";
 constexpr const char* kZone = "/vendor/lib/modules/pstore_zone.ko";
 constexpr const char* kBlk = "/vendor/lib/modules/pstore_blk.ko";
+// KEdump header magic 0xaee0dead, little endian; the record index follows it.
+constexpr std::array<unsigned char, 4> kKedumpMagic = {0xad, 0xde, 0xe0, 0xae};
+constexpr size_t kKedumpHeaderBytes = 4096;
 constexpr unsigned kRejectedFlags = DM_BUFFER_FULL_FLAG | DM_SUSPEND_FLAG |
         DM_READONLY_FLAG | DM_INTERNAL_SUSPEND_FLAG | DM_DEFERRED_REMOVE |
         DM_INACTIVE_PRESENT_FLAG | DM_QUERY_INACTIVE_TABLE_FLAG;
@@ -118,6 +122,7 @@ class Runner {
         if (created_ && !attach_attempted_) Cleanup();
     }
     bool Run();
+    bool Consume(Kedump* result);
 
   private:
     bool Clock(uint64_t* now) {
@@ -162,7 +167,7 @@ class Runner {
 
     std::string* error_;
     Fd control_;
-    std::string uuid_, mapper_path_;
+    std::string uuid_, mapper_path_, raw_path_;
     dev_t backing_ = 0, mapper_ = 0;
     uint64_t deadline_ = 0;
     bool created_ = false, attach_attempted_ = false;
@@ -216,6 +221,7 @@ bool Runner::Discover() {
         if (ioctl(partition.value, BLKGETSIZE64, &size)) return Fail(error_, "size expdb");
         if (size != R1_EXPDB_BYTES) return Reject(error_, "expdb must be exactly 20 MiB");
         backing_ = st.st_rdev;
+        raw_path_ = "/dev/block/" + candidate;
         // Release O_EXCL before DM acquires its holder claim. This cannot
         // exclude an unrelated privileged raw writer across the transition.
         return true;
@@ -307,6 +313,39 @@ void Runner::Cleanup() {
     *error_ = original;
 }
 
+bool Runner::Consume(Kedump* result) {
+    error_->clear();
+    *result = Kedump::NotRamoops;
+    std::string backend;
+    if (!ReadText(kBackend, &backend, error_)) return false;
+    if (backend != "ramoops") return true;
+    if (!Clock(&deadline_)) return false;
+    deadline_ += 30000;
+    if (!Discover()) return false;
+    Fd raw(open(raw_path_.c_str(), O_RDWR | O_CLOEXEC | O_NOFOLLOW | O_EXCL));
+    if (raw.value < 0) return Fail(error_, "open expdb for its KEdump header");
+    struct stat st {};
+    if (fstat(raw.value, &st)) return Fail(error_, "stat expdb");
+    if (!S_ISBLK(st.st_mode) || st.st_rdev != backing_) return Reject(error_, "Wrong expdb device node");
+    std::array<unsigned char, kKedumpHeaderBytes> header {};
+    ssize_t count = pread(raw.value, header.data(), header.size(), 0);
+    if (count != static_cast<ssize_t>(header.size())) {
+        if (count >= 0) errno = EIO;
+        return Fail(error_, "read KEdump header");
+    }
+    *result = Kedump::Absent;
+    if (!std::equal(kKedumpMagic.begin(), kKedumpMagic.end(), header.begin())) return true;
+    header.fill(0);
+    count = pwrite(raw.value, header.data(), header.size(), 0);
+    if (count != static_cast<ssize_t>(header.size())) {
+        if (count >= 0) errno = EIO;
+        return Fail(error_, "clear KEdump header");
+    }
+    if (fsync(raw.value)) return Fail(error_, "flush expdb");
+    *result = Kedump::Consumed;
+    return true;
+}
+
 bool Runner::Run() {
     error_->clear();
     if (!Clock(&deadline_)) return false;
@@ -384,6 +423,10 @@ bool ValidateExpdbTable(const void* buffer, size_t capacity, dev_t backing,
     if (target.next != next || next > capacity - dm.data_start)
         return Reject(error, "Invalid expdb table target boundary");
     return true;
+}
+
+bool ConsumeKedump(Kedump* result, std::string* error) {
+    return Runner(error).Consume(result);
 }
 
 bool StartExpdb(std::string* error) {

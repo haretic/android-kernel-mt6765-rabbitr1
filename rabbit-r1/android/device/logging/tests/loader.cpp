@@ -23,6 +23,8 @@
 #include <unistd.h>
 #include <vector>
 
+using haretic::logging::ConsumeKedump;
+using haretic::logging::Kedump;
 using haretic::logging::StartExpdb;
 using haretic::logging::ValidateExpdbTable;
 static std::string test_name;
@@ -39,7 +41,7 @@ constexpr const char* backend_path = "/sys/module/pstore/parameters/backend";
 constexpr const char* parameters = "blkdev=/dev/block/dm-9 best_effort=1 console_size=1024 pmsg_size=64 kmsg_size=64 ftrace_size=0 max_reason=2";
 
 enum class Role { Text, Raw, Control, Map, Zone, Blk };
-struct File { Role role; std::string text; size_t offset = 0; };
+struct File { Role role; std::string text; size_t offset = 0; bool writable = false; };
 struct Model {
     std::map<int, File> files;
     int next_fd = 20000;
@@ -63,6 +65,10 @@ struct Model {
     uint64_t raw_size = 20971520, map_size = 18874368;
     uint64_t elapsed_ms = 0;
     std::vector<unsigned char> backing;
+    // KEdump consumption: the expdb head, its raw read-write opens and syncs.
+    std::vector<unsigned char> head = std::vector<unsigned char>(8192, 0x11);
+    bool kedump = false, short_io = false;
+    unsigned rw_opens = 0, head_writes = 0, syncs = 0;
 
     bool Fault(const char* at, int error = EIO) {
         if (failure != at) return false;
@@ -127,10 +133,18 @@ extern "C" int __wrap_open(const char* input, int flags, ...) {
             value = found->second;
         }
     }
-    Check((flags & O_ACCMODE) == (role == Role::Control ? O_RDWR : O_RDONLY),
-          "ordinary write access requested outside mapper control");
+    const bool writable = role == Role::Raw && (flags & O_ACCMODE) == O_RDWR;
+    if (writable) {
+        Check(m.kedump, "raw write access outside KEdump consumption");
+        Check(m.files.empty(), "raw expdb reopened while another descriptor is open");
+        if (m.Fault("rw.open")) return -1;
+        ++m.rw_opens;
+    } else {
+        Check((flags & O_ACCMODE) == (role == Role::Control ? O_RDWR : O_RDONLY),
+              "ordinary write access requested outside mapper control");
+    }
     const int fd = m.next_fd++;
-    m.files.emplace(fd, File{role, value, 0});
+    m.files.emplace(fd, File{role, value, 0, writable});
     return fd;
 }
 extern "C" int __wrap_close(int fd) {
@@ -147,6 +161,33 @@ extern "C" ssize_t __wrap_read(int fd, void* buffer, size_t capacity) {
     std::memcpy(buffer, file.text.data() + file.offset, size);
     file.offset += size;
     return size;
+}
+extern "C" ssize_t __wrap_pread(int fd, void* buffer, size_t size, off_t offset) {
+    auto& m = *current;
+    Check(m.Fd(fd).writable, "raw read outside KEdump consumption");
+    Check(offset == 0 && size == 4096, "KEdump read beyond its header");
+    if (m.Fault("pread")) return -1;
+    const size_t count = m.short_io ? 100 : size;
+    std::memcpy(buffer, m.head.data(), count);
+    return count;
+}
+extern "C" ssize_t __wrap_pwrite(int fd, const void* buffer, size_t size, off_t offset) {
+    auto& m = *current;
+    Check(m.Fd(fd).writable, "raw write outside KEdump consumption");
+    Check(offset == 0 && size == 4096, "KEdump write beyond its header");
+    const auto* bytes = static_cast<const unsigned char*>(buffer);
+    Check(std::all_of(bytes, bytes + size, [](auto byte) { return byte == 0; }), "header not cleared to zero");
+    if (m.Fault("pwrite")) return -1;
+    ++m.head_writes;
+    std::memcpy(m.head.data(), buffer, size);
+    return size;
+}
+extern "C" int __wrap_fsync(int fd) {
+    auto& m = *current;
+    Check(m.Fd(fd).writable, "sync on wrong descriptor");
+    if (m.Fault("fsync")) return -1;
+    ++m.syncs;
+    return 0;
 }
 extern "C" int __wrap_fstat(int fd, struct stat* result) {
     auto& m = *current;
@@ -466,6 +507,45 @@ int main() {
     run("wrong registered backend", [](auto& m) { m.after_backend = "ramoops"; }, false, 0, 2);
     for (const char* name : {"blkdev", "best_effort", "console_size", "pmsg_size", "kmsg_size", "ftrace_size", "max_reason"})
         run(name, [=](auto& m) { m.changed_parameter = name; }, false, 0, 2);
+
+    auto consume = [&](const char* name, const std::function<void(Model&)>& setup, bool success,
+                       Kedump expected, unsigned writes) {
+        test_name = name;
+        Model model;
+        current = &model;
+        model.kedump = true;
+        model.backend = "ramoops";
+        std::memcpy(model.head.data(), "\xad\xde\xe0\xae", 4);
+        setup(model);
+        const auto tail = std::vector<unsigned char>(model.head.begin() + 4096, model.head.end());
+        std::string error;
+        Kedump result = Kedump::Consumed;
+        Check(ConsumeKedump(&result, &error) == success, "unexpected KEdump result");
+        Check(success ? error.empty() : !error.empty(), "result/error disagreement");
+        if (success) Check(result == expected, "wrong KEdump outcome");
+        Check(model.head_writes == writes && model.syncs == (success ? writes : model.syncs),
+              "wrong KEdump write or sync count");
+        Check(std::equal(tail.begin(), tail.end(), model.head.begin() + 4096), "KEdump data past the header changed");
+        if (writes) Check(std::all_of(model.head.begin(), model.head.begin() + 4096,
+                                      [](auto byte) { return byte == 0; }), "header left partly intact");
+        Check(!model.loads && !model.creates, "KEdump consumption touched pstore_blk or device-mapper");
+        Check(model.files.empty() && !model.directory_open, "descriptor/directory leak");
+        current = nullptr;
+        ++scenarios;
+    };
+    consume("KEdump consumed", [](auto&) {}, true, Kedump::Consumed, 1);
+    consume("no KEdump", [](auto& m) { m.head[0] = 0; }, true, Kedump::Absent, 0);
+    consume("other backend untouched", [](auto& m) { m.backend = "pstore_blk"; }, true, Kedump::NotRamoops, 0);
+    consume("no backend untouched", [](auto& m) { m.backend = "(null)"; }, true, Kedump::NotRamoops, 0);
+    consume("backend unreadable", [](auto& m) { m.failure = "text.open"; }, false, Kedump::Absent, 0);
+    consume("no expdb before deadline", [](auto& m) { m.entries.clear(); }, false, Kedump::Absent, 0);
+    consume("raw identity mismatch", [](auto& m) { m.raw_wrong_dev = true; }, false, Kedump::Absent, 0);
+    consume("raw size mismatch", [](auto& m) { ++m.raw_size; }, false, Kedump::Absent, 0);
+    consume("read-write open failure", [](auto& m) { m.failure = "rw.open"; }, false, Kedump::Absent, 0);
+    consume("header read failure", [](auto& m) { m.failure = "pread"; }, false, Kedump::Absent, 0);
+    consume("short header read", [](auto& m) { m.short_io = true; }, false, Kedump::Absent, 0);
+    consume("header write failure", [](auto& m) { m.failure = "pwrite"; }, false, Kedump::Absent, 0);
+    consume("flush failure", [](auto& m) { m.failure = "fsync"; }, false, Kedump::Absent, 1);
 
     test_name = "bounded table parser truncations";
     alignas(8) std::array<unsigned char, 4096> bytes {};

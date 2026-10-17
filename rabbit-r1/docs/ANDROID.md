@@ -322,7 +322,19 @@ artifact and compiled recovery-policy checks. Runtime dependencies and device
 operation remain to be checked on the complete system.
 
 The `r1-expdb` service starts asynchronously after `post-fs` when the fixed build
-property `ro.vendor.r1.expdb.enabled=1` is set. It verifies the 20 MiB `expdb`
+property `ro.vendor.r1.expdb.enabled=1` is set.
+
+LK passes `ramoops.*` on the kernel command line, so ramoops is normally the
+pstore backend and the RAM console survives warm resets. After an abnormal reset
+(watchdog, panic) LK also saves the RAM console and pstore to `expdb` behind a
+KEdump header (magic `0xaee0dead`, record index in its first 4 KiB) and restores
+them over ramoops on every later boot until the header goes. Stock AEE cleared
+it after boot. Left in place, every boot shows that one old console in
+`console-ramoops-0` and bootstat reports its panic again. With ramoops as the
+backend, `r1-expdb` therefore clears that 4 KiB header (ramoops has already
+loaded the console) and stops; it writes nothing else.
+
+Without ramoops, the service verifies the 20 MiB `expdb`
 partition and creates a UUID-owned, single-target mapping of its first 18 MiB.
 It checks the active table, device identities and ueventd links before loading
 the two fixed pstore modules, then verifies backend registration and parameters.

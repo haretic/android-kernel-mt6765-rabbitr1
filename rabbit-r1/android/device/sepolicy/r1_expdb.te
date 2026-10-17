@@ -20,8 +20,9 @@ allow r1_expdb sysfs_block:lnk_file r_file_perms;
 r_dir_file(r1_expdb, sysfs_r1_mmc)
 r_dir_file(r1_expdb, sysfs_r1_pstore)
 
-# Validate the physical partition; ordinary raw writes are never requested.
-allow r1_expdb r1_expdb_raw_device:blk_file { open read getattr ioctl };
+# Validate the physical partition. The one raw write clears LK's KEdump header
+# (its first 4 KiB) once ramoops holds the console it saved.
+allow r1_expdb r1_expdb_raw_device:blk_file { open read write getattr ioctl };
 allowxperm r1_expdb r1_expdb_raw_device:blk_file ioctl { 0x1272 };
 
 # Only the bounded 18 MiB mapping is opened for pstore's internal writes.
