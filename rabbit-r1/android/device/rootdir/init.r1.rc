@@ -18,13 +18,17 @@ service watchdogd /system/bin/watchdogd 10 20
     disabled
     seclabel u:r:watchdogd:s0
 
+# Core power-down in idle (mt6765-mcdi) once the deadman no longer guards boot,
+# as stock enabled MCDI only after boot.
 on property:sys.boot_completed=1
     start watchdogd
     swapon_all /vendor/etc/fstab.r1
+    write /sys/module/mt6765_mcdi/parameters/enable 1
 
 # Off-mode charging never completes boot.
 on charger
     start watchdogd
+    write /sys/module/mt6765_mcdi/parameters/enable 1
 
 # PowerVR GE8320 (ported DDK 1.13). rgx.fw comes from /vendor/firmware on first use.
 # ueventd sets /dev/pvr_sync's owner and mode (ueventd.r1.rc). Its node can

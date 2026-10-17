@@ -203,8 +203,9 @@
 	chosen {
 		stdout-path = "serial0:921600n8";
 		/*
-		 * The stock ATF offers PSCI SYSTEM_SUSPEND, but it runs SPM
-		 * firmware that only the stock kernel hands over: sleep to idle.
+		 * Sleep to idle: LK hands ATF the SPM firmware, but deep suspend
+		 * also needs the stock kernel's SPM/SSPM sleep sequence, and ATF
+		 * rejects SYSTEM_SUSPEND's power level.
 		 * fbcon draws the LK splash (logo_rabbit_r1_clut224) centred, once,
 		 * with no cursor, from when the display binds until Android draws.
 		 */

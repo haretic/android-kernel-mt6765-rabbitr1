@@ -114,10 +114,13 @@ def main():
                     'RTC_CLASS', 'RTC_DRV_MT6397', 'RTC_NVMEM', 'NVMEM', 'NVMEM_SYSFS']:
             assert f'CONFIG_{key}=y\n' in config, f'Missing power monitor CONFIG_{key}'
         assert 'CONFIG_DRM_PANEL_RABBIT_R1=y\n' in config, 'Missing r1 panel driver'
-        # Suspend-to-idle only: the stock ATF's deeper states need SPM firmware nothing loads.
         for key in ['SUSPEND', 'PM_SLEEP', 'PM_WAKELOCKS']:
             assert f'CONFIG_{key}=y\n' in config, f'Missing suspend CONFIG_{key}'
-        for key in ['USB_ETH','USB_G_HID','CPU_IDLE','HIBERNATION']:
+        # PSCI cpu-off parks the core unless the SSPM manages it: cpuidle only with MCDI.
+        if 'CONFIG_CPU_IDLE=y\n' in config:
+            for key in ['ARM_PSCI_CPUIDLE', 'MTK_MT6765_MCDI']:
+                assert f'CONFIG_{key}=y\n' in config, f'cpuidle without CONFIG_{key}'
+        for key in ['USB_ETH','USB_G_HID','HIBERNATION']:
             assert f'CONFIG_{key}=y\n' not in config and f'CONFIG_{key}=m\n' not in config, f'Unexpected CONFIG_{key}'
         for key in ['PSTORE_ZONE', 'PSTORE_BLK']:
             assert f'CONFIG_{key}=m\n' in config, f'Missing logging module CONFIG_{key}'
