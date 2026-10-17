@@ -684,6 +684,9 @@
 	};
 
 	rtc {
+		/* LK enters fastboot when RTC_PDN1 bit 13 is set. */
+		mode-bootloader = <0x2000>;
+
 		nvmem-layout {
 			compatible = "fixed-layout";
 			#address-cells = <1>;

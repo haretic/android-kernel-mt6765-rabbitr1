@@ -13,10 +13,23 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
+#include <linux/reboot-mode.h>
 #include <linux/rtc.h>
 #include <linux/mfd/mt6397/rtc.h>
 
 #define MT6357_RTC_SPARE_SIZE 2
+
+/*
+ * Boot-mode bits the MT6357 bootloader reads from RTC_PDN1: recovery (bits 4-5)
+ * and fastboot (bit 13), as the vendor kernel's rtc_mark_recovery/_fast set them.
+ */
+#define MT6357_RTC_PDN1			0x002c
+#define MT6357_RTC_PDN1_BOOT_MODES	(GENMASK(5, 4) | BIT(13))
+
+struct mt6357_rtc_reboot {
+	struct reboot_mode_driver reboot;
+	struct mt6397_rtc *rtc;
+};
 
 static struct platform_driver mtk_rtc_driver;
 
@@ -87,6 +100,41 @@ static int mtk_rtc_write_trigger(struct mt6397_rtc *rtc)
 			"failed to write WRTGR: %d\n", ret);
 
 	return ret;
+}
+
+static int mt6357_rtc_reboot_write(struct reboot_mode_driver *reboot,
+				   unsigned int magic)
+{
+	struct mt6397_rtc *rtc =
+		container_of(reboot, struct mt6357_rtc_reboot, reboot)->rtc;
+	int ret;
+
+	if (magic & ~MT6357_RTC_PDN1_BOOT_MODES)
+		return -EINVAL;
+	mutex_lock(&rtc->lock);
+	ret = regmap_update_bits(rtc->regmap, rtc->addr_base + MT6357_RTC_PDN1,
+				 MT6357_RTC_PDN1_BOOT_MODES, magic);
+	if (!ret)
+		ret = mtk_rtc_write_trigger(rtc);
+	mutex_unlock(&rtc->lock);
+	return ret;
+}
+
+/* mode-<cmd> = <PDN1 bits> properties in the RTC node, if any. */
+static int mt6357_rtc_reboot_register(struct platform_device *pdev,
+				      struct mt6397_rtc *rtc)
+{
+	struct mt6357_rtc_reboot *r;
+
+	if (!IS_ENABLED(CONFIG_REBOOT_MODE) || !pdev->dev.of_node)
+		return 0;
+	r = devm_kzalloc(&pdev->dev, sizeof(*r), GFP_KERNEL);
+	if (!r)
+		return -ENOMEM;
+	r->rtc = rtc;
+	r->reboot.dev = &pdev->dev;
+	r->reboot.write = mt6357_rtc_reboot_write;
+	return devm_reboot_mode_register(&pdev->dev, &r->reboot);
 }
 
 static irqreturn_t mtk_rtc_irq_handler_thread(int irq, void *data)
@@ -353,6 +401,11 @@ static int mtk_rtc_probe(struct platform_device *pdev)
 	ret = devm_rtc_register_device(rtc->rtc_dev);
 	if (ret)
 		return ret;
+	if (rtc->data->has_fg_spares) {
+		ret = mt6357_rtc_reboot_register(pdev, rtc);
+		if (ret)
+			dev_warn(&pdev->dev, "no reboot modes: %d\n", ret);
+	}
 	if (IS_ENABLED(CONFIG_RTC_NVMEM) && rtc->data->has_fg_spares) {
 		struct nvmem_config config = {
 			.size = MT6357_RTC_SPARE_SIZE,
