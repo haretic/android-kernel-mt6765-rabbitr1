@@ -30,10 +30,10 @@ It combines the requested cap with these independent constraints:
   A momentarily unknown level keeps the previous decision.
   **Settings → Battery → Charging control** sets it through the LineageOS
   health HAL in "limit" mode (50–100 %, resuming 10 % below the limit).
-* BC1.2 DCP/CDP permit at most 1 A. SDP uses the gadget's actual enumeration and
-  suspend budget, capped at 500 mA. Budgets below the charger's 500 mA minimum
-  charge current isolate input; no small USB budget is rounded up. The diagnostic
-  ACM gadget advertises 100 mA, so it does not charge from an SDP host.
+* BC1.2 DCP/CDP permit at most 1 A. SDP and unclassified sources get the USB 2.0
+  default of 500 mA whatever the gadget negotiated: a plug with floating data
+  lines reads as SDP and never enumerates, off-mode charging has no gadget, and
+  an idle host suspends the bus.
 * An optional TCPM supply can provide a confirmed 5 V Type-C/PD budget. It is not
   connected in this board tree: TCPC and higher-voltage negotiation remain off.
 * Charger overvoltage, thermal regulation, fault state or safety-timer expiry
