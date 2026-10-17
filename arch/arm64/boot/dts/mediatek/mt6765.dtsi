@@ -225,25 +225,29 @@
 			entry-method = "psci";
 
 			/*
-			 * Core power-down (stock mcdi-cpu). The SSPM does the
-			 * power-off, so mt6765-mcdi gates these until it is
-			 * enabled. Residencies are the stock cpuidle driver's.
+			 * Core power-down at cluster level, as the stock MCDI
+			 * governor enters it: ATF coordinates the cluster (L2
+			 * flush) and the SSPM powers the cores off, and the
+			 * cluster too once mt6765-mcdi has told it the last
+			 * core is going down. mt6765-mcdi gates these until it
+			 * is enabled. Residencies are the stock cpuidle
+			 * driver's, the exit latency its cluster-off one.
 			 */
 			cpu_off_b: cpu-off-b {
 				compatible = "arm,idle-state";
-				arm,psci-suspend-param = <0x00010001>;
+				arm,psci-suspend-param = <0x01010001>;
 				local-timer-stop;
 				entry-latency-us = <100>;
-				exit-latency-us = <200>;
+				exit-latency-us = <500>;
 				min-residency-us = <1500>;
 			};
 
 			cpu_off_l: cpu-off-l {
 				compatible = "arm,idle-state";
-				arm,psci-suspend-param = <0x00010001>;
+				arm,psci-suspend-param = <0x01010001>;
 				local-timer-stop;
 				entry-latency-us = <100>;
-				exit-latency-us = <200>;
+				exit-latency-us = <500>;
 				min-residency-us = <4500>;
 			};
 		};

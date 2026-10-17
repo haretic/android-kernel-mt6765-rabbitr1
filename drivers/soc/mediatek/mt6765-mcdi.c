@@ -31,13 +31,18 @@
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <asm/smp_plat.h>
 #include <linux/pm_qos.h>
 
 /* SSPM mailbox 3 slots, 4 bytes each (stock mt6765/mtk_mcdi_reg.h). */
+#define MCDI_CLUSTER_CAN_POWER_OFF	0	/* + cluster */
 #define MCDI_PAUSE_ACTION	6
 #define MCDI_AVAIL_CPU_MASK	7
 #define MCDI_CPU_ISO_MASK	12
 #define MCDI_PAUSE_ACK		13
+#define MCDI_CLUSTER_CNT	10	/* + cluster */
+
+#define MCDI_CLUSTERS		2
 
 #define MTK_SIP_POWER_DOWN_CORE	0xc2000212
 
@@ -47,6 +52,13 @@ static bool mcdi_enabled;
 static struct pm_qos_request mcdi_gate;
 /* CPUs between cpu_pm_enter() and cpu_pm_exit(), i.e. in a power-down state. */
 static atomic_t mcdi_deep = ATOMIC_INIT(0);
+static atomic_t mcdi_cluster_deep[MCDI_CLUSTERS];
+static struct cpumask mcdi_cluster_cpus[MCDI_CLUSTERS];
+
+static unsigned int mcdi_cluster(unsigned int cpu)
+{
+	return MPIDR_AFFINITY_LEVEL(cpu_logical_map(cpu), 1);
+}
 
 static void mcdi_write(unsigned int slot, u32 value)
 {
@@ -89,13 +101,29 @@ static void mcdi_gate_states(bool gate)
 	}
 }
 
+/*
+ * Every deep state asks PSCI for cluster level, so the last core of a cluster to
+ * go down may let the SSPM power the cluster off too (stock
+ * mcdi_notify_cluster_off). The SSPM consumes the flag. Hotplug holds deep idle
+ * off, so the online CPUs of a cluster do not change under these counts.
+ */
 static int mcdi_cpu_pm_notify(struct notifier_block *nb, unsigned long action,
 			      void *data)
 {
-	if (action == CPU_PM_ENTER)
+	unsigned int cpu = smp_processor_id();
+	unsigned int cluster = mcdi_cluster(cpu);
+	atomic_t *in_cluster = &mcdi_cluster_deep[cluster];
+
+	if (action == CPU_PM_ENTER) {
 		atomic_inc(&mcdi_deep);
-	else if (action == CPU_PM_EXIT || action == CPU_PM_ENTER_FAILED)
+		if (atomic_inc_return(in_cluster) ==
+		    cpumask_weight_and(&mcdi_cluster_cpus[cluster], cpu_online_mask) &&
+		    READ_ONCE(mcdi_enabled))
+			mcdi_write(MCDI_CLUSTER_CAN_POWER_OFF + cluster, 1);
+	} else if (action == CPU_PM_EXIT || action == CPU_PM_ENTER_FAILED) {
+		atomic_dec(in_cluster);
 		atomic_dec(&mcdi_deep);
+	}
 	return NOTIFY_OK;
 }
 
@@ -211,15 +239,37 @@ static const struct kernel_param_ops mcdi_enable_ops = {
 module_param_cb(enable, &mcdi_enable_ops, NULL, 0644);
 MODULE_PARM_DESC(enable, "Let the SSPM power idle CPU cores off");
 
+static int mcdi_cluster_off_get(char *buffer, const struct kernel_param *kp)
+{
+	if (!mcdi_mbox)
+		return -ENODEV;
+	return sysfs_emit(buffer, "%u %u\n",
+			  readl(mcdi_mbox + (MCDI_CLUSTER_CNT + 0) * 4),
+			  readl(mcdi_mbox + (MCDI_CLUSTER_CNT + 1) * 4));
+}
+
+static const struct kernel_param_ops mcdi_cluster_off_ops = {
+	.get = mcdi_cluster_off_get,
+};
+module_param_cb(cluster_off_count, &mcdi_cluster_off_ops, NULL, 0444);
+MODULE_PARM_DESC(cluster_off_count, "Cluster power-downs the SSPM counted, per cluster");
+
 static int mt6765_mcdi_probe(struct platform_device *pdev)
 {
 	void __iomem *base;
+	unsigned int cpu;
 	int ret;
 
 	base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(base))
 		return PTR_ERR(base);
 	mcdi_mbox = base;
+
+	for_each_possible_cpu(cpu) {
+		if (mcdi_cluster(cpu) >= MCDI_CLUSTERS)
+			return -EINVAL;
+		cpumask_set_cpu(cpu, &mcdi_cluster_cpus[mcdi_cluster(cpu)]);
+	}
 
 	ret = cpu_pm_register_notifier(&mcdi_cpu_pm_nb);
 	if (ret)
