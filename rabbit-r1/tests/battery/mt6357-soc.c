@@ -112,18 +112,49 @@ static void seed_and_cache(void)
     assert(value == (e.soc_point_bp+50)/100); unsigned int old_ops=nops;
     for (unsigned int i=0; i<200; i++) assert(!mt6357_soc_read_capacity(&gauge,&value));
     assert(old_ops == nops && raw_calls == 6); soc_cases++;
-    now+=6000000; value=-777; assert(mt6357_soc_read_capacity(&gauge,&value) == -ENODATA && value == -777); soc_cases++;
+    /* An expired estimate keeps the shown level, until the hold runs out. */
+    int shown=value; now+=6000000; value=-777; assert(!mt6357_soc_read_capacity(&gauge,&value) && value == shown);
+    gauge.soc.estimate_ns=now-MT6357_SOC_HOLD_NS; value=-777;
+    assert(mt6357_soc_read_capacity(&gauge,&value) == -ENODATA && value == -777); soc_cases++;
 }
 
 static void percentages(void)
 {
     const struct { int bp, percent; } examples[]={{0,0},{1,0},{49,0},{50,1},{99,1},{100,1},{149,1},{150,2},{9899,99},{9949,99},{9950,100},{9999,100},{10000,100}};
     for (unsigned int i=0; i<ARRAY_SIZE(examples); i++) {
-        int value=-777; assert(!mt6357_soc_percent(examples[i].bp,&value));
-        assert(value == examples[i].percent); soc_cases++;
+        struct mt6357_r1_soc s={0}; int value=-777;
+        assert(!mt6357_soc_percent(&s,1,examples[i].bp,0,&value));
+        assert(value == examples[i].percent && s.shown_valid); soc_cases++;
     }
     const r1_battery_int invalid[]={-1,10001,INT64_MIN,INT64_MAX};
-    for (unsigned int i=0; i<ARRAY_SIZE(invalid); i++) { int value=-777; assert(mt6357_soc_percent(invalid[i],&value) == -ERANGE && value == -777); soc_cases++; }
+    for (unsigned int i=0; i<ARRAY_SIZE(invalid); i++) {
+        struct mt6357_r1_soc s={0}; int value=-777;
+        assert(mt6357_soc_percent(&s,1,invalid[i],0,&value) == -ERANGE && value == -777 && !s.shown_valid); soc_cases++;
+    }
+    /* One percent per step, a step at most every 20 s, whatever the estimate does. */
+    const u64 sec=1000000000ULL; struct mt6357_r1_soc s={0}; int value;
+    assert(!mt6357_soc_percent(&s,sec,5000,0,&value) && value == 50);
+    const int jitter[]={5600,4400,5600,4400};
+    for (unsigned int i=0; i<ARRAY_SIZE(jitter); i++) {
+        assert(!mt6357_soc_percent(&s,sec+(i+1)*4*sec,jitter[i],0,&value) && value == 50); soc_cases++;
+    }
+    assert(!mt6357_soc_percent(&s,21*sec,5600,0,&value) && value == 51);
+    assert(!mt6357_soc_percent(&s,22*sec,5600,0,&value) && value == 51);
+    assert(!mt6357_soc_percent(&s,40*sec,5600,0,&value) && value == 51);
+    assert(!mt6357_soc_percent(&s,41*sec,5600,0,&value) && value == 52); soc_cases++;
+    /* Only the way the current flows: no rise while discharging, no fall while charging. */
+    assert(!mt6357_soc_percent(&s,100*sec,6000,-MT6357_SOC_FLOW_UA,&value) && value == 52);
+    assert(!mt6357_soc_percent(&s,100*sec,6000,-MT6357_SOC_FLOW_UA+1,&value) && value == 53);
+    assert(!mt6357_soc_percent(&s,200*sec,4000,MT6357_SOC_FLOW_UA,&value) && value == 53);
+    assert(!mt6357_soc_percent(&s,200*sec,4000,MT6357_SOC_FLOW_UA-1,&value) && value == 52); soc_cases++;
+    /* Near empty the shown level follows every 5 s. */
+    s=(struct mt6357_r1_soc){0}; assert(!mt6357_soc_percent(&s,sec,700,0,&value) && value == 7);
+    assert(!mt6357_soc_percent(&s,5*sec,0,-300000,&value) && value == 7);
+    assert(!mt6357_soc_percent(&s,6*sec,0,-300000,&value) && value == 6);
+    for (int level=5; level>=0; level--) {
+        assert(!mt6357_soc_percent(&s,(6+5*(6-level))*sec,0,-300000,&value) && value == level); soc_cases++;
+    }
+    assert(s.estimate_ns == 36*sec);
 }
 static void adapter(void)
 {
@@ -186,8 +217,12 @@ static void worker_and_pm(void)
     run_work(&gauge.soc.work); assert(notifications == 1 && gauge.soc.work.queued);
     for (unsigned int i=0; i<5; i++) run_work(&gauge.soc.work);
     assert(notifications == 1); soc_cases++;
+    /* A failed sample keeps the shown level without a uevent, until the hold runs out. */
     raw_errors[0]=-EIO; run_work(&gauge.soc.work); int value=-777;
-    assert(mt6357_soc_read_capacity(&gauge,&value) == -EIO && value == -777 && notifications == 2);
+    assert(!mt6357_soc_read_capacity(&gauge,&value) && value == gauge.soc.shown && notifications == 1);
+    gauge.soc.estimate_ns=now-MT6357_SOC_HOLD_NS; value=-777;
+    assert(mt6357_soc_read_capacity(&gauge,&value) == -EIO && value == -777);
+    run_work(&gauge.soc.work); assert(notifications == 2);
     run_work(&gauge.soc.work); assert(notifications == 2); soc_cases++;
     raw_errors[0]=0; run_work(&gauge.soc.work); assert(!mt6357_soc_read_capacity(&gauge,&value) && notifications == 3); soc_cases++;
     r1_battery_int old_epoch=gauge.soc.session.estimate.epoch;
@@ -233,12 +268,19 @@ static void init_and_seed_failures(void)
         switch (fault) {
         case 0: raw_errors[0]=-EIO; break;
         case 1: for (unsigned int i=0; i<6; i++) if (i == 1 || i == 4) raw_values[i]=2800; break; /* Cold profile/NTC rejection. */
-        case 2: raw_values[0]=raw_values[5]=30000; break; /* Beyond curve; no root. */
+        case 2: raw_values[0]=raw_values[5]=30000; break; /* Beyond the curve's full end. */
         case 3: for (unsigned int i=0; i<ARRAY_SIZE(current_words); i++) current_words[i]=0x7fff; break;
         case 4: raw_values[5]+=1000; break;
         }
-        int ret=mt6357_soc_seed(&gauge); assert(ret<0 && sleep_calls == 7 && latch_count == 16 && !registrations);
-        int value=-777; assert(mt6357_soc_read_capacity(&gauge,&value)<0 && value == -777); soc_cases++;
+        int ret=mt6357_soc_seed(&gauge), value=-777;
+        if (fault == 2) {
+            /* A pack charged past the profile's first row seeds as full. */
+            assert(!ret && !sleep_calls && latch_count == 2 && !registrations);
+            assert(!mt6357_soc_read_capacity(&gauge,&value) && value == 100); soc_cases++;
+            continue;
+        }
+        assert(ret<0 && sleep_calls == 7 && latch_count == 16 && !registrations);
+        assert(mt6357_soc_read_capacity(&gauge,&value)<0 && value == -777); soc_cases++;
     }
 }
 static void startup_deadline(void)
@@ -330,7 +372,8 @@ static void expiry_during_collection(void)
     assert(!mt6357_soc_read_capacity(&gauge,&after) && before == after);
     struct r1_battery_estimate old;
     assert(!r1_battery_session_read(&previous,gauge.soc.session.estimate.accepted_ns,&old));
-    assert(old.validity != R1_BATTERY_FRESH && notifications == 2); soc_cases++;
+    /* Readers kept the shown level through the expiry, so nothing to announce. */
+    assert(old.validity != R1_BATTERY_FRESH && notifications == 1); soc_cases++;
 }
 static void counter_epochs(void)
 {
@@ -342,6 +385,8 @@ static void counter_epochs(void)
     assert(gauge.soc.session.estimate.discharged_point_uah>before && gauge.soc.session.estimate.epoch == epoch); soc_cases++;
     for (unsigned int i=latch_count; i<ARRAY_SIZE(car_words); i++) car_words[i]=900000*2048;
     run_work(&gauge.soc.work); int value=-777;
+    assert(!mt6357_soc_read_capacity(&gauge,&value) && value == gauge.soc.shown);
+    gauge.soc.estimate_ns=now-MT6357_SOC_HOLD_NS; value=-777;
     assert(mt6357_soc_read_capacity(&gauge,&value) == -ENODATA && value == -777);
     assert(gauge.soc.session.estimate.reason == R1_BATTERY_REASON_COUNTER_RATE); soc_cases++;
     /* Next complete sample can seed at its own arbitrary signed CAR baseline. */
