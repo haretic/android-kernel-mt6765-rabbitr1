@@ -1,0 +1,15 @@
+// SPDX-License-Identifier: Apache-2.0
+// R1HA, the Home Assistant client for the R1 (github.com/itskenny0/R1HA), as
+// released (sha256 f6641a8f181968b315f99f0c54337842573309d6965fb2281841516549b90fec).
+// Its own signature is kept so its F-Droid releases update it in place.
+android_app_import {
+    name: "R1HA",
+    apk: "r1ha-fdroid-2026.09.03.2328.apk",
+    presigned: true,
+    preprocessed: true,
+    product_specific: true,
+    optional_uses_libs: [
+        "androidx.window.extensions",
+        "androidx.window.sidecar",
+    ],
+}

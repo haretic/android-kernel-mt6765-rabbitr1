@@ -89,6 +89,9 @@ PRODUCT_PACKAGES += \
 # Airplane mode after the screen has been off for a set time (Settings > Battery).
 PRODUCT_PACKAGES += R1RadioSleep
 
+# Home Assistant client for the R1, preinstalled.
+PRODUCT_PACKAGES += R1HA
+
 # The logger validates expdb and bounds its mapping before loading pstore.
 PRODUCT_VENDOR_PROPERTIES += ro.vendor.r1.expdb.enabled=1
 
