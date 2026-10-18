@@ -961,8 +961,7 @@ int ccci_load_firmware(int md_id, void *img_inf,
 			return -CCCI_ERR_INVALID_PARAM;
 		}
 	}
-	strncpy(img->file_name, img_name, sizeof(img->file_name));
-	img->file_name[IMG_NAME_LEN - 1] = '\0';
+	strscpy(img->file_name, img_name, sizeof(img->file_name));
 	img->offset = 0;
 	img->tail_length = 0;
 	/*Check whether need skip header*/

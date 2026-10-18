@@ -324,15 +324,14 @@ static void mdee_info_dump_v3(struct ccci_fsm_ee *mdee)
 				"%s-%d:snprintf fail,ret=%d\n", __func__, __LINE__, ret);
 		break;
 	case MD_EE_CASE_NO_RESPONSE:
-		/* use strncpy, otherwise if this happens after a MD EE,
+		/* pad with zeros, otherwise if this happens after a MD EE,
 		 * the former EE info will be printed out
 		 */
 		db_opt |= DB_OPT_FTRACE;
 		fallthrough;
 	case MD_EE_CASE_WDT:
-		strncpy(ex_info, mdee_more_inf_str[dumper->more_info],
-			EE_BUF_LEN_UMOLY);
-		ex_info[EE_BUF_LEN_UMOLY - 1] = '\0';
+		strscpy_pad(ex_info, mdee_more_inf_str[dumper->more_info],
+			    EE_BUF_LEN_UMOLY);
 		break;
 	default:
 		mdee_output_debug_info_to_buf(mdee, debug_info, ex_info);

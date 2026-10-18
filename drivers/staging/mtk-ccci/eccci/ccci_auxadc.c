@@ -16,6 +16,8 @@
 #include "ccci_debug.h"
 #include "mtk_ccci_main.h"
 
+MODULE_IMPORT_NS("IIO_CONSUMER");
+
 #define TAG "ccci_adc"
 
 static struct platform_device *md_adc_pdev;
