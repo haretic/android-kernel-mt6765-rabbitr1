@@ -443,6 +443,30 @@ static int mtk_musb_set_mode(struct musb *musb, u8 mode)
 	return 0;
 }
 
+/*
+ * The glue's own registers: the controller loses them when the SoC powers
+ * it down in deep sleep, and musb_restore_context() only covers the MUSB
+ * core ones, so musb_resume() reprograms them through the enable hook.
+ */
+static void mtk_musb_glue_regs_init(struct musb *musb)
+{
+	/* Set TX/RX toggle enable */
+	musb_writew(musb->mregs, MUSB_TXTOGEN, MTK_TOGGLE_EN);
+	musb_writew(musb->mregs, MUSB_RXTOGEN, MTK_TOGGLE_EN);
+
+#if defined(CONFIG_USB_INVENTRA_DMA)
+	musb_writel(musb->mregs, MUSB_HSDMA_INTR,
+		    DMA_INTR_STATUS_MSK | DMA_INTR_UNMASK_SET_MSK);
+#endif
+	musb_writel(musb->mregs, USB_L1INTM, TX_INT_STATUS | RX_INT_STATUS |
+		    USBCOM_INT_STATUS | DMA_INT_STATUS);
+}
+
+static void mtk_musb_enable(struct musb *musb)
+{
+	mtk_musb_glue_regs_init(musb);
+}
+
 static int mtk_musb_init(struct musb *musb)
 {
 	struct device *dev = musb->controller;
@@ -454,10 +478,6 @@ static int mtk_musb_init(struct musb *musb)
 	musb->xceiv = glue->xceiv;
 	musb->is_host = false;
 	musb->isr = mtk_musb_interrupt;
-
-	/* Set TX/RX toggle enable */
-	musb_writew(musb->mregs, MUSB_TXTOGEN, MTK_TOGGLE_EN);
-	musb_writew(musb->mregs, MUSB_RXTOGEN, MTK_TOGGLE_EN);
 
 	if (musb->port_mode == MUSB_OTG) {
 		ret = mtk_otg_switch_init(glue);
@@ -475,12 +495,7 @@ static int mtk_musb_init(struct musb *musb)
 
 	phy_set_mode(glue->phy, glue->phy_mode);
 
-#if defined(CONFIG_USB_INVENTRA_DMA)
-	musb_writel(musb->mregs, MUSB_HSDMA_INTR,
-		    DMA_INTR_STATUS_MSK | DMA_INTR_UNMASK_SET_MSK);
-#endif
-	musb_writel(musb->mregs, USB_L1INTM, TX_INT_STATUS | RX_INT_STATUS |
-		    USBCOM_INT_STATUS | DMA_INT_STATUS);
+	mtk_musb_glue_regs_init(musb);
 	mtk_musb_power_role(&glue->power, glue->role);
 	return 0;
 
@@ -556,6 +571,7 @@ static int mtk_musb_vbus_draw(struct musb *musb, unsigned int ma)
 static const struct musb_platform_ops mtk_musb_ops = {
 	.quirks = MUSB_DMA_INVENTRA,
 	.init = mtk_musb_init,
+	.enable = mtk_musb_enable,
 	.get_toggle = mtk_musb_get_toggle,
 	.set_toggle = mtk_musb_set_toggle,
 	.exit = mtk_musb_exit,
