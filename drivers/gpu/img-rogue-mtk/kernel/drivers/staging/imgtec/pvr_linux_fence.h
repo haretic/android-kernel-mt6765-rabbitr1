@@ -101,6 +101,11 @@ dma_fence_wait_timeout(struct dma_fence *fence, bool intr, signed long timeout)
 
 #endif
 
+/* Linux 7.3 renamed dma_fence_enable_sw_signaling() to dma_fence_enable_signaling(). */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(7, 3, 0))
+#define dma_fence_enable_sw_signaling dma_fence_enable_signaling
+#endif
+
 /*
  * dma_fence_ops lost fence_value_str/timeline_value_str upstream. They were
  * only used for debug output, so fall back to the seqno when they are gone.
