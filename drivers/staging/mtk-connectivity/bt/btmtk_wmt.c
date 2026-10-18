@@ -464,7 +464,7 @@ static int __init btmtk_wmt_init(void)
 	INIT_WORK(&bdev->rx_work, btmtk_wmt_rx_work);
 	INIT_WORK(&bdev->tx_work, btmtk_wmt_tx_work);
 
-	bdev->wq = alloc_workqueue("btmtk_wmt", WQ_HIGHPRI | WQ_MEM_RECLAIM,
+	bdev->wq = alloc_workqueue("btmtk_wmt", WQ_HIGHPRI | WQ_MEM_RECLAIM | WQ_PERCPU,
 				   0);
 	if (!bdev->wq) {
 		err = -ENOMEM;
