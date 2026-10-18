@@ -1,2 +1,0 @@
-vendor.wlan.firmware.version    u:object_r:vendor_wlan_versions_prop:s0 exact string
-vendor.wlan.driver.version      u:object_r:vendor_wlan_versions_prop:s0 exact string

@@ -1,2 +1,0 @@
-# Driver and firmware versions reported by libwifi-hal-r1.
-vendor_restricted_prop(vendor_wlan_versions_prop)

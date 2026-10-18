@@ -1,7 +1,0 @@
-# Recovery starts watchdogd from the rootfs-labelled recovery ramdisk (init.recovery.r1.rc),
-# like the services AOSP lists in init.te; without this the exec is denied and the boot
-# deadman resets recovery after watchdog.open_timeout.
-recovery_only(`
-  domain_trans(init, rootfs, watchdogd)
-  allow watchdogd rootfs:dir r_dir_perms;
-')

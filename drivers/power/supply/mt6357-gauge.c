@@ -584,7 +584,7 @@ static void mt6357_gauge_live_diagnostic(struct mt6357_gauge *gauge)
 
 #if IS_ENABLED(CONFIG_BATTERY_MT6357_R1_SOC)
 /* Experimental factory-r1 model. These assumptions are not calibrated error
- * bounds. See rabbit-r1/battery/SESSION.rst and the integration policy audit. */
+ * bounds. See battery/SESSION.rst in haretic/r1-tools and the integration policy audit. */
 static const struct r1_battery_policy mt6357_r1_policy = {
 	.minimum_01mv = 33500, .discharge_01ma = 5000,
 	.shunt_01mohm = 100, .meter_01mohm = 75, .dc_ratio_percent = 100,
