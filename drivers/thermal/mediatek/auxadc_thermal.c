@@ -360,6 +360,10 @@ struct mtk_thermal_sensor {
 struct mtk_thermal {
 	struct device *dev;
 	void __iomem *thermal_base;
+	void __iomem *apmixed_base;
+	void __iomem *auxadc_base;
+	u64 apmixed_phys_base;
+	u64 auxadc_phys_base;
 
 	struct clk *clk_peri_therm;
 	struct clk *clk_auxadc;
@@ -1396,9 +1400,26 @@ static void mtk_thermal_release_periodic_ts(struct mtk_thermal *mt,
 	writel((tmp & (~0x10e)), mt->thermal_base + TEMP_MSRCTL1);
 }
 
+/* The controller state that the SoC's deep sleep power-down loses. */
+static void mtk_thermal_hw_init(struct mtk_thermal *mt)
+{
+	int ctrl_id, i;
+
+	mtk_thermal_turn_on_buffer(mt, mt->apmixed_base);
+
+	if (mt->conf->version == MTK_THERMAL_V2 ||
+	    mt->conf->version == MTK_THERMAL_V3)
+		mtk_thermal_release_periodic_ts(mt, mt->auxadc_base);
+
+	for (ctrl_id = 0; ctrl_id < mt->conf->num_controller ; ctrl_id++)
+		for (i = 0; i < mt->conf->num_banks; i++)
+			mtk_thermal_init_bank(mt, i, mt->apmixed_phys_base,
+					      mt->auxadc_phys_base, ctrl_id);
+}
+
 static int mtk_thermal_probe(struct platform_device *pdev)
 {
-	int ret, i, ctrl_id;
+	int ret, i;
 	struct device_node *auxadc, *apmixedsys, *np = pdev->dev.of_node;
 	struct mtk_thermal *mt;
 	u64 auxadc_phys_base, apmixed_phys_base;
@@ -1473,11 +1494,12 @@ static int mtk_thermal_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	mtk_thermal_turn_on_buffer(mt, apmixed_base);
-
-	if (mt->conf->version == MTK_THERMAL_V2 ||
-	    mt->conf->version == MTK_THERMAL_V3)
-		mtk_thermal_release_periodic_ts(mt, auxadc_base);
+	mt->apmixed_base = apmixed_base;
+	mt->auxadc_base = auxadc_base;
+	mt->apmixed_phys_base = apmixed_phys_base;
+	mt->auxadc_phys_base = auxadc_phys_base;
+	platform_set_drvdata(pdev, mt);
+	mtk_thermal_hw_init(mt);
 
 	if (mt->conf->version == MTK_THERMAL_V1)
 		mt->raw_to_mcelsius = raw_to_mcelsius_v1;
@@ -1487,11 +1509,6 @@ static int mtk_thermal_probe(struct platform_device *pdev)
 		mt->raw_to_mcelsius = raw_to_mcelsius_v3;
 	else
 		mt->raw_to_mcelsius = raw_to_mcelsius_v4;
-
-	for (ctrl_id = 0; ctrl_id < mt->conf->num_controller ; ctrl_id++)
-		for (i = 0; i < mt->conf->num_banks; i++)
-			mtk_thermal_init_bank(mt, i, apmixed_phys_base,
-					      auxadc_phys_base, ctrl_id);
 
 	tzdev = devm_thermal_of_zone_register(&pdev->dev, 0, mt,
 					      &mtk_thermal_ops);
@@ -1530,11 +1547,21 @@ static int mtk_thermal_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static int mtk_thermal_resume(struct device *dev)
+{
+	mtk_thermal_hw_init(dev_get_drvdata(dev));
+
+	return 0;
+}
+
+static DEFINE_SIMPLE_DEV_PM_OPS(mtk_thermal_pm_ops, NULL, mtk_thermal_resume);
+
 static struct platform_driver mtk_thermal_driver = {
 	.probe = mtk_thermal_probe,
 	.driver = {
 		.name = "mtk-thermal",
 		.of_match_table = mtk_thermal_of_match,
+		.pm = pm_sleep_ptr(&mtk_thermal_pm_ops),
 	},
 };
 
