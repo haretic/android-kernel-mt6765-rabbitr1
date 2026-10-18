@@ -47,6 +47,10 @@ properties:
     type: object
     $ref: /schemas/interconnect/mediatek,mt8183-emi.yaml#
 
+  dram:
+    type: object
+    $ref: /schemas/devfreq/mediatek,mt6765-dvfsrc-dram.yaml#
+
 required:
   - compatible
   - reg
