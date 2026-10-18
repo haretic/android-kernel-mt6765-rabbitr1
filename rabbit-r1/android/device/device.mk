@@ -31,8 +31,8 @@ endif
 TARGET_GRAPHICS_COMPOSER_HAL := drmfb-composer
 # Keep the supported ARM backends without x86-only Intel cache operations.
 TARGET_MINIGBM_PLATFORM := all_arm
-# The bring-up default installs suspend_blocker; the kernel sleeps to idle
-# (mem_sleep_default=s2idle in BoardConfig.mk), so let Android autosuspend.
+# The bring-up default installs suspend_blocker; the kernel suspends through
+# the SPM (mem_sleep_default=deep in the DT bootargs), so let Android autosuspend.
 TARGET_SUPPORTS_SUSPEND := true
 TARGET_BOOT_HAL := r1
 # The stock gralloc is HIDL allocator/mapper 4.0, which FCM level 7 still accepts.

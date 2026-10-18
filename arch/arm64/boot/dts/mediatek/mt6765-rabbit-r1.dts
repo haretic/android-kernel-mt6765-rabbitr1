@@ -203,13 +203,13 @@
 	chosen {
 		stdout-path = "serial0:921600n8";
 		/*
-		 * Sleep to idle: LK hands ATF the SPM firmware, but deep suspend
-		 * also needs the stock kernel's SPM/SSPM sleep sequence, and ATF
-		 * rejects SYSTEM_SUSPEND's power level.
+		 * Deep sleep: the SPM puts the SoC down (mt6765-spm-sleep); ATF
+		 * rejects PSCI SYSTEM_SUSPEND's power level, so s2idle is no
+		 * alternative.
 		 * fbcon draws the LK splash (logo_rabbit_r1_clut224) centred, once,
 		 * with no cursor, from when the display binds until Android draws.
 		 */
-		bootargs = "earlycon=uart8250,mmio32,0x11002000 console=ttyS0,921600n8 clk_ignore_unused regulator_ignore_unused mem_sleep_default=s2idle fbcon=logo-pos:center,logo-count:1 vt.global_cursor_default=0";
+		bootargs = "earlycon=uart8250,mmio32,0x11002000 console=ttyS0,921600n8 clk_ignore_unused regulator_ignore_unused mem_sleep_default=deep fbcon=logo-pos:center,logo-count:1 vt.global_cursor_default=0";
 	};
 
 	/*
