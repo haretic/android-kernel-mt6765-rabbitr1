@@ -633,9 +633,7 @@ int mtk_cfg80211_vendor_set_scan_param(struct wiphy *wiphy,
 	kalMemZero(&rChipConfigInfo, sizeof(rChipConfigInfo));
 	rChipConfigInfo.ucType = CHIP_CONFIG_TYPE_WO_RESPONSE;
 	rChipConfigInfo.u2MsgSize = len;
-	kalStrnCpy(rChipConfigInfo.aucCmd, str,
-		   CHIP_CONFIG_RESP_SIZE - 1);
-	rChipConfigInfo.aucCmd[CHIP_CONFIG_RESP_SIZE - 1] = '\0';
+	strscpy(rChipConfigInfo.aucCmd, str, sizeof(rChipConfigInfo.aucCmd));
 
 	rStatus = kalIoctl(prAdapter->prGlueInfo, wlanoidSetChipConfig,
 		&rChipConfigInfo, sizeof(rChipConfigInfo),

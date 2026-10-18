@@ -9308,10 +9308,15 @@ uint32_t wlanCfgParseToFW(int8_t **args, int8_t *args_size,
 		DBGLOG(INIT, ERROR, "cfg args wrong\n");
 		return WLAN_STATUS_FAILURE;
 	}
+	if (args_size[ED_STRING_SITE] > sizeof(cmd_v1.itemString) ||
+	    args_size[ED_VALUE_SITE] > sizeof(cmd_v1.itemValue)) {
+		DBGLOG(INIT, ERROR, "cfg args too long\n");
+		return WLAN_STATUS_FAILURE;
+	}
 
 	cmd_v1.itemStringLength = args_size[ED_STRING_SITE];
-	strncpy(cmd_v1.itemString, args[ED_STRING_SITE],
-		cmd_v1.itemStringLength);
+	kalStrnCpy(cmd_v1.itemString, args[ED_STRING_SITE],
+		   cmd_v1.itemStringLength);
 	DBGLOG(INIT, INFO, "itemString:");
 	for (i = 0; i <  cmd_v1.itemStringLength; i++)
 		DBGLOG(INIT, INFO, "%c", cmd_v1.itemString[i]);
@@ -9367,8 +9372,8 @@ uint32_t wlanCfgParseToFW(int8_t **args, int8_t *args_size,
 		cmd_v1.itemValueLength = bufferindex;
 	} else if (cmd_v1.itemType == ITEM_TYPE_STR) {
 		cmd_v1.itemValueLength = args_size[ED_VALUE_SITE];
-		strncpy(cmd_v1.itemValue, args[ED_VALUE_SITE],
-			cmd_v1.itemValueLength);
+		kalStrnCpy(cmd_v1.itemValue, args[ED_VALUE_SITE],
+			   cmd_v1.itemValueLength);
 	}
 
 	DBGLOG(INIT, INFO, "Length = %d itemValue:",

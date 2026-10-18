@@ -3204,7 +3204,8 @@ void scanLogEssResult(struct ADAPTER *prAdapter)
 					"%s", strbuf);
 			}
 		}
-		kalStrnCpy(ssid, prEssResult[u4Index].aucSSID, sizeof(ssid));
+		kalStrnCpy(ssid, prEssResult[u4Index].aucSSID,
+			   sizeof(prEssResult[u4Index].aucSSID));
 		ssid[sizeof(ssid) - 1] = '\0';
 		pos += kalSnprintf(pos, end - pos, " %s;", ssid);
 	}
@@ -4662,8 +4663,8 @@ void scanReqLog(struct CMD_SCAN_REQ_V2 *prCmdScanReq)
 			for (j = 0; j < snum[i]; ++j) {
 				char ssid[PARAM_MAX_LEN_SSID + 1] = {0};
 
-				kalStrnCpy(ssid,
-					slist[i][j].aucSsid, sizeof(ssid));
+				kalStrnCpy(ssid, slist[i][j].aucSsid,
+					   sizeof(slist[i][j].aucSsid));
 				ssid[sizeof(ssid) - 1] = '\0';
 				pos += kalSnprintf(pos, end - pos, " %s", ssid);
 			}
