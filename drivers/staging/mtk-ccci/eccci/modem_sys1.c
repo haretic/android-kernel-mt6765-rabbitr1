@@ -1251,18 +1251,14 @@ static void md_cd_sysfs_init(struct ccci_modem *md)
 			ccci_md_attr_parameter.attr.name, ret);
 }
 
-/* weak function for compatibility */
-int __weak ccci_modem_suspend_noirq(struct device *dev)
+static int ccci_modem_suspend_noirq(struct device *dev)
 {
-	CCCI_NORMAL_LOG(-1, TAG,
-		"%s:weak function\n", __func__);
 	return 0;
 }
 
-int __weak ccci_modem_resume_noirq(struct device *dev)
+static int ccci_modem_resume_noirq(struct device *dev)
 {
-	CCCI_NORMAL_LOG(-1, TAG,
-		"%s:weak function\n", __func__);
+	ccci_ccif_check_wakeup();
 	return 0;
 }
 

@@ -286,6 +286,7 @@ void md_ccif_reset_queue(unsigned char hif_id, unsigned char for_start);
 void ccif_polling_ready(unsigned char hif_id, int step);
 
 void md_ccif_sram_reset(unsigned char hif_id);
+void ccci_ccif_check_wakeup(void);
 int md_ccif_ring_buf_init(unsigned char hif_id);
 void md_ccif_switch_ringbuf(unsigned char hif_id, enum ringbuf_id rb_id);
 void ccci_reset_ccif_hw(unsigned char md_id,

@@ -28,6 +28,7 @@
 #include <linux/of_address.h>
 #include <linux/clk.h> /* for clk_prepare/un* */
 #include <linux/syscore_ops.h>
+#include <linux/suspend.h>
 
 #include "ccci_config.h"
 #include "ccci_core.h"
@@ -2299,6 +2300,24 @@ static int ccci_ccif_syssuspend(void *data)
 {
 
 	return 0;
+}
+
+/*
+ * The vendor SPM driver reported a modem wakeup with ID_GET_MD_WAKEUP_SRC;
+ * here the PM core knows the IRQ, so the RX path can name the channel. Call
+ * from a noirq resume callback: the wake IRQ is recorded once it is
+ * delivered, after syscore resume, and its handler runs only afterwards.
+ */
+void ccci_ccif_check_wakeup(void)
+{
+	struct md_ccif_ctrl *ccif_ctrl =
+		(struct md_ccif_ctrl *)ccci_hif_get_by_id(CCIF_HIF_ID);
+	unsigned int irq = pm_wakeup_irq();
+	int wakeup = 1;
+
+	if (ccif_ctrl && irq && (irq == ccif_ctrl->ap_ccif_irq0_id ||
+				 irq == ccif_ctrl->ap_ccif_irq1_id))
+		ccif_debug(CCIF_HIF_ID, CCCI_HIF_DEBUG_SET_WAKEUP, &wakeup);
 }
 
 static void ccci_ccif_sysresume(void *data)
