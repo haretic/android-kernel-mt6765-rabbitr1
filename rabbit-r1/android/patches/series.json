@@ -47,7 +47,7 @@
    "repository": "https://github.com/haretic/android_hardware_interfaces.git",
    "branch": "lineage-24.0",
    "base_commit": "1b92b77fe1f2f2c820c51b0b1e366c17d6b9911b",
-   "commit": "4447d5e7423c0d3d6a6d63cc049d54bff2f3739e"
+   "commit": "6e389677808977290621cddea00c06e04c58dde6"
   },
   {
    "project": "system/core",
@@ -68,7 +68,7 @@
    "repository": "https://github.com/haretic/android_kernel_configs.git",
    "branch": "lineage-24.0",
    "base_commit": "200b3987b78fc25015bf826b281f0c3851daf146",
-   "commit": "113c5cd8a0d19c0400965f1a77bdcd9381cbb9b6"
+   "commit": "ee999faadc9c2a998fc177038adde658e85bd7b4"
   },
   {
    "project": "packages/providers/TelephonyProvider",
