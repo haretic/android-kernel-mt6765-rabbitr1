@@ -90,6 +90,16 @@ config MTK_MT6765_MCDI
 	  back. Deep cpuidle states stay off until the "enable" parameter
 	  is set.
 
+config MTK_MT6765_SPM_SLEEP
+	bool "MediaTek MT6765 SPM system suspend"
+	depends on MTK_MT6765_MCDI && SUSPEND && ARM64
+	help
+	  Suspend to RAM ("deep" mem sleep) through the SPM PCM firmware
+	  that LK loads, as the stock kernel does: the boot CPU enters the
+	  firmware's suspend state and the SPM puts the SoC to sleep,
+	  waking it on its wake sources. The stock ATF does not support
+	  PSCI SYSTEM_SUSPEND.
+
 config MTK_SOCINFO
 	tristate "MediaTek SoC Information"
 	default y
