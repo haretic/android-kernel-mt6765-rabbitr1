@@ -108,7 +108,7 @@ static struct r1_charge_target r1_charge_decide(struct r1_charge_policy *p,
 	}
 	p->full = s->voltage >= t.voltage_uv ||
 		  (p->full && s->voltage >= t.voltage_uv - 100000);
-	if (s->voltage < 3000000 || s->voltage > 4450000 || p->full) {
+	if (s->voltage < 3000000 || s->voltage > 4450000) {
 		t.reason = R1_VOLTAGE;
 		return t;
 	}
@@ -140,6 +140,18 @@ static struct r1_charge_target r1_charge_decide(struct r1_charge_policy *p,
 	if (t.charge_ua < R1_CHARGE_MIN_UA) {
 		t.charge_ua = 0;
 		t.input_ua = 0;
+	}
+	/*
+	 * Full at the charge voltage: stop charging but keep the input powering
+	 * the system, as the level hold does. The cell regulates at that same
+	 * voltage, so gauge noise crosses it; isolating the input there put the
+	 * charger to sleep, dropped VBUS and with it the USB gadget, until the
+	 * battery sagged 100 mV under load and the input came back.
+	 */
+	if (p->full && t.input_ua) {
+		t.charge_ua = 0;
+		t.reason = R1_VOLTAGE;
+		return t;
 	}
 	/*
 	 * Charge level limit: stop at charge_stop_level, resume once the
