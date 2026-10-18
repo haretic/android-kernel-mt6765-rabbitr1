@@ -917,6 +917,40 @@
 	status = "okay";
 };
 
+/*
+ * The DVFSRC levels (indices into the driver's MT6765 table) that run this
+ * LPDDR4X-3200 board at each data rate. Without a request the DRAM stays at
+ * the lowest one, which is also the vote left in place across suspend.
+ */
+/ {
+	dram_opp: opp-table-dram {
+		compatible = "operating-points-v2";
+
+		opp-1534000000 {
+			opp-hz = /bits/ 64 <1534000000>;
+			opp-level = <0>;
+			opp-suspend;
+		};
+
+		opp-2392000000 {
+			opp-hz = /bits/ 64 <2392000000>;
+			opp-level = <3>;
+		};
+
+		opp-3200000000 {
+			opp-hz = /bits/ 64 <3200000000>;
+			opp-level = <5>;
+		};
+	};
+};
+
+&dvfsrc {
+	dram {
+		compatible = "mediatek,mt6765-dvfsrc-dram";
+		operating-points-v2 = <&dram_opp>;
+	};
+};
+
 &spi4 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&r1_spi4_pins>;
