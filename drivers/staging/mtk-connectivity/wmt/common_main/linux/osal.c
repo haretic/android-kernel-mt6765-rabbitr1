@@ -120,12 +120,14 @@ INT32 osal_strncmp(const PINT8 dst, const PINT8 src, UINT32 len)
 
 PINT8 osal_strcpy(PINT8 dst, const PINT8 src)
 {
-	return strncpy(dst, src, strlen(src)+1);
+	return strcpy(dst, src);
 }
 
+/* strncpy() semantics; Linux 7.3 removed strncpy() itself. */
 PINT8 osal_strncpy(PINT8 dst, const PINT8 src, UINT32 len)
 {
-	return strncpy(dst, src, len);
+	memcpy_and_pad(dst, len, src, strnlen(src, len), 0);
+	return dst;
 }
 
 PINT8 osal_strcat(PINT8 dst, const PINT8 src)

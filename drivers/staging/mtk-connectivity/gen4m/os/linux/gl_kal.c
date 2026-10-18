@@ -10031,14 +10031,11 @@ void kalPrintTrace(char *buffer, const int len)
 	} else {
 		char sub_buffer[WIFI_LOG_MSG_MAX];
 
-		strncpy(sub_buffer, buffer,
-			WIFI_LOG_MSG_MAX - 1);
-		sub_buffer[WIFI_LOG_MSG_MAX - 1] = '\0';
+		strscpy(sub_buffer, buffer, WIFI_LOG_MSG_MAX);
 		trace_wifi_standalone_log(sub_buffer);
 
-		strncpy(sub_buffer, buffer + WIFI_LOG_MSG_MAX - 1,
-			WIFI_LOG_MSG_MAX - 1);
-		sub_buffer[WIFI_LOG_MSG_MAX - 1] = '\0';
+		strscpy(sub_buffer, buffer + WIFI_LOG_MSG_MAX - 1,
+			WIFI_LOG_MSG_MAX);
 		trace_wifi_standalone_log(sub_buffer);
 	}
 

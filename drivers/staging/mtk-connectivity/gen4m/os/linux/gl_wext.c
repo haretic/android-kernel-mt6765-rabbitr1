@@ -1145,22 +1145,22 @@ wext_get_name(IN struct net_device *prNetDev,
 
 		switch (eNetWorkType) {
 		case PARAM_NETWORK_TYPE_DS:
-			strncpy(pcName, "IEEE 802.11b", pcNameSize);
+			strscpy(pcName, "IEEE 802.11b", pcNameSize);
 			break;
 		case PARAM_NETWORK_TYPE_OFDM24:
-			strncpy(pcName, "IEEE 802.11bgn", pcNameSize);
+			strscpy(pcName, "IEEE 802.11bgn", pcNameSize);
 			break;
 		case PARAM_NETWORK_TYPE_AUTOMODE:
 		case PARAM_NETWORK_TYPE_OFDM5:
-			strncpy(pcName, "IEEE 802.11abgn", pcNameSize);
+			strscpy(pcName, "IEEE 802.11abgn", pcNameSize);
 			break;
 		case PARAM_NETWORK_TYPE_FH:
 		default:
-			strncpy(pcName, "IEEE 802.11", pcNameSize);
+			strscpy(pcName, "IEEE 802.11", pcNameSize);
 			break;
 		}
 	} else {
-		strncpy(pcName, "Disconnected", pcNameSize);
+		strscpy(pcName, "Disconnected", pcNameSize);
 	}
 
 	pcName[pcNameSize - 1] = '\0';

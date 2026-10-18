@@ -809,9 +809,18 @@ static inline void kalCfg80211ScanDone(struct cfg80211_scan_request *request,
 #define strnicmp(s1, s2, n)                         strncasecmp(s1, s2, n)
 #endif
 
+/*
+ * strncpy() semantics, which the callers rely on: at most n bytes, the rest
+ * of n zero-filled, and no terminator when src is n bytes or longer.
+ * Linux 7.3 removed strncpy() itself.
+ */
+static inline void kalStrnCpy(void *dest, const char *src, size_t n)
+{
+	memcpy_and_pad(dest, n, src, strnlen(src, n), 0);
+}
+
 /* string operation */
 #define kalStrCpy(dest, src)               strcpy(dest, src)
-#define kalStrnCpy(dest, src, n)           strncpy(dest, src, n)
 #define kalStrCmp(ct, cs)                  strcmp(ct, cs)
 #define kalStrnCmp(ct, cs, n)              strncmp(ct, cs, n)
 #define kalStrChr(s, c)                    strchr(s, c)
