@@ -6169,11 +6169,13 @@ int32_t kalRequestFirmware(const uint8_t *pucPath,
 	int ret = 0;
 
 	/*
-	 * Driver support request_firmware() to get files
-	 * Android path: "/etc/firmware", "/vendor/firmware", "/firmware/image"
-	 * Linux path: "/lib/firmware", "/lib/firmware/update"
+	 * Only optional configuration files (wifi_sigma.cfg, wifi.cfg,
+	 * txpowerctrl.cfg, the tx power limit and EEPROM buffer bins) come
+	 * through here. Look them up directly: with the Android sysfs fallback
+	 * a missing one waits on ueventd, which blocks the WMT wifi-on op past
+	 * its timeout during boot.
 	 */
-	ret = _kalRequestFirmware(&fw, pucPath, dev);
+	ret = request_firmware_direct(&fw, pucPath, dev);
 
 	if (ret != 0) {
 		DBGLOG(INIT, TRACE, "kalRequestFirmware %s Fail, errno[%d]!!\n",
