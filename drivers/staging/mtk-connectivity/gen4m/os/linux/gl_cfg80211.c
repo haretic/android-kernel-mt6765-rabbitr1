@@ -7541,12 +7541,28 @@ int mtk_cfg_assoc(struct wiphy *wiphy,
 	return mtk_cfg80211_assoc(wiphy, ndev, req);
 }
 
+/*
+ * Since 7.3 cfg80211 hands the cookie it assigned in by value, and an
+ * rx_addr only with NL80211_EXT_FEATURE_ROC_ADDR_FILTER, which gen4m does
+ * not set. The STA and P2P paths below read the cookie through a pointer.
+ */
+#if KERNEL_VERSION(7, 3, 0) <= CFG80211_VERSION_CODE
 int mtk_cfg_remain_on_channel(struct wiphy *wiphy,
 			      struct wireless_dev *wdev,
 			      struct ieee80211_channel *chan,
-			      unsigned int duration, u64 *cookie)
+			      unsigned int duration, u64 cookie,
+			      const u8 *rx_addr)
+#else
+int mtk_cfg_remain_on_channel(struct wiphy *wiphy,
+			      struct wireless_dev *wdev,
+			      struct ieee80211_channel *chan,
+			      unsigned int duration, u64 *pu8Cookie)
+#endif
 {
 	struct GLUE_INFO *prGlueInfo = NULL;
+#if KERNEL_VERSION(7, 3, 0) <= CFG80211_VERSION_CODE
+	u64 *pu8Cookie = &cookie;
+#endif
 
 	WIPHY_PRIV(wiphy, prGlueInfo);
 
@@ -7557,11 +7573,11 @@ int mtk_cfg_remain_on_channel(struct wiphy *wiphy,
 
 	if (mtk_IsP2PNetDevice(prGlueInfo, wdev->netdev) > 0) {
 		return mtk_p2p_cfg80211_remain_on_channel(wiphy, wdev, chan,
-				duration, cookie);
+				duration, pu8Cookie);
 	}
 	/* STA Mode */
 	return mtk_cfg80211_remain_on_channel(wiphy, wdev, chan,
-					      duration, cookie);
+					      duration, pu8Cookie);
 }
 
 int mtk_cfg_cancel_remain_on_channel(struct wiphy *wiphy,
@@ -7586,7 +7602,11 @@ int mtk_cfg_cancel_remain_on_channel(struct wiphy *wiphy,
 			cookie);
 }
 
-#if KERNEL_VERSION(3, 14, 0) <= CFG80211_VERSION_CODE
+#if KERNEL_VERSION(7, 3, 0) <= CFG80211_VERSION_CODE
+int mtk_cfg_mgmt_tx(struct wiphy *wiphy,
+		    struct wireless_dev *wdev,
+		    struct cfg80211_mgmt_tx_params *params, u64 u8Cookie)
+#elif KERNEL_VERSION(3, 14, 0) <= CFG80211_VERSION_CODE
 int mtk_cfg_mgmt_tx(struct wiphy *wiphy,
 		    struct wireless_dev *wdev,
 		    struct cfg80211_mgmt_tx_params *params, u64 *cookie)
@@ -7598,6 +7618,9 @@ int mtk_cfg_mgmt_tx(struct wiphy *wiphy, struct wireless_dev *wdev,
 #endif
 {
 	struct GLUE_INFO *prGlueInfo = NULL;
+#if KERNEL_VERSION(7, 3, 0) <= CFG80211_VERSION_CODE
+	u64 *cookie = &u8Cookie;
+#endif
 
 	WIPHY_PRIV(wiphy, prGlueInfo);
 

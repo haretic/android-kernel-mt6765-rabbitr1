@@ -661,11 +661,19 @@ int mtk_cfg_resume(struct wiphy *wiphy);
 int mtk_cfg_assoc(struct wiphy *wiphy,
 		  struct net_device *ndev,
 		  struct cfg80211_assoc_request *req);
+#if KERNEL_VERSION(7, 3, 0) <= CFG80211_VERSION_CODE
+int mtk_cfg_remain_on_channel(struct wiphy *wiphy,
+			      struct wireless_dev *wdev,
+			      struct ieee80211_channel *chan,
+			      unsigned int duration,
+			      u64 cookie, const u8 *rx_addr);
+#else
 int mtk_cfg_remain_on_channel(struct wiphy *wiphy,
 			      struct wireless_dev *wdev,
 			      struct ieee80211_channel *chan,
 			      unsigned int duration,
 			      u64 *cookie);
+#endif
 int mtk_cfg_cancel_remain_on_channel(struct wiphy *wiphy,
 				     struct wireless_dev *wdev, u64 cookie);
 uint16_t cfg80211_get_non_wfa_vendor_ie(
@@ -673,7 +681,11 @@ uint16_t cfg80211_get_non_wfa_vendor_ie(
 	uint8_t *ies, int32_t len,
 	uint8_t ucBssIndex);
 
-#if KERNEL_VERSION(3, 14, 0) <= CFG80211_VERSION_CODE
+#if KERNEL_VERSION(7, 3, 0) <= CFG80211_VERSION_CODE
+int mtk_cfg_mgmt_tx(struct wiphy *wiphy,
+		    struct wireless_dev *wdev,
+		    struct cfg80211_mgmt_tx_params *params, u64 cookie);
+#elif KERNEL_VERSION(3, 14, 0) <= CFG80211_VERSION_CODE
 int mtk_cfg_mgmt_tx(struct wiphy *wiphy,
 		    struct wireless_dev *wdev,
 		    struct cfg80211_mgmt_tx_params *params, u64 *cookie);
