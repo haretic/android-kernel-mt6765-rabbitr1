@@ -14,9 +14,12 @@
  * limitations under the License.
  */
 
+#include <unistd.h>
+#include <chrono>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
+#include <thread>
 #include "halstate.h"
 #include "info.h"
 #include "interface.h"
@@ -36,6 +39,24 @@ Info* asInfo(wifi_handle h) {
 
 Interface* asInterface(wifi_interface_handle h) {
     return reinterpret_cast<Interface*>(h);
+}
+
+// MTK_CONSYS_WIFI_POWER=boot powers Wi-Fi from a service that WMT's ROM patch
+// download and the gen4m probe hold for several seconds, and system_server can
+// start Wi-Fi before that: wlan0 does not exist yet, three failed starts make
+// it give up and leave Wi-Fi off. In hal mode wlan0 is there once the
+// /dev/wmtWifi write returns, so the wait ends at once.
+wifi_error wifi_wait_for_driver_ready() {
+    using namespace std::chrono_literals;
+    const auto deadline = std::chrono::steady_clock::now() + 20s;
+
+    while (access("/sys/class/net/wlan0", F_OK) != 0) {
+        if (std::chrono::steady_clock::now() >= deadline) {
+            return WIFI_ERROR_TIMED_OUT;
+        }
+        std::this_thread::sleep_for(100ms);
+    }
+    return WIFI_SUCCESS;
 }
 
 wifi_error wifi_initialize(wifi_handle* handle) {
@@ -206,8 +227,9 @@ wifi_error init_wifi_vendor_hal_func_table(wifi_hal_fn* fn)
     // The AIDL service fills every slot with a stub returning
     // WIFI_ERROR_NOT_SUPPORTED (initHalFuncTableWithStubs) before calling
     // this, so only the implemented entry points are set. In particular
-    // wifi_wait_for_driver_ready and wifi_virtual_interface_create stay
-    // stubs, which the service accepts (see README.md).
+    // wifi_virtual_interface_create stays a stub, which the service accepts
+    // (see README.md).
+    fn->wifi_wait_for_driver_ready = wifi_wait_for_driver_ready;
     fn->wifi_initialize = wifi_initialize;
     fn->wifi_cleanup = wifi_cleanup;
     fn->wifi_event_loop = wifi_event_loop;
