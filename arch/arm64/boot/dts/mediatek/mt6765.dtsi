@@ -655,6 +655,13 @@
 			status = "disabled";
 		};
 
+		/* Clocked from the SPM's mux; the SPM firmware executes its levels. */
+		dvfsrc: dvfsrc@10012000 {
+			compatible = "mediatek,mt6765-dvfsrc";
+			reg = <0 0x10012000 0 0x1000>;
+			clocks = <&topckgen CLK_TOP_SPM_SEL>;
+		};
+
 		/*
 		 * MD1 modem: CLDMA (data) and CCIF (control) host interfaces
 		 * and the AP view of the modem boot status registers.
@@ -736,6 +743,20 @@
 		mcdi: mcdi@10480000 {
 			compatible = "mediatek,mt6765-mcdi";
 			reg = <0 0x10480000 0 0x100>;
+		};
+
+		/*
+		 * SSPM mailbox 1 (IPI pins 5-10) and its IRQ registers, for
+		 * the SPM_SUSPEND notification around system suspend, and the
+		 * SPM's IRQ status in the scpsys block.
+		 */
+		spm_sleep: sleep@10460000 {
+			compatible = "mediatek,mt6765-spm-sleep";
+			reg = <0 0x10460000 0 0x100>,
+			      <0 0x10461000 0 0x10>,
+			      <0 0x10006158 0 0x4>;
+			interrupts = <GIC_SPI 181 IRQ_TYPE_LEVEL_LOW>;
+			status = "disabled";
 		};
 
 		apdma: dma-controller@11000680 {

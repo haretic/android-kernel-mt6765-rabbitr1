@@ -908,6 +908,15 @@
  * an IIO trigger. The supplies follow the MediaTek reference sensor wiring
  * (VIO28 core, VIO18 I/O); both are on from LK and not traced on the board.
  */
+/*
+ * LPDDR4X-3200: LK's emi_info,dram_type 3 and the DRAMC rate 3200 select the
+ * spmfw entry pcm_allinone_lp4_3200 (stock spm_get_spmfw_idx).
+ */
+&spm_sleep {
+	mediatek,spmfw-idx = <1>;
+	status = "okay";
+};
+
 &spi4 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&r1_spi4_pins>;
