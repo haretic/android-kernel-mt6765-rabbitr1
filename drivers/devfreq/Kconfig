@@ -140,6 +140,15 @@ config ARM_MEDIATEK_CCI_DEVFREQ
 	  buck voltages and update a proper CCI frequency. Use the notification
 	  to get the regulator status.
 
+config ARM_MEDIATEK_DVFSRC_DEVFREQ
+	tristate "MediaTek DVFSRC DRAM DEVFREQ Driver"
+	depends on MTK_DVFSRC || COMPILE_TEST
+	select DEVFREQ_GOV_PASSIVE
+	help
+	  This adds a devfreq driver that requests DRAM levels from the
+	  MediaTek DVFSRC, following the CPU frequency with the passive
+	  governor. Without it the DVFSRC keeps the DRAM at its lowest level.
+
 config ARM_RK3399_DMC_DEVFREQ
 	tristate "ARM RK3399 DMC DEVFREQ Driver"
 	depends on (ARCH_ROCKCHIP && HAVE_ARM_SMCCC) || \
