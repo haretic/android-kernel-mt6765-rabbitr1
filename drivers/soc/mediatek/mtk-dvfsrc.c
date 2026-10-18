@@ -92,6 +92,7 @@ struct dvfsrc_soc_data {
 	const u8 *bw_units;
 	const bool has_emi_ddr;
 	const struct dvfsrc_opp_desc *opps_desc;
+	u32 num_opps_desc;
 	u32 (*calc_dram_bw)(struct mtk_dvfsrc *dvfsrc, enum mtk_dvfsrc_bw_type type, u64 bw);
 	u32 (*get_target_level)(struct mtk_dvfsrc *dvfsrc);
 	u32 (*get_current_level)(struct mtk_dvfsrc *dvfsrc);
@@ -188,6 +189,10 @@ static const int dvfsrc_mt8196_regs[] = {
 static const struct dvfsrc_opp *dvfsrc_get_current_opp(struct mtk_dvfsrc *dvfsrc)
 {
 	u32 level = dvfsrc->dvd->get_current_level(dvfsrc);
+
+	/* A level outside the table (none is set before START) counts as the lowest */
+	if (level >= dvfsrc->curr_opps->num_opp)
+		level = 0;
 
 	return &dvfsrc->curr_opps->opps[level];
 }
@@ -581,6 +586,9 @@ int mtk_dvfsrc_send_request(const struct device *dev, u32 cmd, u64 data)
 		if (!dvfsrc->dvd->set_opp_level)
 			return 0;
 
+		if (data >= dvfsrc->curr_opps->num_opp)
+			return -EINVAL;
+
 		dvfsrc->dvd->set_opp_level(dvfsrc, data);
 		break;
 	case MTK_DVFSRC_CMD_VCORE_LEVEL:
@@ -683,19 +691,30 @@ static int mtk_dvfsrc_probe(struct platform_device *pdev)
 		if (ret)
 			return ret;
 	} else {
-		dvfsrc->curr_opps = &dvfsrc->dvd->opps_desc[dvfsrc->dram_type];
+		/* A single table serves every DRAM type the firmware reports */
+		u32 desc = dvfsrc->dvd->num_opps_desc == 1 ? 0 : dvfsrc->dram_type;
+
+		if (desc >= dvfsrc->dvd->num_opps_desc)
+			return dev_err_probe(&pdev->dev, -EINVAL,
+					     "No OPP table for DRAM type %d\n",
+					     dvfsrc->dram_type);
+		dvfsrc->curr_opps = &dvfsrc->dvd->opps_desc[desc];
 	}
 	platform_set_drvdata(pdev, dvfsrc);
-
-	ret = devm_of_platform_populate(&pdev->dev);
-	if (ret)
-		return dev_err_probe(&pdev->dev, ret, "Failed to populate child devices\n");
 
 	/* Everything is set up - make it run! */
 	arm_smccc_smc(MTK_SIP_DVFSRC_VCOREFS_CONTROL, MTK_SIP_DVFSRC_START,
 		      0, 0, 0, 0, 0, 0, &ares);
 	if (ares.a0 & BIT(0))
 		return dev_err_probe(&pdev->dev, -EINVAL, "Cannot start DVFSRC: %lu\n", ares.a0);
+
+	/*
+	 * Children may vote and wait for the level they asked for while they
+	 * probe, which only a running DVFSRC can answer.
+	 */
+	ret = devm_of_platform_populate(&pdev->dev);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "Failed to populate child devices\n");
 
 	return 0;
 }
@@ -736,6 +755,7 @@ static const struct dvfsrc_opp_desc dvfsrc_opp_mt6893_desc[] = {
 
 static const struct dvfsrc_soc_data mt6893_data = {
 	.opps_desc = dvfsrc_opp_mt6893_desc,
+	.num_opps_desc = ARRAY_SIZE(dvfsrc_opp_mt6893_desc),
 	.regs = dvfsrc_mt8195_regs,
 	.get_target_level = dvfsrc_get_target_level_v2,
 	.get_current_level = dvfsrc_get_current_level_v2,
@@ -753,12 +773,16 @@ static const struct dvfsrc_soc_data mt6893_data = {
 };
 
 /*
- * The SW_REQ DRAM field steps the LPDDR4X through 1534, 2392 and 3200 MT/s,
- * measured on the Rabbit R1.
+ * The levels the LEVEL register reports on the Rabbit R1, lowest first, as
+ * { vcore, dram }. The SW_REQ DRAM field steps the LPDDR4X through 1534, 2392
+ * and 3200 MT/s; the firmware raises VCORE with it.
  */
 static const struct dvfsrc_opp dvfsrc_opp_mt6765_lp4[] = {
-	{ 0, 0 }, { 0, 1 }, { 0, 2 },
+	{ 0, 0 }, { 1, 0 }, { 2, 0 }, { 2, 1 }, { 3, 1 }, { 3, 2 },
 };
+
+/* The one-hot LEVEL bit of each entry above; the bits between never show */
+static const u8 dvfsrc_level_bits_mt6765[] = { 0, 1, 3, 4, 8, 9 };
 
 static const struct dvfsrc_opp_desc dvfsrc_opp_mt6765_desc[] = {
 	[0] = {
@@ -767,12 +791,25 @@ static const struct dvfsrc_opp_desc dvfsrc_opp_mt6765_desc[] = {
 	},
 };
 
+static u32 dvfsrc_get_current_level_mt6765(struct mtk_dvfsrc *dvfsrc)
+{
+	u32 bit = dvfsrc_get_current_level_v1(dvfsrc);
+	u32 i;
+
+	for (i = 0; i < ARRAY_SIZE(dvfsrc_level_bits_mt6765); i++)
+		if (dvfsrc_level_bits_mt6765[i] == bit)
+			return i;
+
+	return ARRAY_SIZE(dvfsrc_level_bits_mt6765);
+}
+
 static const struct dvfsrc_soc_data mt6765_data = {
 	.opps_desc = dvfsrc_opp_mt6765_desc,
+	.num_opps_desc = ARRAY_SIZE(dvfsrc_opp_mt6765_desc),
 	.regs = dvfsrc_mt8183_regs,
 	.calc_dram_bw = dvfsrc_calc_dram_bw_v1,
 	.get_target_level = dvfsrc_get_target_level_v1,
-	.get_current_level = dvfsrc_get_current_level_v1,
+	.get_current_level = dvfsrc_get_current_level_mt6765,
 	.get_vcore_level = dvfsrc_get_vcore_level_v1,
 	.set_dram_bw = dvfsrc_set_dram_bw_v1,
 	.set_opp_level = dvfsrc_set_opp_level_v1,
@@ -808,6 +845,7 @@ static const struct dvfsrc_opp_desc dvfsrc_opp_mt8183_desc[] = {
 
 static const struct dvfsrc_soc_data mt8183_data = {
 	.opps_desc = dvfsrc_opp_mt8183_desc,
+	.num_opps_desc = ARRAY_SIZE(dvfsrc_opp_mt8183_desc),
 	.regs = dvfsrc_mt8183_regs,
 	.calc_dram_bw = dvfsrc_calc_dram_bw_v1,
 	.get_target_level = dvfsrc_get_target_level_v1,
@@ -840,6 +878,7 @@ static const struct dvfsrc_opp_desc dvfsrc_opp_mt8195_desc[] = {
 
 static const struct dvfsrc_soc_data mt8195_data = {
 	.opps_desc = dvfsrc_opp_mt8195_desc,
+	.num_opps_desc = ARRAY_SIZE(dvfsrc_opp_mt8195_desc),
 	.regs = dvfsrc_mt8195_regs,
 	.calc_dram_bw = dvfsrc_calc_dram_bw_v1,
 	.get_target_level = dvfsrc_get_target_level_v2,
