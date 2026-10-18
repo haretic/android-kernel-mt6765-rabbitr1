@@ -2152,7 +2152,13 @@ static void hi846_remove(struct i2c_client *client)
 	mutex_destroy(&hi846->mutex);
 }
 
+/*
+ * System sleep goes through runtime PM: with runtime callbacks alone the PM
+ * core would treat the sensor as having none and mark it active on resume
+ * while it is still powered off.
+ */
 static const struct dev_pm_ops hi846_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend, pm_runtime_force_resume)
 	SET_RUNTIME_PM_OPS(hi846_suspend, hi846_resume, NULL)
 };
 
