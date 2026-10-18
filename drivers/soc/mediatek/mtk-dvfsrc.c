@@ -752,6 +752,37 @@ static const struct dvfsrc_soc_data mt6893_data = {
 	.bw_min_constraints = dvfsrc_bw_min_constr_none,
 };
 
+/*
+ * The SW_REQ DRAM field steps the LPDDR4X through 1534, 2392 and 3200 MT/s,
+ * measured on the Rabbit R1.
+ */
+static const struct dvfsrc_opp dvfsrc_opp_mt6765_lp4[] = {
+	{ 0, 0 }, { 0, 1 }, { 0, 2 },
+};
+
+static const struct dvfsrc_opp_desc dvfsrc_opp_mt6765_desc[] = {
+	[0] = {
+		.opps = dvfsrc_opp_mt6765_lp4,
+		.num_opp = ARRAY_SIZE(dvfsrc_opp_mt6765_lp4),
+	},
+};
+
+static const struct dvfsrc_soc_data mt6765_data = {
+	.opps_desc = dvfsrc_opp_mt6765_desc,
+	.regs = dvfsrc_mt8183_regs,
+	.calc_dram_bw = dvfsrc_calc_dram_bw_v1,
+	.get_target_level = dvfsrc_get_target_level_v1,
+	.get_current_level = dvfsrc_get_current_level_v1,
+	.get_vcore_level = dvfsrc_get_vcore_level_v1,
+	.set_dram_bw = dvfsrc_set_dram_bw_v1,
+	.set_opp_level = dvfsrc_set_opp_level_v1,
+	.set_vcore_level = dvfsrc_set_vcore_level_v1,
+	.wait_for_opp_level = dvfsrc_wait_for_opp_level_v1,
+	.wait_for_vcore_level = dvfsrc_wait_for_vcore_level_v1,
+	.bw_max_constraints = dvfsrc_bw_max_constr_v1,
+	.bw_min_constraints = dvfsrc_bw_min_constr_none,
+};
+
 static const struct dvfsrc_opp dvfsrc_opp_mt8183_lp4[] = {
 	{ 0, 0 }, { 0, 1 }, { 0, 2 }, { 1, 2 },
 };
@@ -856,6 +887,7 @@ static const struct dvfsrc_soc_data mt8196_data = {
 };
 
 static const struct of_device_id mtk_dvfsrc_of_match[] = {
+	{ .compatible = "mediatek,mt6765-dvfsrc", .data = &mt6765_data },
 	{ .compatible = "mediatek,mt6893-dvfsrc", .data = &mt6893_data },
 	{ .compatible = "mediatek,mt8183-dvfsrc", .data = &mt8183_data },
 	{ .compatible = "mediatek,mt8195-dvfsrc", .data = &mt8195_data },
