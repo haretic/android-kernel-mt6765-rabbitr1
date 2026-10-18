@@ -33,6 +33,7 @@
 #include <linux/platform_device.h>
 #include <asm/smp_plat.h>
 #include <linux/pm_qos.h>
+#include <linux/soc/mediatek/mt6765-mcdi.h>
 
 /* SSPM mailbox 3 slots, 4 bytes each (stock mt6765/mtk_mcdi_reg.h). */
 #define MCDI_CLUSTER_CAN_POWER_OFF	0	/* + cluster */
@@ -71,13 +72,27 @@ static int mcdi_pause(bool pause)
 	int ret;
 
 	mcdi_write(MCDI_PAUSE_ACTION, pause);
-	ret = readl_poll_timeout(mcdi_mbox + MCDI_PAUSE_ACK * 4, ack,
-				 ack == pause, 10, 10000);
+	ret = readl_poll_timeout_atomic(mcdi_mbox + MCDI_PAUSE_ACK * 4, ack,
+					ack == pause, 10, 10000);
 	if (ret)
 		pr_warn_ratelimited("mt6765-mcdi: SSPM did not %s (ack %u)\n",
 				    pause ? "pause" : "resume", ack);
 	return ret;
 }
+
+/*
+ * System suspend pauses the task around the SPM sleep, as stock
+ * slp_suspend_ops_enter does: only the boot CPU is left, and it is not in a
+ * deep idle state, so nothing waits on the task meanwhile.
+ */
+int mt6765_mcdi_suspend_pause(bool pause)
+{
+	if (!mcdi_mbox)
+		return -ENODEV;
+
+	return mcdi_pause(pause);
+}
+EXPORT_SYMBOL_GPL(mt6765_mcdi_suspend_pause);
 
 /* Every state past WFI powers the core down. */
 static void mcdi_gate_states(bool gate)
