@@ -2763,12 +2763,20 @@ static void wlanNetUnregister(struct wireless_dev *prWdev)
 #endif
 }				/* end of wlanNetUnregister() */
 
+/* Since 5.15 the core hands SIOCDEVPRIVATE commands only to ndo_siocdevprivate */
+static int wlanSiocDevPrivate(struct net_device *prDev, struct ifreq *prIfReq,
+			      void __user *data, int i4Cmd)
+{
+	return wlanDoIOCTL(prDev, prIfReq, i4Cmd);
+}
+
 static const struct net_device_ops wlan_netdev_ops = {
 	.ndo_open = wlanOpen,
 	.ndo_stop = wlanStop,
 	.ndo_set_rx_mode = wlanSetMulticastList,
 	.ndo_get_stats = wlanGetStats,
 	.ndo_do_ioctl = wlanDoIOCTL,
+	.ndo_siocdevprivate = wlanSiocDevPrivate,
 	.ndo_start_xmit = wlanHardStartXmit,
 	.ndo_init = wlanInit,
 	.ndo_uninit = wlanUninit,
