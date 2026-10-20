@@ -100,6 +100,26 @@ static const struct regulator_ops dvfsrc_vcore_ops = {
 	.set_voltage_sel = dvfsrc_set_voltage_sel,
 };
 
+/*
+ * The four VCORE levels, lowest first. Levels 0 and 1 are trimmed by efuse to
+ * 650-700 mV; they are listed at their lowest, so a vote never gets less.
+ */
+static const unsigned int mt6765_voltages[] = {
+	650000,
+	650000,
+	700000,
+	800000,
+};
+
+static const struct regulator_desc mt6765_regulators[] = {
+	MTK_DVFSRC_VREG("dvfsrc-vcore", VCORE, mt6765_voltages),
+};
+
+static const struct dvfsrc_regulator_pdata mt6765_data = {
+	.descs = mt6765_regulators,
+	.size = ARRAY_SIZE(mt6765_regulators),
+};
+
 static const unsigned int mt6873_voltages[] = {
 	575000,
 	600000,
@@ -208,6 +228,7 @@ static int dvfsrc_vcore_regulator_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id mtk_dvfsrc_regulator_match[] = {
+	{ .compatible = "mediatek,mt6765-dvfsrc-regulator", .data = &mt6765_data },
 	{ .compatible = "mediatek,mt6873-dvfsrc-regulator", .data = &mt6873_data },
 	{ .compatible = "mediatek,mt6893-dvfsrc-regulator", .data = &mt6893_data },
 	{ .compatible = "mediatek,mt8183-dvfsrc-regulator", .data = &mt8183_data },
