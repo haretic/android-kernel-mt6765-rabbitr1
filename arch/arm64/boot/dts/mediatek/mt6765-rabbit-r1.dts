@@ -226,6 +226,11 @@
 	 * more than their stock voltage, but light loads still run slower. The OPPs above 0.85 V were turbo-mode until
 	 * throttling was checked on hardware (see ap-ntc-thermal); schedutil
 	 * never selects boost OPPs, so they have to be ordinary entries.
+	 *
+	 * The turbo-mode OPPs are the overclock: above the stock tables at the
+	 * stock top voltage (1.2 V, the vendor limit for Vproc and Vsram), off
+	 * until /sys/devices/system/cpu/cpufreq/boost is set (Settings >
+	 * Performance > CPU overclock).
 	 */
 	cluster0_opp: opp-table-cluster0 {
 		compatible = "operating-points-v2";
@@ -309,6 +314,18 @@
 		opp-2200000000 {
 			opp-hz = /bits/ 64 <2200000000>;
 			opp-microvolt = <1200000>;
+		};
+
+		opp-2300000000 {
+			opp-hz = /bits/ 64 <2300000000>;
+			opp-microvolt = <1200000>;
+			turbo-mode;
+		};
+
+		opp-2400000000 {
+			opp-hz = /bits/ 64 <2400000000>;
+			opp-microvolt = <1200000>;
+			turbo-mode;
 		};
 	};
 
@@ -394,6 +411,18 @@
 		opp-1600000000 {
 			opp-hz = /bits/ 64 <1600000000>;
 			opp-microvolt = <1200000>;
+		};
+
+		opp-1700000000 {
+			opp-hz = /bits/ 64 <1700000000>;
+			opp-microvolt = <1200000>;
+			turbo-mode;
+		};
+
+		opp-1800000000 {
+			opp-hz = /bits/ 64 <1800000000>;
+			opp-microvolt = <1200000>;
+			turbo-mode;
 		};
 	};
 
