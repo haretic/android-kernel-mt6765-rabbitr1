@@ -625,6 +625,30 @@ static void mtk_cpufreq_exit(struct cpufreq_policy *policy)
 	dev_pm_opp_free_cpufreq_table(info->cpu_dev, &policy->freq_table);
 }
 
+/*
+ * cpufreq_frequency_table_cpuinfo() only ever raises cpuinfo.max_freq, so the
+ * top a boost gave would outlive it and keep the turbo OPPs in reach through
+ * boost_freq_req. Set the top for the new state first.
+ */
+static int mtk_cpufreq_set_boost(struct cpufreq_policy *policy, int state)
+{
+	struct cpufreq_frequency_table *pos;
+	unsigned int max_freq = 0;
+
+	if (!policy->freq_table)
+		return -ENXIO;
+
+	cpufreq_for_each_valid_entry(pos, policy->freq_table)
+		if ((state || !(pos->flags & CPUFREQ_BOOST_FREQ)) &&
+		    pos->frequency > max_freq)
+			max_freq = pos->frequency;
+
+	if (max_freq)
+		policy->cpuinfo.max_freq = max_freq;
+
+	return cpufreq_boost_set_sw(policy, state);
+}
+
 static struct cpufreq_driver mtk_cpufreq_driver = {
 	.flags = CPUFREQ_NEED_INITIAL_FREQ_CHECK |
 		 CPUFREQ_HAVE_GOVERNOR_PER_POLICY |
@@ -635,7 +659,7 @@ static struct cpufreq_driver mtk_cpufreq_driver = {
 	.init = mtk_cpufreq_init,
 	.exit = mtk_cpufreq_exit,
 	.register_em = cpufreq_register_em_with_opp,
-	.set_boost = cpufreq_boost_set_sw,
+	.set_boost = mtk_cpufreq_set_boost,
 	.name = "mtk-cpufreq",
 };
 
