@@ -24,6 +24,7 @@
 #include <linux/device.h>
 #include <linux/io.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/pm_domain.h>
@@ -71,6 +72,21 @@ MODULE_PARM_DESC(mfg_freq_khz,
 /* VCORE needed by the clock actually in use (set by MTKSetFixedFreq). */
 static int mfg_min_vcore_uv = 650000;
 
+#if defined(SUPPORT_LINUX_DVFS)
+static bool dvfs = true;
+module_param(dvfs, bool, 0444);
+MODULE_PARM_DESC(dvfs,
+	"Scale the GPU clock with its load over the stock OPPs, voting their VCORE "
+	"through DVFSRC (1), or keep the fixed mfg_freq_khz clock (0)");
+
+/* devfreq's view of the stock table, slowest first, as { uV, Hz } */
+static const IMG_OPP mtk_mfg_dvfs_opps[] = {
+	{ 650000, 400000000 },
+	{ 700000, 500000000 },
+	{ 800000, 680000000 },
+};
+#endif
+
 static bool hwapm = true;
 module_param(hwapm, bool, 0444);
 MODULE_PARM_DESC(hwapm,
@@ -90,6 +106,10 @@ struct mtk_mfg {
 	struct clk *clk_sub_parent;	/* clk26m */
 
 	struct regulator *vcore;	/* optional, shared VCORE */
+	struct regulator *vcore_vote;	/* DVFSRC VCORE vote, for DVFS */
+	struct mutex vote_lock;
+	int vote_uv;			/* the current OPP's VCORE */
+	bool voting;			/* vote_uv is voted, while powered */
 
 	/* Virtual genpd devices when several domains are named in DT. */
 	struct device *pd_mfg;
@@ -208,6 +228,34 @@ static void MTKDisableVcore(struct mtk_mfg *mfg)
 		regulator_disable(mfg->vcore);
 }
 
+/*
+ * The VCORE vote is held only while the GPU is powered, as stock dropped its
+ * pm_qos request with the buck; vote_uv is what the OPP needs.
+ */
+static void MTKApplyVote(struct mtk_mfg *mfg)
+{
+	int uv = mfg->voting ? mfg->vote_uv : 0;
+	int ret;
+
+	lockdep_assert_held(&mfg->vote_lock);
+
+	/* 0 is clamped to the regulator's lowest level: no vote */
+	ret = regulator_set_voltage(mfg->vcore_vote, uv, INT_MAX);
+	if (ret)
+		dev_warn(mfg->dev, "failed to vote vcore %d uV: %d\n", uv, ret);
+}
+
+static void MTKVoteVcore(struct mtk_mfg *mfg, bool on)
+{
+	if (!mfg->vcore_vote)
+		return;
+
+	mutex_lock(&mfg->vote_lock);
+	mfg->voting = on;
+	MTKApplyVote(mfg);
+	mutex_unlock(&mfg->vote_lock);
+}
+
 /* Mirrors mt_gpufreq_voltage_enable_set(BUCK_ON) + mt_gpufreq_enable_MTCMOS() */
 static int MTKEnableMfgClock(struct mtk_mfg *mfg)
 {
@@ -219,6 +267,7 @@ static int MTKEnableMfgClock(struct mtk_mfg *mfg)
 	ret = MTKEnableVcore(mfg);
 	if (ret)
 		return ret;
+	MTKVoteVcore(mfg, true);
 
 	/* enable PLL and set clk_mux to mfgpll */
 	ret = clk_prepare_enable(mfg->clk_mux);
@@ -261,6 +310,7 @@ err_mux:
 	clk_set_parent(mfg->clk_mux, mfg->clk_sub_parent);
 	clk_disable_unprepare(mfg->clk_mux);
 err_vcore:
+	MTKVoteVcore(mfg, false);
 	MTKDisableVcore(mfg);
 	return ret;
 }
@@ -280,6 +330,7 @@ static void MTKDisableMfgClock(struct mtk_mfg *mfg)
 	clk_set_parent(mfg->clk_mux, mfg->clk_sub_parent);
 	clk_disable_unprepare(mfg->clk_mux);
 
+	MTKVoteVcore(mfg, false);
 	MTKDisableVcore(mfg);
 
 	mfg->powered = false;
@@ -482,6 +533,74 @@ static void MTKSetFixedFreq(struct mtk_mfg *mfg, PVRSRV_DEVICE_CONFIG *psDevConf
 		psRGXData->psRGXTimingInfo->ui32CoreClockSpeed = rate;
 }
 
+#if defined(SUPPORT_LINUX_DVFS)
+/*
+ * devfreq callbacks (pvr_dvfs_device.c): the voltage is raised before a
+ * faster clock and lowered after a slower one. The PLL hops between OPPs
+ * on the same post-divider, as stock's mt_gpufreq did with the GPU running.
+ */
+static void MTKDVFSSetFrequency(IMG_UINT32 ui32Freq)
+{
+	int ret = clk_set_rate(g_mfg->clk_main_parent, ui32Freq);
+
+	if (ret)
+		dev_warn(g_mfg->dev, "failed to set mfgpll to %u Hz: %d\n",
+			 ui32Freq, ret);
+}
+
+static void MTKDVFSSetVoltage(IMG_UINT32 ui32Volt)
+{
+	struct mtk_mfg *mfg = g_mfg;
+
+	mutex_lock(&mfg->vote_lock);
+	mfg->vote_uv = ui32Volt;
+	if (mfg->voting)
+		MTKApplyVote(mfg);
+	mutex_unlock(&mfg->vote_lock);
+}
+
+/* Whether the DDK gets the OPP table; without a VCORE vote the clock stays fixed. */
+static bool MTKInitDVFS(struct mtk_mfg *mfg, PVRSRV_DEVICE_CONFIG *psDevConfig)
+{
+	IMG_DVFS_DEVICE_CFG *psCfg = &psDevConfig->sDVFS.sDVFSDeviceCfg;
+	IMG_DVFS_GOVERNOR_CFG *psGov = &psDevConfig->sDVFS.sDVFSGovernorCfg;
+	struct regulator *vote;
+
+	mutex_init(&mfg->vote_lock);
+
+	if (!dvfs)
+		return false;
+
+	vote = devm_regulator_get_optional(mfg->dev, "dvfsrc-vcore");
+	if (IS_ERR(vote)) {
+		dev_info(mfg->dev, "no dvfsrc-vcore (%ld), fixed GPU clock\n",
+			 PTR_ERR(vote));
+		return false;
+	}
+
+	mfg->vcore_vote = vote;
+	mfg->vote_uv = mtk_mfg_dvfs_opps[0].ui32Volt;
+
+	psCfg->pasOPPTable = mtk_mfg_dvfs_opps;
+	psCfg->ui32OPPTableSize = ARRAY_SIZE(mtk_mfg_dvfs_opps);
+	psCfg->ui32PollMs = 50;
+	psCfg->bIdleReq = IMG_FALSE;
+	psCfg->pfnSetFrequency = MTKDVFSSetFrequency;
+	psCfg->pfnSetVoltage = MTKDVFSSetVoltage;
+
+	/* About stock GED's step-up at 70% load and step-down near 55% */
+	psGov->ui32UpThreshold = 70;
+	psGov->ui32DownDifferential = 15;
+
+	return true;
+}
+#else
+static bool MTKInitDVFS(struct mtk_mfg *mfg, PVRSRV_DEVICE_CONFIG *psDevConfig)
+{
+	return false;
+}
+#endif
+
 int MTKRGXDeviceInit(PVRSRV_DEVICE_CONFIG *psDevConfig)
 {
 	struct device *dev = psDevConfig->pvOSDevice;
@@ -528,7 +647,15 @@ int MTKRGXDeviceInit(PVRSRV_DEVICE_CONFIG *psDevConfig)
 		return ret == -EPROBE_DEFER ? PVRSRV_ERROR_PROBE_DEFER :
 					      PVRSRV_ERROR_INIT_FAILURE;
 
-	MTKSetFixedFreq(mfg, psDevConfig);
+	if (MTKInitDVFS(mfg, psDevConfig)) {
+		/* The vote covers each OPP; InitDVFS starts at the slowest. */
+		mfg_min_vcore_uv = 0;
+		dev_info(dev, "GPU DVFS %u-%u kHz, hwapm=%d\n",
+			 mtk_mfg_opps[ARRAY_SIZE(mtk_mfg_opps) - 1].khz,
+			 mtk_mfg_opps[0].khz, hwapm);
+	} else {
+		MTKSetFixedFreq(mfg, psDevConfig);
+	}
 
 	g_mfg = mfg;
 

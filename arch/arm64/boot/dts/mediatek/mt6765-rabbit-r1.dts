@@ -665,6 +665,8 @@
 
 &gpu {
 	vcore-supply = <&mt6357_vcore_reg>;
+	/* GPU DVFS votes each OPP's VCORE here */
+	dvfsrc-vcore-supply = <&dvfsrc_vcore>;
 	status = "okay";
 };
 

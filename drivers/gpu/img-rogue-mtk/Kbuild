@@ -11,6 +11,10 @@ ccflags-y += -DCONFIG_MACH_MT6765
 ccflags-y += -include $(PVR_TOP)/include/config_kernel_user_mt6765.h
 ccflags-y += -include $(PVR_TOP)/include/config_kernel_mainline.h
 
+# The DDK's devfreq glue (pvr_dvfs_device.c); mt6765/mtk_mfgsys.c gives it the
+# stock OPPs and votes their VCORE through DVFSRC.
+ccflags-y += -DSUPPORT_LINUX_DVFS
+
 ccflags-y += \
 	-D__linux__ \
 	-fno-strict-aliasing \
@@ -129,6 +133,7 @@ pvrsrvkm-y += \
 	services/server/env/linux/pvr_bridge_k.o \
 	services/server/env/linux/physmem_dmabuf.o \
 	services/server/env/linux/pvr_debugfs.o \
+	services/server/env/linux/pvr_dvfs_device.o \
 	services/server/env/linux/osconnection_server.o \
 	services/server/env/linux/handle_idr.o \
 	services/server/env/linux/event.o \
