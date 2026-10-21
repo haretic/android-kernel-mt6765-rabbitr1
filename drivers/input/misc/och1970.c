@@ -4,8 +4,10 @@
  *
  * The sensor sits next to a diametrically magnetised wheel. Turning the wheel
  * rotates the field in the sensor's X/Z plane, so the wheel angle is
- * atan2(X, Z). Like the vendor driver, the sensor is polled and every step of
- * at least OCH1970_STEP_DEG reports one KEY_UP or KEY_DOWN press.
+ * atan2(X, Z). Like the vendor driver, the sensor is polled and every
+ * OCH1970_STEP_DEG of turn reports one KEY_UP or KEY_DOWN press. The steps
+ * are counted from a fixed grid, so a fast turn reports each step it passed
+ * and a slow one keeps its part step until it completes.
  */
 
 #include <linux/array_size.h>
@@ -35,17 +37,21 @@
 #define OCH1970_CNTL2_MODE_STANDBY	0x00
 #define OCH1970_CNTL2_MODE_CONT_100HZ	0x0c
 
-#define OCH1970_POLL_MS			50
+#define OCH1970_POLL_MS			50	/* idle */
+#define OCH1970_POLL_FAST_MS		16	/* while turning */
+#define OCH1970_FAST_HOLD_MS		1000
 #define OCH1970_STEP_DEG		30
-#define OCH1970_REBASE_MS		3000
+#define OCH1970_MAX_STEPS		5	/* short of half a turn a poll */
 
 struct och1970 {
 	struct i2c_client *client;
 	struct input_dev *input;
 	u8 cntl2;		/* standby value with the measurement settings */
 	bool have_base;
-	int base_deg;
-	unsigned long base_time;
+	int base_deg;		/* the grid point the last step ended on */
+	int last_deg;
+	unsigned long moved;	/* jiffies of the last turn */
+	bool fast;
 };
 
 /* tan(0..45 degrees) * 65536 */
@@ -113,7 +119,8 @@ static void och1970_poll(struct input_dev *input)
 {
 	struct och1970 *och = input_get_drvdata(input);
 	unsigned long now = jiffies;
-	int x, z, deg, delta;
+	int x, z, deg, delta, moved, steps, key, i;
+	bool fast;
 	u8 buf[8];
 	int ret;
 
@@ -135,13 +142,11 @@ static void och1970_poll(struct input_dev *input)
 	if (deg < 0)
 		return;
 
-	if (!och->have_base ||
-	    time_after_eq(now, och->base_time +
-				msecs_to_jiffies(OCH1970_REBASE_MS))) {
-		/* Follow slow drift while the wheel is idle. */
+	if (!och->have_base) {
 		och->have_base = true;
 		och->base_deg = deg;
-		och->base_time = now;
+		och->last_deg = deg;
+		och->moved = now;
 		return;
 	}
 
@@ -151,17 +156,35 @@ static void och1970_poll(struct input_dev *input)
 	else if (delta <= -180)
 		delta += 360;
 
-	if (abs(delta) < OCH1970_STEP_DEG)
-		return;
+	steps = delta / OCH1970_STEP_DEG;
+	if (steps) {
+		/*
+		 * The base moves by whole steps, keeping the rest of the turn, so
+		 * every step is the same length however the polls fall.
+		 */
+		och->base_deg = (och->base_deg + steps * OCH1970_STEP_DEG + 360) % 360;
+		steps = clamp(steps, -OCH1970_MAX_STEPS, OCH1970_MAX_STEPS);
+		/* Vendor convention: increasing angle is KEY_DOWN. */
+		key = steps > 0 ? KEY_DOWN : KEY_UP;
+		for (i = 0; i < abs(steps); i++) {
+			input_report_key(input, key, 1);
+			input_sync(input);
+			input_report_key(input, key, 0);
+			input_sync(input);
+		}
+	}
 
-	/* Vendor convention: increasing angle is KEY_DOWN. */
-	input_report_key(input, delta > 0 ? KEY_DOWN : KEY_UP, 1);
-	input_sync(input);
-	input_report_key(input, delta > 0 ? KEY_DOWN : KEY_UP, 0);
-	input_sync(input);
-
-	och->base_deg = deg;
-	och->base_time = now;
+	/* Poll fast while the wheel turns, so a quick spin can't outrun it */
+	moved = abs(deg - och->last_deg);
+	if (min(moved, 360 - moved) >= 2)
+		och->moved = now;
+	och->last_deg = deg;
+	fast = time_before(now, och->moved + msecs_to_jiffies(OCH1970_FAST_HOLD_MS));
+	if (fast != och->fast) {
+		och->fast = fast;
+		input_set_poll_interval(input, fast ? OCH1970_POLL_FAST_MS
+						    : OCH1970_POLL_MS);
+	}
 }
 
 static int och1970_open(struct input_dev *input)
