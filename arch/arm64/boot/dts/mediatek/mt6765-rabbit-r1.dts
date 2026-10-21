@@ -837,7 +837,7 @@
 		port {
 			r1_camera_out: endpoint {
 				data-lanes = <1 2 3 4>;
-				link-frequencies = /bits/ 64 <80000000 200000000>;
+				link-frequencies = /bits/ 64 <80000000 200000000 400000000>;
 				remote-endpoint = <&r1_seninf_csi2_in>;
 			};
 		};
