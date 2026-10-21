@@ -7,7 +7,9 @@
  * atan2(X, Z). Like the vendor driver, the sensor is polled and every
  * OCH1970_STEP_DEG of turn reports one KEY_UP or KEY_DOWN press. The steps
  * are counted from a fixed grid, so a fast turn reports each step it passed
- * and a slow one keeps its part step until it completes.
+ * and a slow one keeps its part step until it completes. Once the wheel rests,
+ * the grid moves to where it stopped: a part step left over is dropped, so a
+ * finger resting on the wheel or letting go of it can't complete one.
  */
 
 #include <linux/array_size.h>
@@ -40,6 +42,8 @@
 #define OCH1970_POLL_MS			50	/* idle */
 #define OCH1970_POLL_FAST_MS		16	/* while turning */
 #define OCH1970_FAST_HOLD_MS		1000
+#define OCH1970_REST_MS			400	/* still this long: at rest */
+#define OCH1970_STILL_DEG		2
 #define OCH1970_STEP_DEG		30
 #define OCH1970_MAX_STEPS		5	/* short of half a turn a poll */
 
@@ -176,9 +180,13 @@ static void och1970_poll(struct input_dev *input)
 
 	/* Poll fast while the wheel turns, so a quick spin can't outrun it */
 	moved = abs(deg - och->last_deg);
-	if (min(moved, 360 - moved) >= 2)
+	if (min(moved, 360 - moved) >= OCH1970_STILL_DEG) {
 		och->moved = now;
-	och->last_deg = deg;
+		och->last_deg = deg;
+	} else if (delta % OCH1970_STEP_DEG &&
+		   time_after(now, och->moved + msecs_to_jiffies(OCH1970_REST_MS))) {
+		och->base_deg = deg;
+	}
 	fast = time_before(now, och->moved + msecs_to_jiffies(OCH1970_FAST_HOLD_MS));
 	if (fast != och->fast) {
 		och->fast = fast;
