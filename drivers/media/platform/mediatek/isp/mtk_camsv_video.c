@@ -962,6 +962,12 @@ int mtk_cam_video_register(struct mtk_cam_dev *cam)
 	vbq->dev = dev;
 	vbq->ops = &mtk_cam_vb2_ops;
 	vbq->mem_ops = &vb2_dma_contig_memops;
+	/*
+	 * Let userspace ask for cached buffers: raw frames read by the CPU,
+	 * as a software ISP does, take several times as long from uncached
+	 * memory. vb2 keeps the caches in sync on queueing and dequeueing.
+	 */
+	vbq->allow_cache_hints = 1;
 	vbq->buf_struct_size = sizeof(struct mtk_cam_dev_buffer);
 	/*
 	 * TODO: The hardware supports SOF interrupts, switch to a SOF
