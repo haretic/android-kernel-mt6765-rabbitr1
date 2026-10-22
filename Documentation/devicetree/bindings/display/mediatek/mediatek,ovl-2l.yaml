@@ -36,6 +36,10 @@ properties:
   interrupts:
     maxItems: 1
 
+  resets:
+    description: The block's software reset in the display MMSYS.
+    maxItems: 1
+
   power-domains:
     description: A phandle and PM domain specifier as defined by bindings of
       the power controller specified by phandle. See
