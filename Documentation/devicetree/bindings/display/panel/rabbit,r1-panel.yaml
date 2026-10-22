@@ -30,6 +30,12 @@ properties:
   backlight: true
   port: true
 
+  rabbit,max-refresh-hz:
+    description:
+      Fastest refresh rate to offer. The panel runs 60 to 100 Hz; without
+      this property every rate is offered and the fastest is preferred.
+    minimum: 60
+
 required:
   - compatible
   - reg
