@@ -4,10 +4,12 @@
  */
 
 #include <linux/clk.h>
+#include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/mailbox_controller.h>
 #include <linux/of.h>
 #include <linux/pm_runtime.h>
+#include <linux/reset.h>
 #include <linux/soc/mediatek/mtk-cmdq.h>
 #include <linux/soc/mediatek/mtk-mmsys.h>
 #include <linux/soc/mediatek/mtk-mutex.h>
@@ -328,6 +330,28 @@ static void mtk_crtc_cmdq_clear_pending(struct mtk_crtc *mtk_crtc)
 
 #endif
 
+static int mtk_crtc_ddp_hw_reset(struct mtk_crtc *mtk_crtc)
+{
+	bool any = false;
+	int i, ret = 0;
+
+	for (i = 0; i < mtk_crtc->ddp_comp_nr; i++) {
+		ret = reset_control_assert(mtk_crtc->ddp_comp[i]->reset);
+		if (ret)
+			goto deassert;
+		any |= !!mtk_crtc->ddp_comp[i]->reset;
+	}
+	if (any)
+		usleep_range(1000, 1100);
+deassert:
+	while (--i >= 0)
+		reset_control_deassert(mtk_crtc->ddp_comp[i]->reset);
+	if (ret)
+		return ret;
+
+	return mtk_mutex_reset(mtk_crtc->mutex);
+}
+
 static int mtk_crtc_ddp_hw_init(struct mtk_crtc *mtk_crtc)
 {
 	struct drm_crtc *crtc = &mtk_crtc->base;
@@ -379,6 +403,18 @@ static int mtk_crtc_ddp_hw_init(struct mtk_crtc *mtk_crtc)
 		goto err_mutex_unprepare;
 	}
 
+	/*
+	 * Start the engines from their power-on state, as the boot firmware
+	 * does. Restarted warm, with only their own soft resets, MT6765's
+	 * composed stream came up two pixels right, the last columns wrapped
+	 * round, on about half the starts.
+	 */
+	ret = mtk_crtc_ddp_hw_reset(mtk_crtc);
+	if (ret < 0) {
+		drm_err(dev, "Failed to reset the display path: %d\n", ret);
+		goto err_clk_disable;
+	}
+
 	for (i = 0; i < mtk_crtc->ddp_comp_nr - 1; i++) {
 		if (!mtk_ddp_comp_connect(mtk_crtc->ddp_comp[i], mtk_crtc->mmsys_dev,
 					  mtk_crtc->ddp_comp[i + 1]->id))
@@ -422,6 +458,8 @@ static int mtk_crtc_ddp_hw_init(struct mtk_crtc *mtk_crtc)
 
 	return 0;
 
+err_clk_disable:
+	mtk_crtc_ddp_clk_disable(mtk_crtc);
 err_mutex_unprepare:
 	mtk_mutex_unprepare(mtk_crtc->mutex);
 err_pm_runtime_put:

@@ -231,6 +231,7 @@ struct mtk_dsi {
 	struct clk *engine_clk;
 	struct clk *digital_clk;
 	struct clk *hs_clk;
+	struct reset_control *reset;
 
 	u32 data_rate;
 
@@ -946,6 +947,16 @@ static int mtk_dsi_poweron(struct mtk_dsi *dsi)
 
 	if (dsi->driver_data->mt6765_regs)
 		writel(0, dsi->regs + DSI_INTEN);
+	/*
+	 * Start from the power-on state, as the rest of the display path does
+	 * (see mtk_crtc_ddp_hw_init()). The reset clears the configuration,
+	 * so it comes before any.
+	 */
+	if (dsi->driver_data->mt6765_regs) {
+		ret = reset_control_reset(dsi->reset);
+		if (ret)
+			goto err_disable_digital_clk;
+	}
 	mtk_dsi_enable(dsi);
 
 	if (dsi->driver_data->has_shadow_ctl)
@@ -1345,7 +1356,7 @@ static int mtk_dsi_bind(struct device *dev, struct device *master, void *data)
 	if (ret)
 		return ret;
 
-	return device_reset_optional(dev);
+	return reset_control_reset(dsi->reset);
 }
 
 static void mtk_dsi_unbind(struct device *dev, struct device *master,
@@ -1780,6 +1791,10 @@ static int mtk_dsi_probe(struct platform_device *pdev)
 	dsi->hs_clk = devm_clk_get(dev, "hs");
 	if (IS_ERR(dsi->hs_clk))
 		return dev_err_probe(dev, PTR_ERR(dsi->hs_clk), "Failed to get hs clock\n");
+
+	dsi->reset = devm_reset_control_get_optional_exclusive(dev, NULL);
+	if (IS_ERR(dsi->reset))
+		return dev_err_probe(dev, PTR_ERR(dsi->reset), "Failed to get reset\n");
 
 	dsi->regs = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(dsi->regs))

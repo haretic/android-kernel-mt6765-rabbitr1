@@ -98,6 +98,7 @@ struct mtk_ddp_comp {
 	unsigned int id;
 	int encoder_index;
 	const struct mtk_ddp_comp_funcs *funcs;
+	struct reset_control *reset;
 };
 
 static inline int mtk_ddp_comp_power_on(struct mtk_ddp_comp *comp)
