@@ -1758,6 +1758,40 @@ static int __maybe_unused hi846_resume(struct device *dev)
 	return hi846_power_on(hi846);
 }
 
+/* Whether the mode streams on the sensor's lane count. */
+static bool hi846_mode_fits_lanes(struct hi846 *hi846, const struct hi846_mode *mode)
+{
+	return hi846->nr_lanes == 2 ? mode->reg_list_2lane.num_of_regs :
+				      mode->reg_list_4lane.num_of_regs;
+}
+
+/*
+ * The mode the lanes stream nearest to a size, as v4l2_find_nearest_size()
+ * measures it, or NULL.
+ */
+static const struct hi846_mode *hi846_find_mode(struct hi846 *hi846,
+						u32 width, u32 height)
+{
+	const struct hi846_mode *best = NULL;
+	u32 best_error = U32_MAX;
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(supported_modes); i++) {
+		const struct hi846_mode *mode = &supported_modes[i];
+		u32 error = abs((s32)mode->width - (s32)width) +
+			    abs((s32)mode->height - (s32)height);
+
+		if (!hi846_mode_fits_lanes(hi846, mode) || error >= best_error)
+			continue;
+		best = mode;
+		best_error = error;
+		if (!error)
+			break;
+	}
+
+	return best;
+}
+
 static int hi846_set_format(struct v4l2_subdev *sd,
 			    struct v4l2_subdev_state *sd_state,
 			    struct v4l2_subdev_format *format)
@@ -1781,22 +1815,11 @@ static int hi846_set_format(struct v4l2_subdev *sd,
 		return 0;
 	}
 
-	/* Check the requested mode, not the one being replaced. */
-	mode = v4l2_find_nearest_size(supported_modes,
-				      ARRAY_SIZE(supported_modes),
-				      width, height, mf->width, mf->height);
-	if (hi846->nr_lanes == 2) {
-		if (!mode->reg_list_2lane.num_of_regs) {
-			dev_err(&client->dev,
-				"this mode is not supported for 2 lanes\n");
-			return -EINVAL;
-		}
-	} else {
-		if (!mode->reg_list_4lane.num_of_regs) {
-			dev_err(&client->dev,
-				"this mode is not supported for 4 lanes\n");
-			return -EINVAL;
-		}
+	/* The nearest mode the lanes stream, not the one being replaced. */
+	mode = hi846_find_mode(hi846, mf->width, mf->height);
+	if (!mode) {
+		dev_err(&client->dev, "no mode for %u lanes\n", hi846->nr_lanes);
+		return -EINVAL;
 	}
 
 	mutex_lock(&hi846->mutex);
@@ -1890,8 +1913,23 @@ static int hi846_enum_frame_size(struct v4l2_subdev *sd,
 				 struct v4l2_subdev_frame_size_enum *fse)
 {
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
+	struct hi846 *hi846 = to_hi846(sd);
+	const struct hi846_mode *mode = NULL;
+	unsigned int i, n = 0;
 
-	if (fse->pad || fse->index >= ARRAY_SIZE(supported_modes))
+	if (fse->pad)
+		return -EINVAL;
+
+	/* Only the modes the lanes stream */
+	for (i = 0; i < ARRAY_SIZE(supported_modes); i++) {
+		if (!hi846_mode_fits_lanes(hi846, &supported_modes[i]))
+			continue;
+		if (n++ == fse->index) {
+			mode = &supported_modes[i];
+			break;
+		}
+	}
+	if (!mode)
 		return -EINVAL;
 
 	if (fse->code != HI846_MEDIA_BUS_FORMAT) {
@@ -1899,10 +1937,10 @@ static int hi846_enum_frame_size(struct v4l2_subdev *sd,
 		return -EINVAL;
 	}
 
-	fse->min_width = supported_modes[fse->index].width;
-	fse->max_width = supported_modes[fse->index].width;
-	fse->min_height = supported_modes[fse->index].height;
-	fse->max_height = supported_modes[fse->index].height;
+	fse->min_width = mode->width;
+	fse->max_width = mode->width;
+	fse->min_height = mode->height;
+	fse->max_height = mode->height;
 
 	dev_dbg(&client->dev, "%s: max width: %d max height: %d\n", __func__,
 		fse->max_width, fse->max_height);
@@ -2014,13 +2052,6 @@ static int hi846_identify_module(struct hi846 *hi846)
 		 hi, lo, hi846->nr_lanes);
 
 	return 0;
-}
-
-/* Whether the mode streams on the sensor's lane count. */
-static bool hi846_mode_fits_lanes(struct hi846 *hi846, const struct hi846_mode *mode)
-{
-	return hi846->nr_lanes == 2 ? mode->reg_list_2lane.num_of_regs :
-				      mode->reg_list_4lane.num_of_regs;
 }
 
 /* A link frequency a mode the lanes stream needs that the device tree lacks, or 0. */
