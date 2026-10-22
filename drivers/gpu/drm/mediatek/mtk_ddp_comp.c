@@ -11,6 +11,7 @@
 #include <linux/of_address.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
+#include <linux/reset.h>
 #include <linux/soc/mediatek/mtk-cmdq.h>
 #include <drm/drm_print.h>
 
@@ -630,6 +631,11 @@ static void mtk_ddp_comp_put_device(void *_dev)
 	put_device(dev);
 }
 
+static void mtk_ddp_comp_reset_put(void *reset)
+{
+	reset_control_put(reset);
+}
+
 static void mtk_ddp_comp_clk_put(void *_clk)
 {
 	struct clk *clk = _clk;
@@ -668,6 +674,16 @@ int mtk_ddp_comp_init(struct device *dev, struct device_node *node, struct mtk_d
 	ret = devm_add_action_or_reset(dev, mtk_ddp_comp_put_device, comp->dev);
 	if (ret)
 		return ret;
+
+	/* The DSI resets itself as it powers on: see mtk_dsi_poweron() */
+	if (type != MTK_DSI) {
+		comp->reset = of_reset_control_get_optional_exclusive(node, NULL);
+		if (IS_ERR(comp->reset))
+			return PTR_ERR(comp->reset);
+		ret = devm_add_action_or_reset(dev, mtk_ddp_comp_reset_put, comp->reset);
+		if (ret)
+			return ret;
+	}
 
 	if (type == MTK_DISP_AAL ||
 	    type == MTK_DISP_BLS ||
