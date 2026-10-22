@@ -13,6 +13,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
+#include <linux/property.h>
 
 #include <drm/drm_mipi_dsi.h>
 #include <drm/drm_modes.h>
@@ -22,6 +23,7 @@ struct r1_panel {
 	struct drm_panel panel;
 	struct mipi_dsi_device *dsi;
 	struct gpio_desc *reset;
+	u32 max_refresh;
 };
 
 struct r1_panel_command {
@@ -210,24 +212,35 @@ static const int r1_panel_clocks[] = {
 static int r1_panel_get_modes(struct drm_panel *panel,
 			      struct drm_connector *connector)
 {
+	struct r1_panel *ctx = container_of(panel, struct r1_panel, panel);
 	struct drm_display_mode *mode;
+	int count = 0, last = 0;
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(r1_panel_clocks); i++) {
+	/* The board can cap the rate; the fastest mode left is preferred */
+	for (i = 0; i < ARRAY_SIZE(r1_panel_clocks); i++)
+		if (!ctx->max_refresh ||
+		    DIV_ROUND_CLOSEST(r1_panel_clocks[i] * 1000,
+				      r1_panel_mode.htotal * r1_panel_mode.vtotal) <=
+		    ctx->max_refresh)
+			last = i;
+
+	for (i = 0; i <= last; i++) {
 		mode = drm_mode_duplicate(connector->dev, &r1_panel_mode);
 		if (!mode)
-			return i;
+			return count;
 
 		mode->clock = r1_panel_clocks[i];
 		mode->type = DRM_MODE_TYPE_DRIVER;
-		if (i == ARRAY_SIZE(r1_panel_clocks) - 1)
+		if (i == last)
 			mode->type |= DRM_MODE_TYPE_PREFERRED;
 		drm_mode_set_name(mode);
 		drm_mode_probed_add(connector, mode);
+		count++;
 	}
 	connector->display_info.bpc = 8;
 
-	return i;
+	return count;
 }
 
 static const struct drm_panel_funcs r1_panel_funcs = {
@@ -254,6 +267,7 @@ static int r1_panel_probe(struct mipi_dsi_device *dsi)
 		return dev_err_probe(dev, PTR_ERR(ctx->reset), "Cannot get panel reset\n");
 
 	ctx->dsi = dsi;
+	device_property_read_u32(dev, "rabbit,max-refresh-hz", &ctx->max_refresh);
 	ctx->panel.prepare_prev_first = true;
 	dsi->lanes = 2;
 	dsi->format = MIPI_DSI_FMT_RGB888;
