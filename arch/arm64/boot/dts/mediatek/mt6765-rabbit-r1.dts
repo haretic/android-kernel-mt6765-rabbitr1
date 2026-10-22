@@ -688,6 +688,7 @@
 		reg = <0>;
 		reset-gpios = <&pio 45 GPIO_ACTIVE_LOW>;
 		backlight = <&r1_backlight>;
+		rabbit,max-refresh-hz = <90>;
 
 		port {
 			r1_panel_in: endpoint {
