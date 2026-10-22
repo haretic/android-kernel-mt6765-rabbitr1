@@ -1236,6 +1236,7 @@
 			mediatek,gce-client-reg = <&gce SUBSYS_1400XXXX 0x1000 0x1000>;
 			mediatek,gce-events = <CMDQ_EVENT_MUTEX0_STREAM_EOF>,
 					      <CMDQ_EVENT_MUTEX1_STREAM_EOF>;
+			resets = <&mmsys MT6765_MMSYS_MUTEX_RST>;
 			power-domains = <&spm MT6765_POWER_DOMAIN_DISP>;
 		};
 
@@ -1266,6 +1267,7 @@
 			reg = <0 0x1400b000 0 0x1000>;
 			interrupts = <GIC_SPI 217 IRQ_TYPE_LEVEL_LOW>;
 			clocks = <&mmsys CLK_MM_DISP_OVL0>;
+			resets = <&mmsys MT6765_MMSYS_DISP_OVL0_RST>;
 			power-domains = <&spm MT6765_POWER_DOMAIN_DISP>;
 			iommus = <&iommu M4U_PORT_DISP_OVL0>;
 			mediatek,gce-client-reg = <&gce SUBSYS_1400XXXX 0xb000 0x1000>;
@@ -1276,6 +1278,7 @@
 			reg = <0 0x1400c000 0 0x1000>;
 			interrupts = <GIC_SPI 229 IRQ_TYPE_LEVEL_LOW>;
 			clocks = <&mmsys CLK_MM_DISP_OVL0_2L>;
+			resets = <&mmsys MT6765_MMSYS_DISP_OVL0_2L_RST>;
 			power-domains = <&spm MT6765_POWER_DOMAIN_DISP>;
 			iommus = <&iommu M4U_PORT_DISP_OVL0_2L>;
 			mediatek,gce-client-reg = <&gce SUBSYS_1400XXXX 0xc000 0x1000>;
@@ -1286,6 +1289,7 @@
 			reg = <0 0x1400d000 0 0x1000>;
 			interrupts = <GIC_SPI 218 IRQ_TYPE_LEVEL_LOW>;
 			clocks = <&mmsys CLK_MM_DISP_RDMA0>;
+			resets = <&mmsys MT6765_MMSYS_DISP_RDMA0_RST>;
 			power-domains = <&spm MT6765_POWER_DOMAIN_DISP>;
 			iommus = <&iommu M4U_PORT_DISP_RDMA0>;
 			mediatek,gce-client-reg = <&gce SUBSYS_1400XXXX 0xd000 0x1000>;
@@ -1308,6 +1312,7 @@
 			reg = <0 0x1400f000 0 0x1000>;
 			interrupts = <GIC_SPI 220 IRQ_TYPE_LEVEL_LOW>;
 			clocks = <&mmsys CLK_MM_DISP_COLOR0>;
+			resets = <&mmsys MT6765_MMSYS_DISP_COLOR0_RST>;
 			power-domains = <&spm MT6765_POWER_DOMAIN_DISP>;
 			mediatek,gce-client-reg = <&gce SUBSYS_1400XXXX 0xf000 0x1000>;
 		};
@@ -1318,6 +1323,7 @@
 			reg = <0 0x14010000 0 0x1000>;
 			interrupts = <GIC_SPI 221 IRQ_TYPE_LEVEL_LOW>;
 			clocks = <&mmsys CLK_MM_DISP_CCORR0>;
+			resets = <&mmsys MT6765_MMSYS_DISP_CCORR0_RST>;
 			power-domains = <&spm MT6765_POWER_DOMAIN_DISP>;
 			mediatek,gce-client-reg = <&gce SUBSYS_1401XXXX 0 0x1000>;
 		};
@@ -1328,6 +1334,7 @@
 			reg = <0 0x14011000 0 0x1000>;
 			interrupts = <GIC_SPI 222 IRQ_TYPE_LEVEL_LOW>;
 			clocks = <&mmsys CLK_MM_DISP_AAL0>;
+			resets = <&mmsys MT6765_MMSYS_DISP_AAL0_RST>;
 			power-domains = <&spm MT6765_POWER_DOMAIN_DISP>;
 			mediatek,gce-client-reg = <&gce SUBSYS_1401XXXX 0x1000 0x1000>;
 		};
@@ -1338,6 +1345,7 @@
 			reg = <0 0x14012000 0 0x1000>;
 			interrupts = <GIC_SPI 223 IRQ_TYPE_LEVEL_LOW>;
 			clocks = <&mmsys CLK_MM_DISP_GAMMA0>;
+			resets = <&mmsys MT6765_MMSYS_DISP_GAMMA0_RST>;
 			power-domains = <&spm MT6765_POWER_DOMAIN_DISP>;
 			mediatek,gce-client-reg = <&gce SUBSYS_1401XXXX 0x2000 0x1000>;
 		};
@@ -1348,6 +1356,7 @@
 			reg = <0 0x14013000 0 0x1000>;
 			interrupts = <GIC_SPI 224 IRQ_TYPE_LEVEL_LOW>;
 			clocks = <&mmsys CLK_MM_DISP_DITHER0>;
+			resets = <&mmsys MT6765_MMSYS_DISP_DITHER0_RST>;
 			power-domains = <&spm MT6765_POWER_DOMAIN_DISP>;
 			mediatek,gce-client-reg = <&gce SUBSYS_1401XXXX 0x3000 0x1000>;
 		};
