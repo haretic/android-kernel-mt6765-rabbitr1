@@ -9,6 +9,7 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
+#include <linux/reset.h>
 #include <linux/soc/mediatek/mtk-mmsys.h>
 #include <linux/soc/mediatek/mtk-mutex.h>
 #include <linux/soc/mediatek/mtk-cmdq.h>
@@ -362,6 +363,7 @@ struct mtk_mutex_data {
 struct mtk_mutex_ctx {
 	struct device			*dev;
 	struct clk			*clk;
+	struct reset_control		*reset;
 	void __iomem			*regs;
 	struct mtk_mutex		mutex[MTK_MUTEX_MAX_HANDLES];
 	const struct mtk_mutex_data	*data;
@@ -1048,6 +1050,18 @@ void mtk_mutex_disable(struct mtk_mutex *mutex)
 }
 EXPORT_SYMBOL_GPL(mtk_mutex_disable);
 
+/* Puts the whole mutex block through its hardware reset, where it has one */
+int mtk_mutex_reset(struct mtk_mutex *mutex)
+{
+	struct mtk_mutex_ctx *mtx = container_of(mutex, struct mtk_mutex_ctx,
+						 mutex[mutex->id]);
+
+	WARN_ON(&mtx->mutex[mutex->id] != mutex);
+
+	return reset_control_reset(mtx->reset);
+}
+EXPORT_SYMBOL_GPL(mtk_mutex_reset);
+
 void mtk_mutex_acquire(struct mtk_mutex *mutex)
 {
 	struct mtk_mutex_ctx *mtx = container_of(mutex, struct mtk_mutex_ctx,
@@ -1144,6 +1158,10 @@ static int mtk_mutex_probe(struct platform_device *pdev)
 		if (IS_ERR(mtx->clk))
 			return dev_err_probe(dev, PTR_ERR(mtx->clk), "Failed to get clock\n");
 	}
+
+	mtx->reset = devm_reset_control_get_optional_exclusive(dev, NULL);
+	if (IS_ERR(mtx->reset))
+		return dev_err_probe(dev, PTR_ERR(mtx->reset), "Failed to get reset\n");
 
 	mtx->regs = devm_platform_get_and_ioremap_resource(pdev, 0, &regs);
 	if (IS_ERR(mtx->regs)) {
