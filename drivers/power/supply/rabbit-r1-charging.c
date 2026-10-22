@@ -16,7 +16,7 @@
 #define R1_CHARGE_MIN_UA 500000
 #define R1_CHARGE_MAX_UA 1000000
 #define R1_SAMPLE_MAX_MS 1500
-#define R1_SESSION_TIMEOUT (10 * 60 * 60 * HZ)
+#define R1_CHARGE_TIMEOUT (10 * 60 * 60 * HZ)
 
 enum r1_charge_reason {
 	R1_WAITING, R1_UNPLUGGED, R1_NO_BATTERY, R1_SENSOR_ERROR,
@@ -54,7 +54,7 @@ struct r1_charge_policy {
 	atomic_t generation;
 	bool stopping, suspended, cold, hot, full, session, timeout;
 	bool notifier_registered, awake, level_hold;
-	unsigned long session_start;
+	unsigned long last_sample, charge_time;
 	int requested_ua, measured_ua, error;
 	int charge_start_level, charge_stop_level;
 	struct r1_charge_target applied;
@@ -81,11 +81,8 @@ static struct r1_charge_target r1_charge_decide(struct r1_charge_policy *p,
 		t.reason = R1_NO_BATTERY;
 		return t;
 	}
-	if (s->timer_expired || s->health == POWER_SUPPLY_HEALTH_SAFETY_TIMER_EXPIRE) {
-		t.reason = R1_TIMER;
-		return t;
-	}
-	if (s->health != POWER_SUPPLY_HEALTH_GOOD) {
+	if (s->health != POWER_SUPPLY_HEALTH_GOOD &&
+	    s->health != POWER_SUPPLY_HEALTH_SAFETY_TIMER_EXPIRE) {
 		t.reason = R1_CHARGER_FAULT;
 		return t;
 	}
@@ -108,6 +105,9 @@ static struct r1_charge_target r1_charge_decide(struct r1_charge_policy *p,
 	}
 	p->full = s->voltage >= t.voltage_uv ||
 		  (p->full && s->voltage >= t.voltage_uv - 100000);
+	/* A charge that got there ends the timed one; a recharge starts anew. */
+	if (p->full)
+		p->charge_time = 0;
 	if (s->voltage < 3000000 || s->voltage > 4450000) {
 		t.reason = R1_VOLTAGE;
 		return t;
@@ -151,6 +151,16 @@ static struct r1_charge_target r1_charge_decide(struct r1_charge_policy *p,
 	if (p->full && t.input_ua) {
 		t.charge_ua = 0;
 		t.reason = R1_VOLTAGE;
+		return t;
+	}
+	/*
+	 * Charging too long without getting full: stop charging, but likewise
+	 * keep the input powering the system. Isolating it left a device that
+	 * stays plugged in running down its battery on the charger.
+	 */
+	if (s->timer_expired && t.input_ua) {
+		t.charge_ua = 0;
+		t.reason = R1_TIMER;
 		return t;
 	}
 	/*
@@ -229,14 +239,20 @@ static int r1_charge_sample(struct r1_charge_policy *p, struct r1_charge_sample 
 	if (!s->plugged) {
 		p->session = false;
 		p->timeout = false;
+		p->charge_time = 0;
 		s->valid = true;
 		return 0;
 	}
-	if (!p->session) {
-		p->session_start = jiffies;
-		p->session = true;
-	}
-	if (time_after_eq(jiffies, p->session_start + R1_SESSION_TIMEOUT))
+	/*
+	 * The timer counts time spent charging since plug-in or the last full
+	 * charge, not time plugged in: holding full or at the level limit for
+	 * a day is no sign of a cell that will not take its charge.
+	 */
+	if (p->session && p->applied.charge_ua)
+		p->charge_time += jiffies - p->last_sample;
+	p->last_sample = jiffies;
+	p->session = true;
+	if (p->charge_time >= R1_CHARGE_TIMEOUT)
 		p->timeout = true;
 	READ_SAMPLE(charger, HEALTH, health);
 	if (s->health == POWER_SUPPLY_HEALTH_SAFETY_TIMER_EXPIRE)
