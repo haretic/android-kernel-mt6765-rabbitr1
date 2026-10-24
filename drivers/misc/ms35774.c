@@ -39,6 +39,12 @@
  */
 #define MS35774_STEP_HIGH_US		50
 #define MS35774_STEP_LOW_US		360
+/*
+ * The pause between steps userspace may pick instead, through step_us: shorter
+ * turns the part quicker until the motor slips, longer turns it gentler.
+ */
+#define MS35774_STEP_LOW_MIN_US		200
+#define MS35774_STEP_LOW_MAX_US		1000
 /* MS1 high, MS2 low */
 #define MS35774_MODE			0x1
 
@@ -54,6 +60,7 @@ struct ms35774 {
 	struct hrtimer timer;
 	struct completion moved;
 	unsigned int steps;		/* left to start, owned by the timer */
+	unsigned int step_low_us;	/* read by the timer */
 	bool step_high;
 	struct mutex lock;		/* protects position, target, homed */
 	unsigned int position;
@@ -68,7 +75,8 @@ static enum hrtimer_restart ms35774_step(struct hrtimer *timer)
 	if (priv->step_high) {
 		gpiod_set_value(priv->step, 0);
 		priv->step_high = false;
-		hrtimer_forward_now(timer, us_to_ktime(MS35774_STEP_LOW_US));
+		hrtimer_forward_now(timer,
+				    us_to_ktime(READ_ONCE(priv->step_low_us)));
 		return HRTIMER_RESTART;
 	}
 
@@ -187,8 +195,37 @@ static ssize_t orientation_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(orientation);
 
+static ssize_t step_us_show(struct device *dev, struct device_attribute *attr,
+			    char *buf)
+{
+	struct ms35774 *priv = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%u\n", READ_ONCE(priv->step_low_us));
+}
+
+static ssize_t step_us_store(struct device *dev, struct device_attribute *attr,
+			     const char *buf, size_t count)
+{
+	struct ms35774 *priv = dev_get_drvdata(dev);
+	unsigned int us;
+	int ret;
+
+	ret = kstrtouint(buf, 10, &us);
+	if (ret)
+		return ret;
+
+	if (us < MS35774_STEP_LOW_MIN_US || us > MS35774_STEP_LOW_MAX_US)
+		return -EINVAL;
+
+	WRITE_ONCE(priv->step_low_us, us);
+
+	return count;
+}
+static DEVICE_ATTR_RW(step_us);
+
 static struct attribute *ms35774_attrs[] = {
 	&dev_attr_orientation.attr,
+	&dev_attr_step_us.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(ms35774);
@@ -212,6 +249,7 @@ static int ms35774_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	priv->dev = dev;
+	priv->step_low_us = MS35774_STEP_LOW_US;
 	platform_set_drvdata(pdev, priv);
 
 	ret = devm_mutex_init(dev, &priv->lock);
