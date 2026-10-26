@@ -521,9 +521,15 @@ static ssize_t __cgroup1_procs_write(struct kernfs_open_file *of,
 	 */
 	cred = of->file->f_cred;
 	tcred = get_task_cred(task);
+	/*
+	 * Android's system_server sorts every app into its cpuset and cpu
+	 * groups by moving the app's tasks, which run as other users, so a
+	 * task may also be moved by one that could renice it.
+	 */
 	if (!uid_eq(cred->euid, GLOBAL_ROOT_UID) &&
 	    !uid_eq(cred->euid, tcred->uid) &&
-	    !uid_eq(cred->euid, tcred->suid))
+	    !uid_eq(cred->euid, tcred->suid) &&
+	    !file_ns_capable(of->file, tcred->user_ns, CAP_SYS_NICE))
 		ret = -EACCES;
 	put_cred(tcred);
 	if (ret)
