@@ -633,6 +633,11 @@
 	compatible = "mediatek,mt6765-devinfo";
 };
 
+/* The chip ID block reads no socinfo cells on the R1, and LK's devinfo copy has none either */
+&soc_data {
+	status = "disabled";
+};
+
 &uart0 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&r1_uart0_pins>;
