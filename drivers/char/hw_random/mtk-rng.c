@@ -20,6 +20,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/soc/mediatek/mtk_sip_svc.h>
+#include <linux/string.h>
 
 /* Runtime PM autosuspend timeout: */
 #define RNG_AUTOSUSPEND_TIMEOUT		100
@@ -35,8 +36,12 @@
 
 /* Driver feature flags */
 #define MTK_RNG_SMC			BIT(0)
+/* The older smartphone SoCs' TF-A: four words a call, the call marked with a magic */
+#define MTK_RNG_SMC_TRNG		BIT(1)
 
 #define MTK_SIP_KERNEL_GET_RND		MTK_SIP_SMC_CMD(0x550)
+#define MTK_SIP_KERNEL_GET_RND_TRNG	MTK_SIP_SMC_CMD(0x26a)
+#define MTK_RNG_TRNG_MAGIC		0x74726e67	/* "trng" */
 
 #define to_mtk_rng(p)	container_of(p, struct mtk_rng, rng)
 
@@ -133,6 +138,36 @@ static int mtk_rng_read_smc(struct hwrng *rng, void *buf, size_t max,
 	return retval || !wait ? retval : -EIO;
 }
 
+static int mtk_rng_read_smc_trng(struct hwrng *rng, void *buf, size_t max,
+				 bool wait)
+{
+	struct arm_smccc_res res;
+	int retval = 0;
+
+	while (max >= sizeof(u32)) {
+		u32 words[4];
+		size_t len = min(max & ~(sizeof(u32) - 1), sizeof(words));
+
+		arm_smccc_smc(MTK_SIP_KERNEL_GET_RND_TRNG, MTK_RNG_TRNG_MAGIC,
+			      0, 0, 0, 0, 0, 0, &res);
+		/* The words come back 32 bits wide, so all ones is no value */
+		if ((long)res.a0 == SMCCC_RET_NOT_SUPPORTED)
+			break;
+
+		words[0] = res.a0;
+		words[1] = res.a1;
+		words[2] = res.a2;
+		words[3] = res.a3;
+		memcpy(buf, words, len);
+		memzero_explicit(words, sizeof(words));
+		retval += len;
+		buf += len;
+		max -= len;
+	}
+
+	return retval || !wait ? retval : -EIO;
+}
+
 static bool mtk_rng_hw_accessible(struct mtk_rng *priv)
 {
 	u32 val;
@@ -201,7 +236,8 @@ static int mtk_rng_probe(struct platform_device *pdev)
 	if (priv->flags & MTK_RNG_SMC) {
 		if (!IS_ENABLED(CONFIG_HAVE_ARM_SMCCC))
 			return -ENODEV;
-		priv->rng.read = mtk_rng_read_smc;
+		priv->rng.read = priv->flags & MTK_RNG_SMC_TRNG ?
+				 mtk_rng_read_smc_trng : mtk_rng_read_smc;
 	} else {
 #ifndef CONFIG_PM
 		priv->rng.init = mtk_rng_init;
@@ -262,6 +298,8 @@ static const struct dev_pm_ops mtk_rng_pm_ops = {
 #endif	/* CONFIG_PM */
 
 static const struct of_device_id mtk_rng_match[] = {
+	{ .compatible = "mediatek,mt6765-rng",
+	  .data = (void *)(MTK_RNG_SMC | MTK_RNG_SMC_TRNG) },
 	{ .compatible = "mediatek,mt7623-rng" },
 	{ .compatible = "mediatek,mt7981-rng", .data = (void *)MTK_RNG_SMC },
 	{ .compatible = "mediatek,mt7986-rng" },

@@ -16,6 +16,7 @@ properties:
   compatible:
     oneOf:
       - enum:
+          - mediatek,mt6765-rng
           - mediatek,mt7623-rng
           - mediatek,mt7981-rng
       - items:
@@ -50,7 +51,9 @@ allOf:
       properties:
         compatible:
           contains:
-            const: mediatek,mt7981-rng
+            enum:
+              - mediatek,mt6765-rng
+              - mediatek,mt7981-rng
     then:
       properties:
         reg: false
