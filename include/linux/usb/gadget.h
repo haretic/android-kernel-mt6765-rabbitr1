@@ -55,6 +55,10 @@ struct usb_ep;
  *     treated as errors (queue stops advancing till cleanup).
  * @dma_mapped: Indicates if request has been mapped to DMA (internal)
  * @sg_was_mapped: Set if the scatterlist has been mapped before the request
+ * @defer_status: For the data stage of a control OUT transfer on ep0: complete
+ *	the request once its data is read, but leave the status stage pending
+ *	until a zero-length request accepts it or a halt stalls it.  Only for
+ *	gadgets with @deferred_out_status set.
  * @complete: Function called when request completes, so this request and
  *	its buffer may be re-used.  The function will always be called with
  *	interrupts disabled, and it must not sleep.
@@ -116,6 +120,7 @@ struct usb_request {
 	unsigned		short_not_ok:1;
 	unsigned		dma_mapped:1;
 	unsigned		sg_was_mapped:1;
+	unsigned		defer_status:1;
 
 	void			(*complete)(struct usb_ep *ep,
 					struct usb_request *req);
@@ -418,6 +423,9 @@ struct usb_gadget_ops {
  *	indicates that it supports LPM as per the LPM ECN & errata.
  * @wakeup_capable: True if gadget is capable of sending remote wakeup.
  * @wakeup_armed: True if gadget is armed by the host for remote wakeup.
+ * @deferred_out_status: True if ep0 honours a request's defer_status, so the
+ *	function decides after reading a control OUT data stage whether to
+ *	accept or stall it.
  * @irq: the interrupt number for device controller.
  * @id_number: a unique ID number for ensuring that gadget names are distinct
  *
@@ -483,6 +491,7 @@ struct usb_gadget {
 	unsigned			lpm_capable:1;
 	unsigned			wakeup_capable:1;
 	unsigned			wakeup_armed:1;
+	unsigned			deferred_out_status:1;
 	int				irq;
 	int				id_number;
 };

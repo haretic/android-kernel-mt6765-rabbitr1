@@ -31,6 +31,7 @@
 #include <linux/unaligned.h>
 
 #include <linux/usb/ccid.h>
+#include <linux/usb/cdc.h>
 #include <linux/usb/composite.h>
 #include <linux/usb/functionfs.h>
 #include <linux/usb/func_utils.h>
@@ -322,6 +323,8 @@ static int __ffs_ep0_queue_wait(struct ffs_data *ffs, char *data, size_t len)
 	}
 
 	req->zero     = len < le16_to_cpu(ffs->ev.setup.wLength);
+	req->defer_status = ffs->defer_out_status && !ffs->out_data_received &&
+		!(ffs->ev.setup.bRequestType & USB_DIR_IN) && len;
 
 	spin_unlock_irq(&ffs->ev.waitq.lock);
 
@@ -345,10 +348,17 @@ static int __ffs_ep0_queue_wait(struct ffs_data *ffs, char *data, size_t len)
 	ret = wait_for_completion_interruptible(&ffs->ep0req_completion);
 	if (ret) {
 		usb_ep_dequeue(ffs->gadget->ep0, req);
+		ffs->out_data_received = false;
 		return -EINTR;
 	}
 
-	ffs->setup_state = FFS_NO_SETUP;
+	/* The data read with its status held: the setup stays for its answer */
+	if (req->defer_status && !req->status) {
+		ffs->out_data_received = true;
+	} else {
+		ffs->out_data_received = false;
+		ffs->setup_state = FFS_NO_SETUP;
+	}
 	return req->status ? req->status : req->actual;
 }
 
@@ -358,6 +368,7 @@ static int __ffs_ep0_stall(struct ffs_data *ffs)
 		pr_vdebug("ep0 stall\n");
 		usb_ep_set_halt(ffs->gadget->ep0);
 		ffs->setup_state = FFS_NO_SETUP;
+		ffs->out_data_received = false;
 		return -EL2HLT;
 	} else {
 		pr_debug("bogus ep0 stall!\n");
@@ -525,6 +536,7 @@ static ssize_t __ffs_ep0_read_events(struct ffs_data *ffs, char __user *buf,
 		if (events[i].type == FUNCTIONFS_SETUP) {
 			events[i].u.setup = ffs->ev.setup;
 			ffs->setup_state = FFS_SETUP_PENDING;
+			ffs->out_data_received = false;
 		}
 	} while (++i < n);
 
@@ -686,7 +698,14 @@ static long ffs_ep0_ioctl(struct file *file, unsigned code, unsigned long value)
 	struct usb_gadget *gadget = ffs->gadget;
 	long ret;
 
-	if (code == FUNCTIONFS_INTERFACE_REVMAP) {
+	if (code == FUNCTIONFS_DEFER_OUT_STATUS) {
+		if (value != 1)
+			return -EINVAL;
+		if (gadget && !gadget->deferred_out_status)
+			return -EOPNOTSUPP;
+		ffs->defer_out_status = true;
+		ret = 0;
+	} else if (code == FUNCTIONFS_INTERFACE_REVMAP) {
 		struct ffs_function *func = ffs->func;
 		ret = func ? ffs_func_revmap_intf(func, value) : -ENODEV;
 	} else if (gadget && gadget->ops->ioctl) {
@@ -2355,6 +2374,8 @@ static void ffs_data_reset(struct ffs_data *ffs)
 	ffs->state = FFS_READ_DESCRIPTORS;
 	ffs->setup_state = FFS_NO_SETUP;
 	ffs->flags = 0;
+	ffs->defer_out_status = false;
+	ffs->out_data_received = false;
 
 	ffs->ms_os_descs_ext_prop_count = 0;
 	ffs->ms_os_descs_ext_prop_name_len = 0;
@@ -2371,6 +2392,12 @@ static int functionfs_bind(struct ffs_data *ffs, struct usb_composite_dev *cdev)
 	if ((ffs->state != FFS_ACTIVE
 		 || test_and_set_bit(FFS_FL_BOUND, &ffs->flags)))
 		return -EBADFD;
+
+	/* Held control OUT status asked for where the controller can't hold it */
+	if (ffs->defer_out_status && !cdev->gadget->deferred_out_status) {
+		clear_bit(FFS_FL_BOUND, &ffs->flags);
+		return -EOPNOTSUPP;
+	}
 
 	first_id = usb_string_ids_n(cdev, ffs->strings_count);
 	if (first_id < 0)
@@ -2694,6 +2721,45 @@ static int __must_check ffs_do_single_desc(char *data, unsigned len,
 			return -EINVAL;
 		}
 
+	case USB_DT_CS_INTERFACE: {
+		u8 *ds = (u8 *)_ds;
+
+		/* CDC ACM's functional descriptors, their interfaces renumbered */
+		if (*current_class != USB_CLASS_COMM) {
+			pr_vdebug("unknown descriptor: %d for class %d\n",
+				  _ds->bDescriptorType, *current_class);
+			return -EINVAL;
+		}
+		if (length < 3)
+			goto inv_length;
+		switch (ds[2]) {
+		case USB_CDC_HEADER_TYPE:
+			if (length != sizeof(struct usb_cdc_header_desc))
+				goto inv_length;
+			break;
+		case USB_CDC_CALL_MANAGEMENT_TYPE:
+			if (length != sizeof(struct usb_cdc_call_mgmt_descriptor))
+				goto inv_length;
+			__entity(INTERFACE, ds[4]);
+			break;
+		case USB_CDC_ACM_TYPE:
+			if (length != sizeof(struct usb_cdc_acm_descriptor))
+				goto inv_length;
+			break;
+		case USB_CDC_UNION_TYPE:
+			/* One subordinate interface */
+			if (length != sizeof(struct usb_cdc_union_desc))
+				goto inv_length;
+			__entity(INTERFACE, ds[3]);
+			__entity(INTERFACE, ds[4]);
+			break;
+		default:
+			pr_vdebug("unknown CDC descriptor: %d\n", ds[2]);
+			return -EINVAL;
+		}
+	}
+		break;
+
 	case USB_DT_OTG:
 		if (length != sizeof(struct usb_otg_descriptor))
 			goto inv_length;
@@ -2704,6 +2770,7 @@ static int __must_check ffs_do_single_desc(char *data, unsigned len,
 		pr_vdebug("interface association descriptor\n");
 		if (length != sizeof *ds)
 			goto inv_length;
+		__entity(INTERFACE, ds->bFirstInterface);
 		if (ds->iFunction)
 			__entity(STRING, ds->iFunction);
 	}

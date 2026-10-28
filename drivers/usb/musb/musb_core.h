@@ -403,6 +403,9 @@ struct musb {
 
 	unsigned		flush_irq_work:1;
 
+	/* ep0's control OUT status stage held for the function, see defer_status */
+	unsigned		ep0_status_deferred:1;
+
 	u8			address;
 	u8			test_mode_nr;
 	u16			ackpend;		/* ep0 */

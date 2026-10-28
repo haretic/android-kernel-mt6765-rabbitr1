@@ -382,6 +382,16 @@ struct usb_functionfs_event {
 #define	FUNCTIONFS_ENDPOINT_REVMAP	_IO('g', 129)
 
 /*
+ * On ep0, with argument 1: a control OUT transfer's data read returns before
+ * its status stage, which a following zero-length read accepts and a write
+ * stalls, so the function can check the data, as a serial port's line coding,
+ * before the host gets its answer.  A new SETUP, a disconnect or an
+ * interrupted read gives the transfer up.  Fails with EOPNOTSUPP where the
+ * controller can't hold the status; binding then fails as well.
+ */
+#define	FUNCTIONFS_DEFER_OUT_STATUS	_IO('g', 131)
+
+/*
  * Returns endpoint descriptor. If endpoint shuts down during the call,
  * returns -ESHUTDOWN.
  */

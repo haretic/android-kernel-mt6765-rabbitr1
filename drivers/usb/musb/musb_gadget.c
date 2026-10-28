@@ -1780,6 +1780,7 @@ int musb_gadget_setup(struct musb *musb)
 
 	musb->g.ops = &musb_gadget_operations;
 	musb->g.max_speed = USB_SPEED_HIGH;
+	musb->g.deferred_out_status = 1;
 	musb->g.speed = USB_SPEED_UNKNOWN;
 
 	MUSB_DEV_MODE(musb);

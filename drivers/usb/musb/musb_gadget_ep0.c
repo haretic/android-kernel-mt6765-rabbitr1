@@ -498,9 +498,18 @@ static void ep0_rxstate(struct musb *musb)
 	 * message just received holds invalid data.
 	 */
 	if (req) {
+		/* The function decides on the status itself: hold it, the host
+		 * NAKed while RXPKTRDY stays set, till its zero-length request
+		 * accepts it (musb_g_ep0_queue) or its halt stalls it.
+		 */
+		const bool defer = req->defer_status && !req->status &&
+			(csr & MUSB_CSR0_P_DATAEND);
+
 		musb->ackpend = csr;
+		if (defer)
+			musb->ep0_status_deferred = 1;
 		musb_g_ep0_giveback(musb, req);
-		if (!musb->ackpend)
+		if (!musb->ackpend || defer)
 			return;
 		musb->ackpend = 0;
 	}
@@ -603,6 +612,7 @@ musb_read_setup(struct musb *musb, struct usb_ctrlrequest *req)
 	 * to switch modes...
 	 */
 	musb->set_address = false;
+	musb->ep0_status_deferred = 0;
 	musb->ackpend = MUSB_CSR0_P_SVDRXPKTRDY;
 	if (req->wLength == 0) {
 		if (req->bRequestType & USB_DIR_IN)
@@ -682,6 +692,14 @@ irqreturn_t musb_g_ep0_irq(struct musb *musb)
 		case MUSB_EP0_STAGE_RX:
 			musb->ep0_state = MUSB_EP0_STAGE_STATUSIN;
 			break;
+		case MUSB_EP0_STAGE_STATUSIN:
+			if (musb->ep0_status_deferred) {
+				/* The host gave up on the held status */
+				musb->ep0_status_deferred = 0;
+				musb->ackpend = 0;
+				break;
+			}
+			fallthrough;
 		default:
 			ERR("SetupEnd came in a wrong ep0stage %s\n",
 			    decode_ep0stage(musb->ep0_state));
@@ -935,6 +953,12 @@ musb_g_ep0_queue(struct usb_ep *e, struct usb_request *r, gfp_t gfp_flags)
 	case MUSB_EP0_STAGE_ACKWAIT:	/* zero-length data */
 		status = 0;
 		break;
+	case MUSB_EP0_STAGE_STATUSIN:	/* a held control-OUT status */
+		if (musb->ep0_status_deferred) {
+			status = 0;
+			break;
+		}
+		fallthrough;
 	default:
 		musb_dbg(musb, "ep0 request queued in state %d",
 				musb->ep0_state);
@@ -955,8 +979,19 @@ musb_g_ep0_queue(struct usb_ep *e, struct usb_request *r, gfp_t gfp_flags)
 	if (musb->ep0_state == MUSB_EP0_STAGE_TX)
 		ep0_txstate(musb);
 
+	/* sequence #2 (OUT) whose status the function held: accept it now */
+	else if (musb->ep0_state == MUSB_EP0_STAGE_STATUSIN) {
+		if (req->request.length)
+			status = -EINVAL;
+		else {
+			musb->ep0_status_deferred = 0;
+			musb_writew(regs, MUSB_CSR0, musb->ackpend);
+			musb->ackpend = 0;
+			musb_g_ep0_giveback(ep->musb, r);
+		}
+
 	/* sequence #3, no-data ... issue IN status */
-	else if (musb->ep0_state == MUSB_EP0_STAGE_ACKWAIT) {
+	} else if (musb->ep0_state == MUSB_EP0_STAGE_ACKWAIT) {
 		if (req->request.length)
 			status = -EINVAL;
 		else {
@@ -1036,6 +1071,7 @@ static int musb_g_ep0_halt(struct usb_ep *e, int value)
 		musb_writew(regs, MUSB_CSR0, csr);
 		musb->ep0_state = MUSB_EP0_STAGE_IDLE;
 		musb->ackpend = 0;
+		musb->ep0_status_deferred = 0;
 		break;
 	default:
 		musb_dbg(musb, "ep0 can't halt in state %d", musb->ep0_state);
