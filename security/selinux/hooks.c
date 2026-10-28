@@ -757,6 +757,12 @@ static int selinux_set_mnt_opts(struct super_block *sb,
 	    !strcmp(sb->s_type->name, "bpf") ||
 	    !strcmp(sb->s_type->name, "pstore") ||
 	    !strcmp(sb->s_type->name, "securityfs") ||
+	    /*
+	     * Per-path labels for a USB gadget's functions, so a function's
+	     * owner can fill it while the rest of configfs stays the gadget
+	     * HAL's; "genfscon configfs /" alone labels it all as before.
+	     */
+	    !strcmp(sb->s_type->name, "configfs") ||
 	    (selinux_policycap_functionfs_seclabel() &&
 	     !strcmp(sb->s_type->name, "functionfs")))
 		sbsec->flags |= SE_SBGENFS;
