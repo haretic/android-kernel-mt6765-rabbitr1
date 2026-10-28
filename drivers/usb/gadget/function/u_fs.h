@@ -147,6 +147,10 @@ enum ffs_setup_state {
 struct ffs_data {
 	struct usb_gadget		*gadget;
 
+	/* FUNCTIONFS_DEFER_OUT_STATUS, and its data stage read; P: mutex */
+	bool				defer_out_status;
+	bool				out_data_received;
+
 	/*
 	 * Protect access read/write operations, only one read/write
 	 * at a time.  As a consequence protects ep0req and company.
