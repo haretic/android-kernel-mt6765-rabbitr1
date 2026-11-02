@@ -41,6 +41,16 @@ static inline void map_dma_buffer(struct musb_request *request,
 	if (!is_dma_capable() || !musb_ep->dma)
 		return;
 
+	/*
+	 * Isochronous Tx goes by PIO. A DMA load completes the request as soon
+	 * as the packet is in the FIFO, and on MediaTek's core TxPktRdy reads
+	 * clear right after the mode 0 load, so the next requests are loaded
+	 * over it within the same frame and the host gets no packet at all.
+	 * PIO completes on the Tx interrupt, once the packet has gone out.
+	 */
+	if (request->tx && musb_ep->type == USB_ENDPOINT_XFER_ISOC)
+		return;
+
 	/* Check if DMA engine can handle this request.
 	 * DMA code must reject the USB request explicitly.
 	 * Default behaviour is to map the request.
@@ -1171,6 +1181,18 @@ void musb_ep_restart(struct musb *musb, struct musb_request *req)
 		txstate(musb, req);
 	} else {
 		csr = musb_readw(epio, MUSB_RXCSR);
+		/*
+		 * A packet that came in while no request was queued is still
+		 * the host's: mass storage never resends a command block, so
+		 * dropping it hangs the drive until the host resets it. Take it
+		 * through the interrupt handler's path in a work item, never from
+		 * usb_ep_queue(), where the request must not complete.
+		 */
+		if (csr & MUSB_RXCSR_RXPKTRDY) {
+			musb->rx_pending |= BIT(req->epnum);
+			schedule_work(&musb->rx_pending_work);
+			return;
+		}
 		csr |= MUSB_RXCSR_FLUSHFIFO | MUSB_RXCSR_P_WZC_BITS;
 		musb_writew(epio, MUSB_RXCSR, csr);
 		musb_writew(epio, MUSB_RXCSR, csr);
@@ -1647,6 +1669,22 @@ static void musb_gadget_work(struct work_struct *work)
 	pm_runtime_put_autosuspend(musb->controller);
 }
 
+static void musb_rx_pending_work(struct work_struct *work)
+{
+	struct musb *musb = container_of(work, struct musb, rx_pending_work);
+	unsigned long flags, pending;
+	unsigned int epnum;
+
+	pm_runtime_get_sync(musb->controller);
+	spin_lock_irqsave(&musb->lock, flags);
+	pending = musb->rx_pending;
+	musb->rx_pending = 0;
+	for_each_set_bit(epnum, &pending, MUSB_C_NUM_EPS)
+		musb_g_rx(musb, epnum);
+	spin_unlock_irqrestore(&musb->lock, flags);
+	pm_runtime_put_autosuspend(musb->controller);
+}
+
 static int musb_gadget_pullup(struct usb_gadget *gadget, int is_on)
 {
 	struct musb	*musb = gadget_to_musb(gadget);
@@ -1791,6 +1829,7 @@ int musb_gadget_setup(struct musb *musb)
 	/* don't support otg protocols */
 	musb->g.is_otg = 0;
 	INIT_DELAYED_WORK(&musb->gadget_work, musb_gadget_work);
+	INIT_WORK(&musb->rx_pending_work, musb_rx_pending_work);
 	musb_g_init_endpoints(musb);
 
 	musb->is_active = 0;
@@ -1813,6 +1852,7 @@ void musb_gadget_cleanup(struct musb *musb)
 		return;
 
 	cancel_delayed_work_sync(&musb->gadget_work);
+	cancel_work_sync(&musb->rx_pending_work);
 	usb_del_gadget_udc(&musb->g);
 }
 

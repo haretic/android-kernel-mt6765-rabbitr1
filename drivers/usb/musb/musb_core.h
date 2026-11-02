@@ -290,6 +290,8 @@ struct musb {
 	struct delayed_work	deassert_reset_work;
 	struct delayed_work	finish_resume_work;
 	struct delayed_work	gadget_work;
+	struct work_struct	rx_pending_work;
+	u16			rx_pending;	/* Rx endpoints holding a packet */
 	u16			hwvers;
 
 	u16			intrrxe;
