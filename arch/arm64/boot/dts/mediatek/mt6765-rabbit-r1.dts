@@ -1097,6 +1097,8 @@
 	cap-mmc-highspeed;
 	mmc-hs200-1_8v;
 	mmc-hs400-1_8v;
+	/* Strobe delay 3 as stock's autok keeps it in HS400; reset leaves it at 0 */
+	mediatek,hs400-ds-dly3 = <20>;
 	non-removable;
 	no-sd;
 	no-sdio;
