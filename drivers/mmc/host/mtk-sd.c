@@ -304,8 +304,11 @@
 #define EMMC50_CFG_CRCSTS_EDGE    BIT(3)   /* RW */
 #define EMMC50_CFG_CFCSTS_SEL     BIT(4)   /* RW */
 #define EMMC50_CFG_CMD_RESP_SEL   BIT(9)   /* RW */
+#define EMMC50_CFG_END_BIT_CHK_CNT GENMASK(8, 5)  /* RW */
+#define EMMC50_CFG_READ_DAT_CNT   GENMASK(23, 21) /* RW */
 
 /* EMMC50_CFG1 mask */
+#define EMMC50_CFG1_CKSWITCH_CNT  GENMASK(10, 8) /* RW */
 #define EMMC50_CFG1_DS_CFG        BIT(28)  /* RW */
 
 /* EMMC50_CFG2 mask */
@@ -451,6 +454,10 @@ struct mtk_mmc_compatible {
 	bool support_new_tx;
 	bool support_new_rx;
 	bool support_spm_res_release;
+	/* eMMC 5.0 read path counters for HS400, where reset values don't work */
+	u8 hs400_read_dat_cnt;
+	u8 hs400_end_bit_chk_cnt;
+	u8 hs400_ckswitch_cnt;
 };
 
 struct msdc_tune_para {
@@ -567,6 +574,10 @@ static const struct mtk_mmc_compatible mt6765_compat = {
 	.enhance_rx = true,
 	.enhance_rx_top_only = true,
 	.support_64g = false,
+	/* As MediaTek's MT6765 BSP sets them for HS400 */
+	.hs400_read_dat_cnt = 1,
+	.hs400_end_bit_chk_cnt = 3,
+	.hs400_ckswitch_cnt = 5,
 };
 
 static const struct mtk_mmc_compatible mt6779_compat = {
@@ -2667,6 +2678,14 @@ static int msdc_prepare_hs400_tuning(struct mmc_host *mmc, struct mmc_ios *ios)
 	sdr_clr_bits(host->base + MSDC_PATCH_BIT2, MSDC_PATCH_BIT2_CFGCRCSTS);
 	/* to improve read performance, set outstanding to 2 */
 	sdr_set_field(host->base + EMMC50_CFG3, EMMC50_CFG3_OUTS_WR, 2);
+	if (host->dev_comp->hs400_read_dat_cnt) {
+		sdr_set_field(host->base + EMMC50_CFG0, EMMC50_CFG_READ_DAT_CNT,
+			      host->dev_comp->hs400_read_dat_cnt);
+		sdr_set_field(host->base + EMMC50_CFG0, EMMC50_CFG_END_BIT_CHK_CNT,
+			      host->dev_comp->hs400_end_bit_chk_cnt);
+		sdr_set_field(host->base + EMMC50_CFG1, EMMC50_CFG1_CKSWITCH_CNT,
+			      host->dev_comp->hs400_ckswitch_cnt);
+	}
 
 	return 0;
 }
