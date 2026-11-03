@@ -18,6 +18,7 @@
 #include <dt-bindings/iio/adc/mediatek,mt6370_adc.h>
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/pinctrl/mediatek,mt6765-pinfunc.h>
+#include <dt-bindings/usb/pd.h>
 #include "mt6765.dtsi"
 #include "mt6357.dtsi"
 
@@ -37,6 +38,7 @@
 		charger-supply = <&r1_charger>;
 		battery-supply = <&r1_battery>;
 		usb-gadget-supply = <&usb2>;
+		typec-supply = <&r1_tcpc>;
 		/* Experimental, source-backed policy; physical charging is untested. */
 	};
 
@@ -1050,6 +1052,15 @@
 			io-channels = <&r1_mt6370_adc MT6370_CHAN_IBUS>;
 			richtek,managed-charging;
 			status = "okay";
+
+			/* VBUS for what is plugged in as host, as stock's usb-otg-vbus */
+			r1_otg_vbus: usb-otg-vbus-regulator {
+				regulator-name = "mt6370-usb-otg-vbus";
+				regulator-min-microvolt = <4350000>;
+				regulator-max-microvolt = <5800000>;
+				regulator-min-microamp = <500000>;
+				regulator-max-microamp = <3000000>;
+			};
 		};
 
 		r1_backlight: backlight {
@@ -1061,10 +1072,32 @@
 			default-brightness = <256>;
 		};
 
-		tcpc {
+		/* The USB-C port, dual role as stock's type_c_port0 (Try.SNK, 5 V only) */
+		r1_tcpc: tcpc {
 			compatible = "mediatek,mt6370-tcpc";
-			interrupts-extended = <&pio 41 IRQ_TYPE_EDGE_FALLING>;
-			status = "disabled";
+			pinctrl-names = "default";
+			pinctrl-0 = <&r1_tcpc_irq_pins>;
+			interrupts-extended = <&pio 24 IRQ_TYPE_LEVEL_LOW>;
+			vbus-supply = <&r1_otg_vbus>;
+
+			connector {
+				compatible = "usb-c-connector";
+				label = "USB-C";
+				data-role = "dual";
+				power-role = "dual";
+				try-power-role = "sink";
+				source-pdos = <PDO_FIXED(5000, 500, PDO_FIXED_DUAL_ROLE |
+							 PDO_FIXED_USB_COMM | PDO_FIXED_DATA_SWAP)>;
+				sink-pdos = <PDO_FIXED(5000, 1000, PDO_FIXED_DUAL_ROLE |
+						       PDO_FIXED_USB_COMM | PDO_FIXED_DATA_SWAP)>;
+				op-sink-microwatt = <5000000>;
+
+				port {
+					r1_typec_hs: endpoint {
+						remote-endpoint = <&r1_usb_role>;
+					};
+				};
+			};
 		};
 
 		indicator {
@@ -1138,8 +1171,16 @@
 &usb2 {
 	assigned-clocks = <&topckgen CLK_TOP_USB_TOP_SEL>;
 	assigned-clock-parents = <&topckgen CLK_TOP_UNIVPLL3_D4>;
-	dr_mode = "peripheral";
+	dr_mode = "otg";
+	role-switch-default-mode = "peripheral";
+	usb-role-switch;
 	status = "okay";
+
+	port {
+		r1_usb_role: endpoint {
+			remote-endpoint = <&r1_typec_hs>;
+		};
+	};
 };
 
 &u2phy {
@@ -1339,6 +1380,15 @@
 			pinmux = <PINMUX_GPIO48__FUNC_SCL5>,
 				 <PINMUX_GPIO49__FUNC_SDA5>;
 			input-enable;
+		};
+	};
+
+	/* Stock's mt6370pd intr_gpio */
+	r1_tcpc_irq_pins: tcpc-irq-pins {
+		pins-irq {
+			pinmux = <PINMUX_GPIO24__FUNC_GPIO24>;
+			input-enable;
+			bias-pull-up;
 		};
 	};
 
