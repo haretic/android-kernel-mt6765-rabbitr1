@@ -1092,10 +1092,11 @@
 	pinctrl-0 = <&r1_mmc0_pins>;
 	pinctrl-1 = <&r1_mmc0_pins_hs200>;
 	bus-width = <8>;
-	/* HS200 from msdcpll/2; stock ran HS400, which also needs the strobe. */
+	/* 200 MHz from msdcpll/2; HS400 as stock ran it, the strobe delay tuned at start */
 	max-frequency = <200000000>;
 	cap-mmc-highspeed;
 	mmc-hs200-1_8v;
+	mmc-hs400-1_8v;
 	non-removable;
 	no-sd;
 	no-sdio;
@@ -1381,9 +1382,16 @@
 			drive-strength = <3>;
 			bias-pull-up = <MTK_PUPD_SET_R1R0_01>;
 		};
+
+		/* HS400's data strobe, its read clock from the card */
+		pins-ds {
+			pinmux = <PINMUX_GPIO131__FUNC_AUX1_MSDC0_DSL>;
+			drive-strength = <3>;
+			bias-pull-down = <MTK_PUPD_SET_R1R0_10>;
+		};
 	};
 
-	/* Stock msdc0@hs200 drive strengths: data and clock one step up. */
+	/* Stock msdc0@hs200 and @hs400 drive strengths: data, clock and strobe one step up. */
 	r1_mmc0_pins_hs200: mmc0-pins-hs200 {
 		pins-dat {
 			pinmux = <PINMUX_GPIO123__FUNC_MSDC0_DAT0>,
@@ -1416,6 +1424,13 @@
 			pinmux = <PINMUX_GPIO133__FUNC_AUX1_MSDC0_RSTB>;
 			drive-strength = <3>;
 			bias-pull-up = <MTK_PUPD_SET_R1R0_01>;
+		};
+
+		/* HS400's data strobe, its read clock from the card */
+		pins-ds {
+			pinmux = <PINMUX_GPIO131__FUNC_AUX1_MSDC0_DSL>;
+			drive-strength = <4>;
+			bias-pull-down = <MTK_PUPD_SET_R1R0_10>;
 		};
 	};
 
