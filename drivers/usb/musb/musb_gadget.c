@@ -51,6 +51,14 @@ static inline void map_dma_buffer(struct musb_request *request,
 	if (request->tx && musb_ep->type == USB_ENDPOINT_XFER_ISOC)
 		return;
 
+	/*
+	 * A zero-length request has nothing for DMA to move: PIO sends its
+	 * empty packet. Mapped, a buffer past the controller's 32-bit mask
+	 * goes to swiotlb to bounce no bytes, which it takes as a bug.
+	 */
+	if (!request->request.length)
+		return;
+
 	/* Check if DMA engine can handle this request.
 	 * DMA code must reject the USB request explicitly.
 	 * Default behaviour is to map the request.
