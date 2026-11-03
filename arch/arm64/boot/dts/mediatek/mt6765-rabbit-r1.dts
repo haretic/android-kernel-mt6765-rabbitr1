@@ -1077,7 +1077,7 @@
 			compatible = "mediatek,mt6370-tcpc";
 			pinctrl-names = "default";
 			pinctrl-0 = <&r1_tcpc_irq_pins>;
-			interrupts-extended = <&pio 24 IRQ_TYPE_LEVEL_LOW>;
+			interrupts-extended = <&pio 41 IRQ_TYPE_LEVEL_LOW>;
 			vbus-supply = <&r1_otg_vbus>;
 
 			connector {
@@ -1383,10 +1383,13 @@
 		};
 	};
 
-	/* Stock's mt6370pd intr_gpio */
+	/*
+	 * The TCPC alert: stock's tree names GPIO24 (mt6370pd intr_gpio), but on
+	 * the R1 it is GPIO41, low while an alert is pending and high once cleared.
+	 */
 	r1_tcpc_irq_pins: tcpc-irq-pins {
 		pins-irq {
-			pinmux = <PINMUX_GPIO24__FUNC_GPIO24>;
+			pinmux = <PINMUX_GPIO41__FUNC_GPIO41>;
 			input-enable;
 			bias-pull-up;
 		};
