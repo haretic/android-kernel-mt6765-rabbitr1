@@ -565,6 +565,8 @@ static const struct mtk_mmc_compatible mt6765_compat = {
 	.clk_div_bits = 12,
 	.recheck_sdio_irq = false,
 	.hs400_tune = false,
+	/* Its pad delays, the data strobe's with them, are in the top block */
+	.needs_top_base = true,
 	.pad_tune_reg = MSDC_PAD_TUNE0,
 	.async_fifo = true,
 	.data_tune = false,
