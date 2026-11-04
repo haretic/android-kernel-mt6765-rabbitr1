@@ -1201,9 +1201,13 @@ void musb_ep_restart(struct musb *musb, struct musb_request *req)
 			schedule_work(&musb->rx_pending_work);
 			return;
 		}
-		csr |= MUSB_RXCSR_FLUSHFIFO | MUSB_RXCSR_P_WZC_BITS;
-		musb_writew(epio, MUSB_RXCSR, csr);
-		musb_writew(epio, MUSB_RXCSR, csr);
+		/*
+		 * No FIFO flush: there is nothing stale to drop, and a packet
+		 * landing between the read above and a flush lost its bytes but
+		 * kept RxPktRdy, so the request completed as a zero-length
+		 * packet and a mass storage write lost its data phase. A packet
+		 * from here on raises the Rx interrupt for this request.
+		 */
 	}
 }
 
