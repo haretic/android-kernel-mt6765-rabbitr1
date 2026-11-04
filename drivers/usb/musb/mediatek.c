@@ -268,6 +268,14 @@ static int mtk_otg_switch_set(struct mtk_glue *glue, enum usb_role role)
 		if (glue->role == USB_ROLE_NONE)
 			phy_power_on(glue->phy);
 
+		/*
+		 * The controller takes A or B from IDDIG when a session starts:
+		 * end any session, have the PHY report host, then start one, or
+		 * it stays a B device that never sees the attached device.
+		 */
+		devctl &= ~MUSB_DEVCTL_SESSION;
+		musb_writeb(musb->mregs, MUSB_DEVCTL, devctl);
+		phy_set_mode(glue->phy, glue->phy_mode);
 		devctl |= MUSB_DEVCTL_SESSION;
 		musb_writeb(musb->mregs, MUSB_DEVCTL, devctl);
 		MUSB_HST_MODE(musb);
@@ -281,6 +289,14 @@ static int mtk_otg_switch_set(struct mtk_glue *glue, enum usb_role role)
 		musb_writeb(musb->mregs, MUSB_DEVCTL, devctl);
 		if (glue->role == USB_ROLE_NONE)
 			phy_power_on(glue->phy);
+		/*
+		 * B as for host above, then the session: the PHY reports VBUS valid
+		 * all along, so the controller sees no VBUS rise to start one itself
+		 * and would stay off the bus after a host session.
+		 */
+		phy_set_mode(glue->phy, glue->phy_mode);
+		devctl |= MUSB_DEVCTL_SESSION;
+		musb_writeb(musb->mregs, MUSB_DEVCTL, devctl);
 
 		MUSB_DEV_MODE(musb);
 		break;
