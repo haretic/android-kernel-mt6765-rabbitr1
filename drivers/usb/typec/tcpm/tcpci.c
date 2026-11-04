@@ -712,7 +712,14 @@ static int tcpci_init(struct tcpc_dev *tcpc)
 
 	tcpci->alert_mask = reg;
 
-	return 0;
+	/*
+	 * The chip raises its level alert for anything its own mask lets
+	 * through: drivers that don't write the mask kept the reset default,
+	 * so a fault, which can't clear while FAULT_STATUS holds, kept the line
+	 * up, tcpci_irq() returned IRQ_NONE until the IRQ was disabled, and
+	 * no plug was seen again (mt6370 after a drive unplug).
+	 */
+	return tcpci_write16(tcpci, TCPC_ALERT_MASK, reg);
 }
 
 irqreturn_t tcpci_irq(struct tcpci *tcpci)
