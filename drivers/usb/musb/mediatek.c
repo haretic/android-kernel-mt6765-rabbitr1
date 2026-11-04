@@ -9,6 +9,7 @@
 
 #include <linux/clk.h>
 #include <linux/dma-mapping.h>
+#include <linux/iopoll.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
@@ -250,6 +251,52 @@ static int mtk_musb_clks_get(struct mtk_glue *glue)
 	return devm_clk_bulk_get(dev, MTK_MUSB_CLKS_NUM, glue->clks);
 }
 
+/*
+ * The controller keeps the A or B role it took when its session began until it
+ * sees the session end, and the PHY reports VBUS valid while it has a role:
+ * clearing the session bit alone left it a B device after a host session
+ * (DEVCTL 0x99), deaf to a replugged drive. With no role the PHY reports the
+ * session ended (powering it off doesn't: it is held powered from probe); the
+ * new ID goes in as the session comes back.
+ */
+static void mtk_musb_restart_session(struct mtk_glue *glue)
+{
+	struct musb *musb = glue->musb;
+	u8 devctl;
+
+	devctl = musb_readb(musb->mregs, MUSB_DEVCTL);
+	musb_writeb(musb->mregs, MUSB_DEVCTL, devctl & ~MUSB_DEVCTL_SESSION);
+	phy_set_mode(glue->phy, PHY_MODE_USB_OTG);
+	if (readb_poll_timeout(musb->mregs + MUSB_DEVCTL, devctl,
+			       !(devctl & MUSB_DEVCTL_VBUS), 1000, 100000))
+		dev_warn(glue->dev, "session didn't end, DEVCTL %02x\n", devctl);
+	phy_set_mode(glue->phy, glue->phy_mode);
+	devctl = musb_readb(musb->mregs, MUSB_DEVCTL);
+	musb_writeb(musb->mregs, MUSB_DEVCTL, devctl | MUSB_DEVCTL_SESSION);
+}
+
+/*
+ * Off the device role, the gadget is detached: Android takes any UDC state
+ * from powered to addressed for a host, and with the state left at default a
+ * drive plugged in showed "USB debugging connected".
+ */
+static void mtk_musb_gadget_detach(struct musb *musb)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&musb->lock, flags);
+	if (musb->g.state != USB_STATE_NOTATTACHED) {
+		musb->g.speed = USB_SPEED_UNKNOWN;
+		if (musb->gadget_driver && musb->gadget_driver->disconnect) {
+			spin_unlock(&musb->lock);
+			musb->gadget_driver->disconnect(&musb->g);
+			spin_lock(&musb->lock);
+		}
+		usb_gadget_set_state(&musb->g, USB_STATE_NOTATTACHED);
+	}
+	spin_unlock_irqrestore(&musb->lock, flags);
+}
+
 static int mtk_otg_switch_set(struct mtk_glue *glue, enum usb_role role)
 {
 	struct musb *musb = glue->musb;
@@ -267,17 +314,8 @@ static int mtk_otg_switch_set(struct mtk_glue *glue, enum usb_role role)
 		new_role = USB_ROLE_HOST;
 		if (glue->role == USB_ROLE_NONE)
 			phy_power_on(glue->phy);
-
-		/*
-		 * The controller takes A or B from IDDIG when a session starts:
-		 * end any session, have the PHY report host, then start one, or
-		 * it stays a B device that never sees the attached device.
-		 */
-		devctl &= ~MUSB_DEVCTL_SESSION;
-		musb_writeb(musb->mregs, MUSB_DEVCTL, devctl);
-		phy_set_mode(glue->phy, glue->phy_mode);
-		devctl |= MUSB_DEVCTL_SESSION;
-		musb_writeb(musb->mregs, MUSB_DEVCTL, devctl);
+		mtk_musb_gadget_detach(musb);
+		mtk_musb_restart_session(glue);
 		MUSB_HST_MODE(musb);
 		break;
 	case USB_ROLE_DEVICE:
@@ -285,18 +323,13 @@ static int mtk_otg_switch_set(struct mtk_glue *glue, enum usb_role role)
 		musb->xceiv->otg->state = OTG_STATE_B_IDLE;
 		glue->phy_mode = PHY_MODE_USB_DEVICE;
 		new_role = USB_ROLE_DEVICE;
-		devctl &= ~MUSB_DEVCTL_SESSION;
-		musb_writeb(musb->mregs, MUSB_DEVCTL, devctl);
 		if (glue->role == USB_ROLE_NONE)
 			phy_power_on(glue->phy);
 		/*
-		 * B as for host above, then the session: the PHY reports VBUS valid
-		 * all along, so the controller sees no VBUS rise to start one itself
-		 * and would stay off the bus after a host session.
+		 * The session restarted as B: the controller sees no VBUS rise to
+		 * start one itself, and would stay off the bus after a host session.
 		 */
-		phy_set_mode(glue->phy, glue->phy_mode);
-		devctl |= MUSB_DEVCTL_SESSION;
-		musb_writeb(musb->mregs, MUSB_DEVCTL, devctl);
+		mtk_musb_restart_session(glue);
 
 		MUSB_DEV_MODE(musb);
 		break;
@@ -306,6 +339,8 @@ static int mtk_otg_switch_set(struct mtk_glue *glue, enum usb_role role)
 		new_role = USB_ROLE_NONE;
 		devctl &= ~MUSB_DEVCTL_SESSION;
 		musb_writeb(musb->mregs, MUSB_DEVCTL, devctl);
+		if (glue->role == USB_ROLE_DEVICE)
+			mtk_musb_gadget_detach(musb);
 		if (glue->role != USB_ROLE_NONE)
 			phy_power_off(glue->phy);
 

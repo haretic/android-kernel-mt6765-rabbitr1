@@ -115,6 +115,7 @@
 #define P2C_FORCE_IDDIG		BIT(9)
 #define P2C_RG_VBUSVALID		BIT(5)
 #define P2C_RG_SESSEND			BIT(4)
+#define P2C_RG_BVALID			BIT(3)
 #define P2C_RG_AVALID			BIT(2)
 #define P2C_RG_IDDIG			BIT(1)
 
@@ -932,17 +933,30 @@ static void u2_phy_instance_set_mode(struct mtk_tphy *tphy,
 	struct u2phy_banks *u2_banks = &instance->u2_banks;
 	u32 tmp;
 
+	/*
+	 * Where the session signals are forced (MT6765's musb), a host or device
+	 * has one and no role has none: the controller keeps the role a session
+	 * began with until it sees one end, and with VBUS valid reported all along
+	 * it started a device session off the port's own VBUS as a drive was
+	 * plugged in. Unforced, these bits are not looked at.
+	 */
 	tmp = readl(u2_banks->com + U3P_U2PHYDTM1);
 	switch (mode) {
 	case PHY_MODE_USB_DEVICE:
 		tmp |= P2C_FORCE_IDDIG | P2C_RG_IDDIG;
+		tmp |= P2C_RG_VBUSVALID | P2C_RG_AVALID | P2C_RG_BVALID;
+		tmp &= ~P2C_RG_SESSEND;
 		break;
 	case PHY_MODE_USB_HOST:
 		tmp |= P2C_FORCE_IDDIG;
 		tmp &= ~P2C_RG_IDDIG;
+		tmp |= P2C_RG_VBUSVALID | P2C_RG_AVALID | P2C_RG_BVALID;
+		tmp &= ~P2C_RG_SESSEND;
 		break;
 	case PHY_MODE_USB_OTG:
 		tmp &= ~(P2C_FORCE_IDDIG | P2C_RG_IDDIG);
+		tmp &= ~(P2C_RG_VBUSVALID | P2C_RG_AVALID | P2C_RG_BVALID);
+		tmp |= P2C_RG_SESSEND;
 		break;
 	default:
 		return;
