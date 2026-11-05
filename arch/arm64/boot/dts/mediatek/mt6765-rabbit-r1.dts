@@ -149,11 +149,13 @@
 	thermal-zones {
 		/*
 		 * The stock policy limits charging from 45 C here and turns the
-		 * camera off from 53 C. Both trips also throttle the CPUs: under
-		 * an all-core load at the 2.2/1.6 GHz OPPs only the SoC zones
-		 * throttled (at 85 C) and this board sensor reached 62 C, taking
-		 * the battery past 55 C. The sensor tracked that load, rising
-		 * 40 to 62 C and falling back as it cooled.
+		 * camera off from 53 C. These trips throttle the CPUs, for the
+		 * battery: under an all-core load at the 2.2/1.6 GHz OPPs only the
+		 * SoC zones throttled (at 85 C) and this board sensor reached 62 C,
+		 * taking the battery past 55 C. The sensor tracked that load, rising
+		 * 40 to 62 C and falling back as it cooled. At 45 C the R1 throttled
+		 * to a third under an ordinary app's load with the battery at 41 C;
+		 * from 52 C and 58 C the battery stays near 46 to 52 C.
 		 */
 		ap_ntc_thermal: ap-ntc-thermal {
 			polling-delay-passive = <1000>;
@@ -162,13 +164,13 @@
 
 			trips {
 				ap_ntc_warm: trip-warm {
-					temperature = <45000>;
+					temperature = <52000>;
 					hysteresis = <2000>;
 					type = "passive";
 				};
 
 				ap_ntc_hot: trip-hot {
-					temperature = <53000>;
+					temperature = <58000>;
 					hysteresis = <2000>;
 					type = "passive";
 				};
