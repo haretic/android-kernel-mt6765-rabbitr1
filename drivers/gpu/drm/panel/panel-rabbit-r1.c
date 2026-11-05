@@ -24,6 +24,8 @@ struct r1_panel {
 	struct mipi_dsi_device *dsi;
 	struct gpio_desc *reset;
 	u32 max_refresh;
+	/* LK left the panel initialised and showing its splash */
+	bool from_lk;
 };
 
 struct r1_panel_command {
@@ -88,6 +90,10 @@ static const struct r1_panel_command r1_panel_init[] = {
 	{ .len = 2, .data = { 0x29, 0x00 } },
 };
 
+static bool lk_handoff = true;
+module_param(lk_handoff, bool, 0444);
+MODULE_PARM_DESC(lk_handoff, "Take over the panel LK initialised instead of resetting it");
+
 static inline struct r1_panel *to_r1_panel(struct drm_panel *panel)
 {
 	return container_of(panel, struct r1_panel, panel);
@@ -113,6 +119,16 @@ static int r1_panel_prepare(struct drm_panel *panel)
 	struct r1_panel *ctx = to_r1_panel(panel);
 	unsigned int i;
 	int ret;
+
+	/*
+	 * LK sent this same RabbitOS sequence and left the panel in sleep-out,
+	 * displaying: take it over as it is. Only the DSI link restarts, at our
+	 * rate, so the splash holds instead of blanking for a reset and init.
+	 */
+	if (ctx->from_lk) {
+		ctx->from_lk = false;
+		return gpiod_direction_output(ctx->reset, 0);
+	}
 
 	/*
 	 * ST7701S timing as in panel-sitronix-st7701: a 20 ms reset pulse,
@@ -266,6 +282,10 @@ static int r1_panel_probe(struct mipi_dsi_device *dsi)
 	if (IS_ERR(ctx->reset))
 		return dev_err_probe(dev, PTR_ERR(ctx->reset), "Cannot get panel reset\n");
 
+	ctx->from_lk = lk_handoff && gpiod_get_direction(ctx->reset) == 0 &&
+		       gpiod_get_value_cansleep(ctx->reset) == 0;
+	if (ctx->from_lk)
+		dev_info(dev, "Taking over the panel from LK\n");
 	ctx->dsi = dsi;
 	device_property_read_u32(dev, "rabbit,max-refresh-hz", &ctx->max_refresh);
 	ctx->panel.prepare_prev_first = true;
