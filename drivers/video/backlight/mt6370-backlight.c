@@ -103,9 +103,8 @@ static int mt6370_bl_update_status(struct backlight_device *bl_dev)
 				  MT6370_BL_EN_MASK, enable_val);
 }
 
-static int mt6370_bl_get_brightness(struct backlight_device *bl_dev)
+static int mt6370_bl_read_brightness(struct mt6370_priv *priv)
 {
-	struct mt6370_priv *priv = bl_get_data(bl_dev);
 	unsigned int enable;
 	u8 brightness_val[2];
 	int brightness, ret;
@@ -126,6 +125,11 @@ static int mt6370_bl_get_brightness(struct backlight_device *bl_dev)
 	brightness += brightness_val[0] & priv->dim2_mask;
 
 	return brightness + 1;
+}
+
+static int mt6370_bl_get_brightness(struct backlight_device *bl_dev)
+{
+	return mt6370_bl_read_brightness(bl_get_data(bl_dev));
 }
 
 static const struct backlight_ops mt6370_bl_ops = {
@@ -294,6 +298,7 @@ static int mt6370_bl_probe(struct platform_device *pdev)
 	};
 	struct device *dev = &pdev->dev;
 	struct mt6370_priv *priv;
+	int boot_brightness;
 	int ret;
 
 	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
@@ -316,10 +321,16 @@ static int mt6370_bl_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, PTR_ERR(priv->enable_gpio),
 				     "Failed to get 'enable' gpio\n");
 
+	/* The level the bootloader lit the screen at: probing keeps it rather than blinking */
+	boot_brightness = mt6370_bl_read_brightness(priv);
+
 	ret = mt6370_init_backlight_properties(priv, &props);
 	if (ret)
 		return dev_err_probe(dev, ret,
 				     "Failed to init backlight properties\n");
+
+	if (boot_brightness > 0)
+		props.brightness = min_t(int, boot_brightness, props.max_brightness);
 
 	priv->bl = devm_backlight_device_register(dev, pdev->name, dev, priv,
 						  &mt6370_bl_ops, &props);
