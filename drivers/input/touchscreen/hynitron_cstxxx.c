@@ -20,6 +20,7 @@
 #include <linux/input/mt.h>
 #include <linux/input/touchscreen.h>
 #include <linux/module.h>
+#include <linux/pm.h>
 #include <linux/property.h>
 #include <linux/unaligned.h>
 
@@ -31,6 +32,8 @@ struct hynitron_ts_chip_data {
 	int (*bootloader_enter)(struct i2c_client *client);
 	int (*init_input)(struct i2c_client *client);
 	void (*report_touch)(struct i2c_client *client);
+	int (*enter_sleep)(struct i2c_client *client);
+	int (*exit_sleep)(struct i2c_client *client);
 };
 
 /* Data generic to all (supported and non-supported) controllers. */
@@ -63,6 +66,9 @@ struct hynitron_ts_data {
 #define CST3XX_TOUCH_DATA_STOP_CMD		0xab00d0
 #define CST3XX_TOUCH_COUNT_MASK			GENMASK(6, 0)
 
+/* Work mode commands, as the vendor driver's 0xd105 and 0xd109 */
+#define CST3XX_DEEP_SLEEP_CMD			0x05d1
+#define CST3XX_NORMAL_MODE_CMD			0x09d1
 
 /*
  * Hard coded reset delay value of 20ms not IC dependent in
@@ -243,6 +249,28 @@ static int cst3xx_bootloader_enter(struct i2c_client *client)
 	hyn_reset_proc(client, 40);
 
 	return 0;
+}
+
+/*
+ * The vendor driver puts the controller into deep sleep on suspend. Only
+ * a reset wakes it, after which it is put back into its normal mode.
+ */
+static int cst3xx_enter_sleep(struct i2c_client *client)
+{
+	unsigned char buf[2];
+
+	put_unaligned_le16(CST3XX_DEEP_SLEEP_CMD, buf);
+	return cst3xx_i2c_write(client, buf, 2);
+}
+
+static int cst3xx_exit_sleep(struct i2c_client *client)
+{
+	unsigned char buf[2];
+
+	hyn_reset_proc(client, 40);
+
+	put_unaligned_le16(CST3XX_NORMAL_MODE_CMD, buf);
+	return cst3xx_i2c_write(client, buf, 2);
 }
 
 static void cst3xx_report_contact(struct hynitron_ts_data *ts_data,
@@ -472,6 +500,45 @@ static int hyn_probe(struct i2c_client *client)
 	return 0;
 }
 
+static int hyn_suspend(struct device *dev)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct hynitron_ts_data *ts_data = i2c_get_clientdata(client);
+	int err;
+
+	disable_irq(client->irq);
+
+	err = ts_data->chip->enter_sleep(client);
+	if (err) {
+		/* Hold it in reset instead, resume resets it either way. */
+		dev_warn(dev, "sleep command failed: %d, holding reset\n", err);
+		gpiod_set_value_cansleep(ts_data->reset_gpio, 1);
+	}
+
+	return 0;
+}
+
+static int hyn_resume(struct device *dev)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct hynitron_ts_data *ts_data = i2c_get_clientdata(client);
+	int err;
+
+	err = ts_data->chip->exit_sleep(client);
+	if (err)
+		dev_warn(dev, "normal mode command failed: %d\n", err);
+
+	/* Release contacts held over suspend, their lift was not seen. */
+	input_mt_sync_frame(ts_data->input_dev);
+	input_sync(ts_data->input_dev);
+
+	enable_irq(client->irq);
+
+	return 0;
+}
+
+static DEFINE_SIMPLE_DEV_PM_OPS(hyn_pm_ops, hyn_suspend, hyn_resume);
+
 static const struct hynitron_ts_chip_data cst3xx_data = {
 	.max_touch_num		= 5,
 	.ic_chkcode		= 0xcaca0000,
@@ -479,6 +546,8 @@ static const struct hynitron_ts_chip_data cst3xx_data = {
 	.bootloader_enter	= &cst3xx_bootloader_enter,
 	.init_input		= &cst3xx_input_dev_int,
 	.report_touch		= &cst3xx_touch_report,
+	.enter_sleep		= &cst3xx_enter_sleep,
+	.exit_sleep		= &cst3xx_exit_sleep,
 };
 
 static const struct i2c_device_id hyn_tpd_id[] = {
@@ -497,6 +566,7 @@ static struct i2c_driver hynitron_i2c_driver = {
 	.driver = {
 		.name = "Hynitron-TS",
 		.of_match_table = hyn_dt_match,
+		.pm = pm_sleep_ptr(&hyn_pm_ops),
 		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 	.id_table = hyn_tpd_id,
