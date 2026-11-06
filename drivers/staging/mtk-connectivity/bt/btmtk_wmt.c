@@ -35,6 +35,12 @@
 
 #define MTK_VENDOR_SET_BDADDR	0xfc1a
 
+/*
+ * The address the CONSYS controller reports at power on, 00:00:46:76:63:01:
+ * a ROM default rather than the unit's own, which is in NVRAM (BT_Addr).
+ */
+#define BDADDR_MTK_CONSYS	(&(bdaddr_t){{0x01, 0x63, 0x76, 0x46, 0x00, 0x00}})
+
 enum {
 	BTMTK_WMT_ON,		/* BT function on, STP callbacks registered */
 	BTMTK_WMT_RESETTING,	/* WMT whole-chip reset in progress */
@@ -425,8 +431,9 @@ static int btmtk_wmt_setup(struct hci_dev *hdev)
 	 * Without it, leave the controller unconfigured so that userspace
 	 * (btmgmt public-addr, the mainline set_bdaddr service) sets one.
 	 */
-	if (!bacmp(&rp->bdaddr, BDADDR_ANY)) {
-		bt_dev_warn(hdev, "no device address programmed");
+	if (!bacmp(&rp->bdaddr, BDADDR_ANY) ||
+	    !bacmp(&rp->bdaddr, BDADDR_MTK_CONSYS)) {
+		bt_dev_info(hdev, "no device address programmed");
 		hci_set_quirk(hdev, HCI_QUIRK_INVALID_BDADDR);
 	}
 	kfree_skb(skb);
@@ -497,6 +504,12 @@ static int __init btmtk_wmt_init(void)
 	hdev->set_bdaddr = btmtk_wmt_set_bdaddr;
 	/* Page 2 advertises a sync train the firmware rejects (0x0c77, unknown command), failing init. */
 	hci_set_quirk(hdev, HCI_QUIRK_BROKEN_LOCAL_EXT_FEATURES_PAGE_2);
+	/*
+	 * Closing turns the BT function off through WMT, which loses the
+	 * programmed address: run setup, and with it set_bdaddr, on every
+	 * open, the HCI user channel the Android HAL opens included.
+	 */
+	hci_set_quirk(hdev, HCI_QUIRK_NON_PERSISTENT_SETUP);
 
 	WRITE_ONCE(btmtk_wmt_dev, bdev);
 
