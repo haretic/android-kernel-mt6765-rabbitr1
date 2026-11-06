@@ -374,10 +374,14 @@ static int RegisterCoolingDevice(struct device *dev,
 	int err = 0;
 	PVRSRV_VZ_RET_IF_MODE(GUEST, err);
 
+	/*
+	 * Without power ops (MT6765 has no GPU power model) the cooling
+	 * device steps the devfreq maximum down the OPP table, which is what
+	 * the step_wise governor of a DT thermal zone needs.
+	 */
 	if (!powerOps)
 	{
-		dev_info(dev, "Cooling: power ops not registered, not enabling cooling");
-		return 0;
+		dev_info(dev, "Cooling: no power model, cooling by OPP steps\n");
 	}
 
 	of_node = of_node_get(dev->of_node);
@@ -385,10 +389,12 @@ static int RegisterCoolingDevice(struct device *dev,
 	psDVFSDevice->psDevfreqCoolingDevice = of_devfreq_cooling_register_power(
 		of_node, psDVFSDevice->psDevFreq, powerOps);
 
+	/* The GPU runs without cooling rather than not at all. */
 	if (IS_ERR(psDVFSDevice->psDevfreqCoolingDevice))
 	{
-		err = PTR_ERR(psDVFSDevice->psDevfreqCoolingDevice);
-		dev_err(dev, "Failed to register as devfreq cooling device %d", err);
+		dev_warn(dev, "Failed to register as devfreq cooling device %ld, GPU not throttled\n",
+				 PTR_ERR(psDVFSDevice->psDevfreqCoolingDevice));
+		psDVFSDevice->psDevfreqCoolingDevice = NULL;
 	}
 
 	of_node_put(of_node);
