@@ -332,8 +332,11 @@
 	 * junction at 85 C at most, and its kernel defaults (tzcpu_initcfg.h)
 	 * limit the CPUs at 85 C and 95 C. Here each cluster is throttled from
 	 * 85 C at its own sensor and both clusters from 95 C at the hottest
-	 * sensor. The system shuts down at 110 C, as an orderly shutdown takes
-	 * a while and nothing programs the controller's 117 C hardware reset.
+	 * sensor. The GPU, which stock budgeted together with the CPUs against
+	 * the same 85 C junction, is throttled from 85 C at its own sensor and
+	 * from 95 C at the hottest one. The system shuts down at 110 C, as an
+	 * orderly shutdown takes a while and nothing programs the controller's
+	 * 117 C hardware reset.
 	 */
 	thermal-zones {
 		soc_thermal: soc-thermal {
@@ -365,7 +368,8 @@
 							 <&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
 							 <&cpu5 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
 							 <&cpu6 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
-							 <&cpu7 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+							 <&cpu7 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&gpu THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
 				};
 			};
 		};
@@ -432,17 +436,30 @@
 			};
 		};
 
-		/* TS3, at the GPU, which has no cooling device yet */
+		/* TS3, at the GPU: its devfreq steps down the GPU OPPs */
 		gpu_thermal: gpu-thermal {
 			polling-delay-passive = <200>;
 			polling-delay = <1000>;
 			thermal-sensors = <&thermal 3>;
 
 			trips {
+				gpu_alert: trip-alert {
+					temperature = <85000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+
 				gpu_crit: trip-crit {
 					temperature = <110000>;
 					hysteresis = <2000>;
 					type = "critical";
+				};
+			};
+
+			cooling-maps {
+				map0 {
+					trip = <&gpu_alert>;
+					cooling-device = <&gpu THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
 				};
 			};
 		};
@@ -1219,6 +1236,8 @@
 			power-domains = <&spm MT6765_POWER_DOMAIN_MFG>,
 					<&spm MT6765_POWER_DOMAIN_MFG_CORE0>;
 			power-domain-names = "mfg", "core0";
+			/* its devfreq, registered by pvrsrvkm */
+			#cooling-cells = <2>;
 			status = "disabled";
 		};
 
