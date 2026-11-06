@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: (GPL-2.0-only OR MIT)
 /*
- * Experimental rabbit r1 bring-up tree. NOT hardware validated.
+ * rabbit r1 board tree.
  * Board wiring: rabbit-hmi-oss r1 source and RabbitOS v0.8.293 DT/DTBO.
  * Pin groups follow the MT6765 port's Nokia ROO example where the SoC
  * muxes agree with Rabbit's gpio_init_default table.
@@ -39,7 +39,6 @@
 		battery-supply = <&r1_battery>;
 		usb-gadget-supply = <&usb2>;
 		typec-supply = <&r1_tcpc>;
-		/* Experimental, source-backed policy; physical charging is untested. */
 	};
 
 	power-monitor {
@@ -904,7 +903,6 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&r1_i2c4_pins>;
 	clock-frequency = <100000>;
-	/* Experimental: stock AP channel and touch wiring, not board-tested. */
 	status = "okay";
 
 	touchscreen@1a {
