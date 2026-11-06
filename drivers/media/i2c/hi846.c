@@ -1967,7 +1967,6 @@ static int hi846_get_selection(struct v4l2_subdev *sd,
 
 	switch (sel->target) {
 	case V4L2_SEL_TGT_CROP:
-	case V4L2_SEL_TGT_CROP_DEFAULT:
 		mutex_lock(&hi846->mutex);
 		switch (sel->which) {
 		case V4L2_SUBDEV_FORMAT_TRY:
@@ -1979,6 +1978,11 @@ static int hi846_get_selection(struct v4l2_subdev *sd,
 		}
 		mutex_unlock(&hi846->mutex);
 		return 0;
+	/*
+	 * The whole array is active (the binned 1632x1224 mode reads all of it), whatever mode is
+	 * set: libcamera takes the default crop once as the camera's active area.
+	 */
+	case V4L2_SEL_TGT_CROP_DEFAULT:
 	case V4L2_SEL_TGT_CROP_BOUNDS:
 	case V4L2_SEL_TGT_NATIVE_SIZE:
 		sel->r.top = 0;
