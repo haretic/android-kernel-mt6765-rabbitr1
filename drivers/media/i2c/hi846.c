@@ -1758,15 +1758,26 @@ static int __maybe_unused hi846_resume(struct device *dev)
 	return hi846_power_on(hi846);
 }
 
-/* Whether the mode streams on the sensor's lane count. */
-static bool hi846_mode_fits_lanes(struct hi846 *hi846, const struct hi846_mode *mode)
+/*
+ * The unbinned 3264x2448 mode has about twice the noise of the 2x binned 1632x1224 one over the
+ * same field, and four times the pixels for the software ISP; it is offered only when asked for.
+ */
+static bool full_res;
+module_param(full_res, bool, 0444);
+MODULE_PARM_DESC(full_res, "Offer the unbinned 3264x2448 mode");
+
+/* Whether the mode streams on the sensor's lane count and is offered. */
+static bool hi846_mode_offered(struct hi846 *hi846, const struct hi846_mode *mode)
 {
+	if (mode->width == mode->crop.width && !full_res)
+		return false;
+
 	return hi846->nr_lanes == 2 ? mode->reg_list_2lane.num_of_regs :
 				      mode->reg_list_4lane.num_of_regs;
 }
 
 /*
- * The mode the lanes stream nearest to a size, as v4l2_find_nearest_size()
+ * The offered mode nearest to a size, as v4l2_find_nearest_size()
  * measures it, or NULL.
  */
 static const struct hi846_mode *hi846_find_mode(struct hi846 *hi846,
@@ -1781,7 +1792,7 @@ static const struct hi846_mode *hi846_find_mode(struct hi846 *hi846,
 		u32 error = abs((s32)mode->width - (s32)width) +
 			    abs((s32)mode->height - (s32)height);
 
-		if (!hi846_mode_fits_lanes(hi846, mode) || error >= best_error)
+		if (!hi846_mode_offered(hi846, mode) || error >= best_error)
 			continue;
 		best = mode;
 		best_error = error;
@@ -1815,7 +1826,7 @@ static int hi846_set_format(struct v4l2_subdev *sd,
 		return 0;
 	}
 
-	/* The nearest mode the lanes stream, not the one being replaced. */
+	/* The nearest offered mode, not the one being replaced. */
 	mode = hi846_find_mode(hi846, mf->width, mf->height);
 	if (!mode) {
 		dev_err(&client->dev, "no mode for %u lanes\n", hi846->nr_lanes);
@@ -1920,9 +1931,9 @@ static int hi846_enum_frame_size(struct v4l2_subdev *sd,
 	if (fse->pad)
 		return -EINVAL;
 
-	/* Only the modes the lanes stream */
+	/* Only the offered modes */
 	for (i = 0; i < ARRAY_SIZE(supported_modes); i++) {
-		if (!hi846_mode_fits_lanes(hi846, &supported_modes[i]))
+		if (!hi846_mode_offered(hi846, &supported_modes[i]))
 			continue;
 		if (n++ == fse->index) {
 			mode = &supported_modes[i];
@@ -2054,7 +2065,7 @@ static int hi846_identify_module(struct hi846 *hi846)
 	return 0;
 }
 
-/* A link frequency a mode the lanes stream needs that the device tree lacks, or 0. */
+/* A link frequency an offered mode needs that the device tree lacks, or 0. */
 static s64 hi846_check_link_freqs(struct hi846 *hi846,
 				  struct v4l2_fwnode_endpoint *ep)
 {
@@ -2063,7 +2074,7 @@ static s64 hi846_check_link_freqs(struct hi846 *hi846,
 	for (i = 0; i < ARRAY_SIZE(supported_modes); i++) {
 		s64 freq = hi846_link_freqs[supported_modes[i].link_freq_index];
 
-		if (!hi846_mode_fits_lanes(hi846, &supported_modes[i]))
+		if (!hi846_mode_offered(hi846, &supported_modes[i]))
 			continue;
 		for (j = 0; j < ep->nr_of_link_frequencies; j++)
 			if (freq == ep->link_frequencies[j])
