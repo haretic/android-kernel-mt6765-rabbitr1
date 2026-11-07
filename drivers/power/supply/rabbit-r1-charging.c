@@ -15,6 +15,9 @@
 
 #define R1_CHARGE_MIN_UA 500000
 #define R1_CHARGE_MAX_UA 1000000
+/* Full: within R1_TAPER_UV of the target, the charge current below a tenth of the cell's 1000 mAh. */
+#define R1_TERM_UA	100000
+#define R1_TAPER_UV	50000
 /* Long enough for the first pass after a resume to sample the charger. */
 #define R1_RESUME_HOLD_MS	1000
 /*
@@ -112,7 +115,17 @@ static struct r1_charge_target r1_charge_decide(struct r1_charge_policy *p,
 		thermal_ua = 500000;
 		t.voltage_uv = s->temperature >= 430 ? 4100000 : 4200000;
 	}
-	p->full = s->voltage >= t.voltage_uv ||
+	/*
+	 * While charging, the cell reads past the target long before it is
+	 * full: at 1 A it read 4.42 V half charged. Taken as full, charging
+	 * stopped, the voltage sagged, charging resumed, and it charged half
+	 * the time. The charger holds the target voltage itself, so full is
+	 * that voltage reached with the current tapered off; idle, the resting
+	 * voltage at the target.
+	 */
+	p->full = (p->applied.charge_ua ?
+		   s->voltage >= t.voltage_uv - R1_TAPER_UV && s->current_ua < R1_TERM_UA :
+		   s->voltage >= t.voltage_uv) ||
 		  (p->full && s->voltage >= t.voltage_uv - 100000);
 	/* A charge that got there ends the timed one; a recharge starts anew. */
 	if (p->full)
