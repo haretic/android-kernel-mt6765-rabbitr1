@@ -69,6 +69,11 @@ static const struct scpsys_domain_data scpsys_domain_data_mt6765[] = {
 					0x2a0, 0x2a4, 0x228),
 		},
 	},
+	/*
+	 * DPY (the DRAM controller) and IFR (infra) have no consumers. Once
+	 * SCPSYS syncs, genpd powers unused domains off, and that hung the
+	 * board at boot. The SPM firmware handles them in system sleep.
+	 */
 	[MT6765_POWER_DOMAIN_DPY] = {
 		.name = "dpy",
 		.sta_mask = BIT(2),
@@ -77,6 +82,7 @@ static const struct scpsys_domain_data scpsys_domain_data_mt6765[] = {
 		.pwr_sta2nd_offs = MT6765_PWR_STATUS_2ND,
 		.sram_pdn_bits = GENMASK(11, 8),
 		.sram_pdn_ack_bits = GENMASK(15, 12),
+		.caps = MTK_SCPD_ALWAYS_ON,
 	},
 	[MT6765_POWER_DOMAIN_DISP] = {
 		.name = "disp",
@@ -119,6 +125,7 @@ static const struct scpsys_domain_data scpsys_domain_data_mt6765[] = {
 		.pwr_sta2nd_offs = MT6765_PWR_STATUS_2ND,
 		.sram_pdn_bits = GENMASK(8, 8),
 		.sram_pdn_ack_bits = GENMASK(12, 12),
+		.caps = MTK_SCPD_ALWAYS_ON,
 	},
 	[MT6765_POWER_DOMAIN_MFG_CORE0] = {
 		.name = "mfg_core0",
