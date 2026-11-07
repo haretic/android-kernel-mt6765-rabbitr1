@@ -15,6 +15,13 @@
 
 #define R1_CHARGE_MIN_UA 500000
 #define R1_CHARGE_MAX_UA 1000000
+/*
+ * The input may carry more than the charge current: the system runs from it
+ * too, and with the input capped at the charge current a lit screen took its
+ * share out of the battery's. USB Type-C's 1.5 A level, which BC1.2 chargers
+ * also allow.
+ */
+#define R1_INPUT_MAX_UA 1500000
 #define R1_SAMPLE_MAX_MS 1500
 #define R1_CHARGE_TIMEOUT (10 * 60 * 60 * HZ)
 
@@ -113,17 +120,26 @@ static struct r1_charge_target r1_charge_decide(struct r1_charge_policy *p,
 		return t;
 	}
 
-	/* An established Type-C/PD budget takes precedence over BC1.2. */
+	/*
+	 * An established Type-C/PD budget takes precedence over BC1.2. Any PD
+	 * contract counts: a source offering PPS or AVS reads as such even on
+	 * the fixed 5 V contract, and taken as no contract it fell back to BC1.2,
+	 * which reads a USB-C charger's data lines as SDP, 500 mA.
+	 */
 	if (s->typec_online && s->typec_uv >= 4500000 && s->typec_uv <= 5500000 &&
 	    ((s->typec_type == POWER_SUPPLY_USB_TYPE_C && s->typec_ua >= 1500000) ||
-	     s->typec_type == POWER_SUPPLY_USB_TYPE_PD)) {
-		budget = min(s->typec_ua, R1_CHARGE_MAX_UA);
+	     s->typec_type == POWER_SUPPLY_USB_TYPE_PD ||
+	     s->typec_type == POWER_SUPPLY_USB_TYPE_PD_DRP ||
+	     s->typec_type == POWER_SUPPLY_USB_TYPE_PD_PPS ||
+	     s->typec_type == POWER_SUPPLY_USB_TYPE_PD_SPR_AVS ||
+	     s->typec_type == POWER_SUPPLY_USB_TYPE_PD_PPS_SPR_AVS)) {
+		budget = min(s->typec_ua, R1_INPUT_MAX_UA);
 	} else if (s->typec_online && s->typec_uv > 5500000) {
 		/* No high-voltage negotiation in this board policy. */
 		budget = 0;
 	} else if (s->usb_type == POWER_SUPPLY_USB_TYPE_DCP ||
 		   s->usb_type == POWER_SUPPLY_USB_TYPE_CDP) {
-		budget = R1_CHARGE_MAX_UA;
+		budget = R1_INPUT_MAX_UA;
 	} else if (s->usb_type == POWER_SUPPLY_USB_TYPE_SDP ||
 		   s->usb_type == POWER_SUPPLY_USB_TYPE_UNKNOWN) {
 		/*
