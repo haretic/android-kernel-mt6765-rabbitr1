@@ -15,6 +15,8 @@
 
 #define R1_CHARGE_MIN_UA 500000
 #define R1_CHARGE_MAX_UA 1000000
+/* Long enough for the first pass after a resume to sample the charger. */
+#define R1_RESUME_HOLD_MS	1000
 /*
  * The input may carry more than the charge current: the system runs from it
  * too, and with the input capped at the charge current a lit screen took its
@@ -711,8 +713,14 @@ static int r1_charge_resume(struct device *dev)
 	mutex_lock(&p->lock);
 	p->suspended = false;
 	if (!p->stopping) {
-		/* A plug-in may have woken us: stay up until the policy samples. */
-		r1_charge_hold_awake(p, true);
+		/*
+		 * A plug-in may have woken us: stay up for the pass that samples
+		 * it, which holds the system for an attached source. Every other
+		 * wake held it too, until a pass read the charger unplugged, about
+		 * 2 s for each wake while idle, and each of those was resumed
+		 * by WiFi and alarms many times a minute.
+		 */
+		pm_wakeup_event(dev, R1_RESUME_HOLD_MS);
 		mod_delayed_work(system_highpri_wq, &p->work, 0);
 	}
 	mutex_unlock(&p->lock);
