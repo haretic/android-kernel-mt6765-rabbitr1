@@ -1122,8 +1122,19 @@ static int mt6370_chg_set_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
 		if (priv->charge_control && !val->intval) {
+			unsigned int asleep;
+			bool known;
+
+			/*
+			 * The policy isolates an idle input on every pass, every 2 s
+			 * and as the system suspends: only report a change. Each
+			 * report holds the supply's wakeup source, and one held as
+			 * the system suspended aborted every suspend.
+			 */
+			known = !mt6370_chg_field_get(priv, F_FORCE_SLEEP, &asleep);
 			ret = mt6370_chg_suspend_input(priv);
-			power_supply_changed(psy);
+			if (ret || !known || !asleep)
+				power_supply_changed(psy);
 			return ret;
 		}
 		fd = F_IAICR;
