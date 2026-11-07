@@ -1010,6 +1010,22 @@
  * Stock mtk-kpd maps hardware key 1 (row 0, column 1) to KEY_POWER. Keys
  * 8, 17 and 71 sit in column 8, which is the PMIC's and has no pin here.
  */
+/*
+ * The SCPSYS power controller keeps every domain on until all of its consumers
+ * have bound (genpd's sync_state), and two never do: mediatek-drm drives the
+ * dither as a part of the display path without binding its node, and nothing
+ * drives the write-back DMA. Camera, ISP, codec and GPU stayed powered all
+ * the time. The dither's registers are in the display domain, on whenever the
+ * path around it is; the write-back is unused.
+ */
+&dither0 {
+	/delete-property/ power-domains;
+};
+
+&wdma0 {
+	status = "disabled";
+};
+
 &keypad {
 	pinctrl-names = "default";
 	pinctrl-0 = <&r1_keypad_pins>;
