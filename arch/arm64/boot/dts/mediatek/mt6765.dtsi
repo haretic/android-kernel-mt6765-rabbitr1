@@ -84,6 +84,7 @@
 			enable-method = "psci";
 			cpu-idle-states = <&cpu_off_b>;
 			capacity-dmips-mhz = <1024>;
+			dynamic-power-coefficient = <84>;
 			clock-frequency = <2300000000>;
 			#cooling-cells = <2>;
 			i-cache-size = <32768>;
@@ -102,6 +103,7 @@
 			enable-method = "psci";
 			cpu-idle-states = <&cpu_off_b>;
 			capacity-dmips-mhz = <1024>;
+			dynamic-power-coefficient = <84>;
 			clock-frequency = <2300000000>;
 			#cooling-cells = <2>;
 			i-cache-size = <32768>;
@@ -120,6 +122,7 @@
 			enable-method = "psci";
 			cpu-idle-states = <&cpu_off_b>;
 			capacity-dmips-mhz = <1024>;
+			dynamic-power-coefficient = <84>;
 			clock-frequency = <2300000000>;
 			#cooling-cells = <2>;
 			i-cache-size = <32768>;
@@ -138,6 +141,7 @@
 			enable-method = "psci";
 			cpu-idle-states = <&cpu_off_b>;
 			capacity-dmips-mhz = <1024>;
+			dynamic-power-coefficient = <84>;
 			clock-frequency = <2300000000>;
 			#cooling-cells = <2>;
 			i-cache-size = <32768>;
@@ -156,6 +160,7 @@
 			enable-method = "psci";
 			cpu-idle-states = <&cpu_off_l>;
 			capacity-dmips-mhz = <740>;
+			dynamic-power-coefficient = <84>;
 			clock-frequency = <1800000000>;
 			#cooling-cells = <2>;
 			i-cache-size = <32768>;
@@ -174,6 +179,7 @@
 			enable-method = "psci";
 			cpu-idle-states = <&cpu_off_l>;
 			capacity-dmips-mhz = <740>;
+			dynamic-power-coefficient = <84>;
 			clock-frequency = <1800000000>;
 			#cooling-cells = <2>;
 			i-cache-size = <32768>;
@@ -192,6 +198,7 @@
 			enable-method = "psci";
 			cpu-idle-states = <&cpu_off_l>;
 			capacity-dmips-mhz = <740>;
+			dynamic-power-coefficient = <84>;
 			clock-frequency = <1800000000>;
 			#cooling-cells = <2>;
 			i-cache-size = <32768>;
@@ -210,6 +217,7 @@
 			enable-method = "psci";
 			cpu-idle-states = <&cpu_off_l>;
 			capacity-dmips-mhz = <740>;
+			dynamic-power-coefficient = <84>;
 			clock-frequency = <1800000000>;
 			#cooling-cells = <2>;
 			i-cache-size = <32768>;
