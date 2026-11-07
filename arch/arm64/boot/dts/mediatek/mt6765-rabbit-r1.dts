@@ -1088,9 +1088,13 @@
 				try-power-role = "sink";
 				source-pdos = <PDO_FIXED(5000, 500, PDO_FIXED_DUAL_ROLE |
 							 PDO_FIXED_USB_COMM | PDO_FIXED_DATA_SWAP)>;
-				sink-pdos = <PDO_FIXED(5000, 1000, PDO_FIXED_DUAL_ROLE |
+				/*
+				 * 1.5 A: the charging policy's input cap, 1 A
+				 * for the battery and the rest for the system
+				 */
+				sink-pdos = <PDO_FIXED(5000, 1500, PDO_FIXED_DUAL_ROLE |
 						       PDO_FIXED_USB_COMM | PDO_FIXED_DATA_SWAP)>;
-				op-sink-microwatt = <5000000>;
+				op-sink-microwatt = <7500000>;
 
 				port {
 					r1_typec_hs: endpoint {
