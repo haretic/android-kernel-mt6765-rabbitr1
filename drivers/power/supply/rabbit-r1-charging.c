@@ -18,7 +18,10 @@
 /* Full: within R1_TAPER_UV of the target, the charge current below a tenth of the cell's 1000 mAh. */
 #define R1_TERM_UA	100000
 #define R1_TAPER_UV	50000
-/* Long enough for the first pass after a resume to sample the charger. */
+/*
+ * The most a resume holds the system for the first pass to sample the
+ * charger; the pass ends the hold as soon as it finds nothing attached.
+ */
 #define R1_RESUME_HOLD_MS	1000
 /*
  * The input may carry more than the charge current: the system runs from it
@@ -65,7 +68,7 @@ struct r1_charge_policy {
 	struct notifier_block notifier;
 	atomic_t generation;
 	bool stopping, suspended, cold, hot, full, session, timeout;
-	bool notifier_registered, awake, level_hold;
+	bool notifier_registered, awake, level_hold, resume_hold;
 	unsigned long last_sample, charge_time;
 	int requested_ua, measured_ua, error;
 	int charge_start_level, charge_stop_level;
@@ -386,8 +389,18 @@ static void r1_charge_work(struct work_struct *work)
 	if (p->stopping || p->suspended)
 		goto out;
 	ret = r1_charge_sample(p, &sample);
-	if (!ret)
+	if (!ret) {
 		r1_charge_hold_awake(p, sample.plugged);
+		/*
+		 * Every wake from WiFi, the PMIC or a timer sat out the whole
+		 * resume hold, most of each wake while idle.
+		 */
+		if (p->resume_hold) {
+			p->resume_hold = false;
+			if (!p->awake)
+				pm_relax(p->dev);
+		}
+	}
 	p->measured_ua = sample.current_ua;
 	target = r1_charge_decide(p, &sample);
 	if (!ret && !r1_charge_fresh(p, start, generation)) {
@@ -708,6 +721,7 @@ static int r1_charge_suspend(struct device *dev)
 
 	mutex_lock(&p->lock);
 	p->suspended = true;
+	p->resume_hold = false;
 	mutex_unlock(&p->lock);
 	cancel_delayed_work_sync(&p->work);
 	mutex_lock(&p->lock);
@@ -738,6 +752,7 @@ static int r1_charge_resume(struct device *dev)
 		 * by WiFi and alarms many times a minute.
 		 */
 		pm_wakeup_event(dev, R1_RESUME_HOLD_MS);
+		p->resume_hold = true;
 		mod_delayed_work(system_highpri_wq, &p->work, 0);
 	}
 	mutex_unlock(&p->lock);
