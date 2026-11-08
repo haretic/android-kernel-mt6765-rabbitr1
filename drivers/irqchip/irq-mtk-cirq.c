@@ -136,6 +136,8 @@ static struct irq_chip mtk_cirq_chip = {
 	.irq_eoi		= irq_chip_eoi_parent,
 	.irq_set_type		= mtk_cirq_set_type,
 	.irq_retrigger		= irq_chip_retrigger_hierarchy,
+	/* A wakeup source behind the CIRQ arms through its parents. */
+	.irq_set_wake		= irq_chip_set_wake_parent,
 #ifdef CONFIG_SMP
 	.irq_set_affinity	= irq_chip_set_affinity_parent,
 #endif
@@ -291,6 +293,7 @@ static inline void mtk_cirq_syscore_init(void) {}
 
 static const struct of_device_id mtk_cirq_of_match[] = {
 	{ .compatible = "mediatek,mt2701-cirq", .data = &mtk_cirq_regoffs_v1 },
+	{ .compatible = "mediatek,mt6765-cirq", .data = &mtk_cirq_regoffs_v1 },
 	{ .compatible = "mediatek,mt8135-cirq", .data = &mtk_cirq_regoffs_v1 },
 	{ .compatible = "mediatek,mt8173-cirq", .data = &mtk_cirq_regoffs_v1 },
 	{ .compatible = "mediatek,mt8192-cirq", .data = &mtk_cirq_regoffs_v2 },

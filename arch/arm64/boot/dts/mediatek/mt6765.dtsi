@@ -679,6 +679,7 @@
 			compatible = "mediatek,mt6765-keypad",
 				     "mediatek,mt6779-keypad";
 			reg = <0 0x10010000 0 0x1000>;
+			interrupt-parent = <&cirq>;
 			interrupts = <GIC_SPI 180 IRQ_TYPE_EDGE_FALLING>;
 			clocks = <&clk26m>;
 			clock-names = "kpd";
@@ -750,6 +751,20 @@
 			compatible = "mediatek,mt6765-mcucfg", "syscon";
 			reg = <0 0x10200000 0 0x800>;
 			#clock-cells = <1>;
+		};
+
+		/*
+		 * Latches edge interrupts while the SPM has the GIC down in
+		 * system suspend and replays them on resume; an edge wake source
+		 * such as the keypad otherwise wakes the SoC without its interrupt.
+		 */
+		cirq: interrupt-controller@10204000 {
+			compatible = "mediatek,mt6765-cirq", "mediatek,mtk-cirq";
+			reg = <0 0x10204000 0 0x400>;
+			#interrupt-cells = <3>;
+			interrupt-controller;
+			interrupt-parent = <&sysirq>;
+			mediatek,ext-irq-range = <72 280>;
 		};
 
 		sysirq: interrupt-controller@10200a80 {
