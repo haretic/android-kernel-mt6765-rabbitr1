@@ -30,11 +30,13 @@
 #include <linux/cpu_pm.h>
 #include <linux/io.h>
 #include <linux/interrupt.h>
+#include <linux/irq.h>
 #include <linux/iopoll.h>
 #include <linux/module.h>
 #include <linux/irqchip/arm-gic-v3.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
+#include <linux/of_irq.h>
 #include <linux/platform_device.h>
 #include <linux/psci.h>
 #include <linux/sched/clock.h>
@@ -65,6 +67,8 @@
 /* The stock wake period: the SPM timer wakes the SoC every 600 s at most. */
 #define SPM_WAKE_PERIOD_S		600
 #define SPM_PCM_WDT_S			30
+/* SPM_SW_RSV_0: the firmware's copy of R12, the wake sources that fired. */
+#define SPM_WAKE_KP			BIT(2)
 
 /* The "suspend" state of the stock idle-states: cluster power-down, id 5. */
 #define MT6765_PSCI_SUSPEND_STATE	0x01010005
@@ -86,6 +90,8 @@ struct mt6765_spm_sleep {
 	void __iomem *mbox;
 	void __iomem *mbox_ctrl;
 	void __iomem *irq_sta;
+	void __iomem *wake_sta;
+	int kp_irq;
 	void __iomem *gicd;
 	unsigned int irq;
 	unsigned int gicd_regs;
@@ -165,6 +171,25 @@ static irqreturn_t mt6765_spm_irq0(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+/*
+ * The keypad wakes the SPM through KP_IRQ_B, but a press over before the SoC
+ * is up raises no interrupt at the GIC: Linux resumed without a wake reason,
+ * Android saw no key and the screen stayed off until a second, quick press.
+ * Stock sets the interrupt pending from the SPM's wake status; do the same,
+ * so the keypad is the wakeup IRQ and its driver reports the press.
+ */
+static void spm_replay_wake_irqs(struct mt6765_spm_sleep *spm)
+{
+	u32 r12;
+
+	if (!spm->wake_sta)
+		return;
+	r12 = readl(spm->wake_sta);
+	pm_pr_dbg("SPM wake status %#x\n", r12);
+	if (spm->kp_irq > 0 && (r12 & SPM_WAKE_KP))
+		irq_set_irqchip_state(spm->kp_irq, IRQCHIP_STATE_PENDING, true);
+}
+
 static int mt6765_spm_sleep_enter(suspend_state_t state)
 {
 	struct mt6765_spm_sleep *spm = spm_sleep;
@@ -207,6 +232,8 @@ static int mt6765_spm_sleep_enter(suspend_state_t state)
 		dev_warn(spm->dev, "SSPM did not take SPM_RESUME\n");
 out_wdt:
 	spm_gic_restore(spm);
+	if (!ret)
+		spm_replay_wake_irqs(spm);
 	spm_smc(MTK_SIP_SPM_ARGS, SPM_ARGS_PCM_WDT, 0, 0, 0);
 	mt6765_mcdi_suspend_pause(false);
 
@@ -252,6 +279,19 @@ static int mt6765_spm_sleep_probe(struct platform_device *pdev)
 	spm->irq_sta = devm_ioremap(dev, res->start, resource_size(res));
 	if (!spm->irq_sta)
 		return -ENOMEM;
+
+	/* Optional: the wake status and the keypad it replays */
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 3);
+	if (res)
+		spm->wake_sta = devm_ioremap(dev, res->start, resource_size(res));
+	np = of_parse_phandle(dev->of_node, "mediatek,wakeup-keypad", 0);
+	if (np) {
+		if (of_device_is_available(np))
+			spm->kp_irq = of_irq_get(np, 0);
+		of_node_put(np);
+		if (spm->kp_irq == -EPROBE_DEFER)
+			return spm->kp_irq;
+	}
 
 	ret = platform_get_irq(pdev, 0);
 	if (ret < 0)
