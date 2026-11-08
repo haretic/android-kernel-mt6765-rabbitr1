@@ -804,15 +804,17 @@
 
 		/*
 		 * SSPM mailbox 1 (IPI pins 5-10) and its IRQ registers, for
-		 * the SPM_SUSPEND notification around system suspend, and the
-		 * SPM's IRQ status in the scpsys block.
+		 * the SPM_SUSPEND notification around system suspend, and in
+		 * the scpsys block the SPM's IRQ status, its software flags
+		 * with the wake status, and the PCM status registers.
 		 */
 		spm_sleep: sleep@10460000 {
 			compatible = "mediatek,mt6765-spm-sleep";
 			reg = <0 0x10460000 0 0x100>,
 			      <0 0x10461000 0 0x10>,
 			      <0 0x10006158 0 0x4>,
-			      <0 0x10006608 0 0x4>;
+			      <0 0x10006600 0 0x10>,
+			      <0 0x10006100 0 0x80>;
 			interrupts = <GIC_SPI 181 IRQ_TYPE_LEVEL_LOW>;
 			mediatek,wakeup-keypad = <&keypad>;
 			status = "disabled";

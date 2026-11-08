@@ -67,8 +67,19 @@
 /* The stock wake period: the SPM timer wakes the SoC every 600 s at most. */
 #define SPM_WAKE_PERIOD_S		600
 #define SPM_PCM_WDT_S			30
-/* SPM_SW_RSV_0: the firmware's copy of R12, the wake sources that fired. */
+/*
+ * In the SPM_SW_FLAG window: SPM_SW_DEBUG, the sleep stages the firmware went
+ * through (bit 1: 26 MHz off), and SPM_SW_RSV_0, its copy of R12, the wake
+ * sources that fired.
+ */
+#define SPM_SW_DEBUG			0x4
+#define SPM_SW_RSV_0			0x8
 #define SPM_WAKE_KP			BIT(2)
+/* In the PCM status window: the resource requests, timer and wake status. */
+#define PCM_REG13_DATA			0x34
+#define PCM_TIMER_OUT			0x50
+#define SPM_WAKEUP_STA			0x5c
+#define SRC_REQ_STA			0x7c
 
 /* The "suspend" state of the stock idle-states: cluster power-down, id 5. */
 #define MT6765_PSCI_SUSPEND_STATE	0x01010005
@@ -90,7 +101,8 @@ struct mt6765_spm_sleep {
 	void __iomem *mbox;
 	void __iomem *mbox_ctrl;
 	void __iomem *irq_sta;
-	void __iomem *wake_sta;
+	void __iomem *sw;
+	void __iomem *pcm_sta;
 	int kp_irq;
 	void __iomem *gicd;
 	unsigned int irq;
@@ -182,10 +194,18 @@ static void spm_replay_wake_irqs(struct mt6765_spm_sleep *spm)
 {
 	u32 r12;
 
-	if (!spm->wake_sta)
+	if (!spm->sw)
 		return;
-	r12 = readl(spm->wake_sta);
-	pm_pr_dbg("SPM wake status %#x\n", r12);
+	r12 = readl(spm->sw + SPM_SW_RSV_0);
+	if (spm->pcm_sta)
+		pm_pr_dbg("SPM wake status %#x debug %#x r13 %#x timer out %#x wakeup %#x src req %#x\n",
+			  r12, readl(spm->sw + SPM_SW_DEBUG),
+			  readl(spm->pcm_sta + PCM_REG13_DATA),
+			  readl(spm->pcm_sta + PCM_TIMER_OUT),
+			  readl(spm->pcm_sta + SPM_WAKEUP_STA),
+			  readl(spm->pcm_sta + SRC_REQ_STA));
+	else
+		pm_pr_dbg("SPM wake status %#x\n", r12);
 	if (spm->kp_irq > 0 && (r12 & SPM_WAKE_KP))
 		irq_set_irqchip_state(spm->kp_irq, IRQCHIP_STATE_PENDING, true);
 }
@@ -280,10 +300,13 @@ static int mt6765_spm_sleep_probe(struct platform_device *pdev)
 	if (!spm->irq_sta)
 		return -ENOMEM;
 
-	/* Optional: the wake status and the keypad it replays */
+	/* Optional: the wake status and the keypad it replays, the PCM status */
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 3);
-	if (res)
-		spm->wake_sta = devm_ioremap(dev, res->start, resource_size(res));
+	if (res && resource_size(res) >= SPM_SW_RSV_0 + 4)
+		spm->sw = devm_ioremap(dev, res->start, resource_size(res));
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 4);
+	if (res && resource_size(res) >= SRC_REQ_STA + 4)
+		spm->pcm_sta = devm_ioremap(dev, res->start, resource_size(res));
 	np = of_parse_phandle(dev->of_node, "mediatek,wakeup-keypad", 0);
 	if (np) {
 		if (of_device_is_available(np))
