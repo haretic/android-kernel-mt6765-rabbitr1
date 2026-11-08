@@ -15,6 +15,7 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
+#include <linux/suspend.h>
 
 #define MTK_PMIC_REG_WIDTH 16
 
@@ -159,6 +160,8 @@ static void mt6358_irq_sp_handler(struct mt6397_chip *chip,
 		if (!irq_status)
 			continue;
 
+		/* Names the source of a wake whose interrupt no driver handles */
+		pm_pr_dbg("PMIC interrupt status %#x at %#x\n", irq_status, sta_reg);
 		status = irq_status;
 		do {
 			j = __ffs(status);
@@ -193,6 +196,7 @@ static irqreturn_t mt6358_irq_handler(int irq, void *data)
 		return IRQ_NONE;
 	}
 
+	pm_pr_dbg("PMIC top interrupt status %#x\n", top_irq_status);
 	for (i = 0; i < irqd->num_top; i++) {
 		bit = BIT(irqd->pmic_ints[i].top_offset);
 		if (top_irq_status & bit) {
