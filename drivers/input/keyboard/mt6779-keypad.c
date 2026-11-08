@@ -12,6 +12,7 @@
 #include <linux/property.h>
 #include <linux/platform_device.h>
 #include <linux/pm_wakeirq.h>
+#include <linux/suspend.h>
 #include <linux/regmap.h>
 
 #define MTK_KPD_NAME		"mt6779-keypad"
@@ -32,6 +33,7 @@ struct mt6779_keypad {
 	struct regmap *regmap;
 	struct input_dev *input_dev;
 	struct clk *clk;
+	int irq;
 	u32 n_rows;
 	u32 n_cols;
 	void (*calc_row_col)(unsigned int key,
@@ -195,6 +197,7 @@ static int mt6779_keypad_pdrv_probe(struct platform_device *pdev)
 	}
 
 	input_set_capability(keypad->input_dev, EV_MSC, MSC_SCAN);
+	input_set_capability(keypad->input_dev, EV_KEY, KEY_WAKEUP);
 
 	regmap_write(keypad->regmap, MTK_KPD_DEBOUNCE,
 		     (debounce * (1 << 5)) & MTK_KPD_DEBOUNCE_MASK);
@@ -226,6 +229,9 @@ static int mt6779_keypad_pdrv_probe(struct platform_device *pdev)
 		return error;
 	}
 
+	keypad->irq = irq;
+	platform_set_drvdata(pdev, keypad);
+
 	error = input_register_device(keypad->input_dev);
 	if (error) {
 		dev_err(&pdev->dev, "Failed to register device\n");
@@ -248,6 +254,33 @@ static int mt6779_keypad_pdrv_probe(struct platform_device *pdev)
 	return 0;
 }
 
+/*
+ * Resuming from deep sleep takes longer than a tap: the key is pressed and
+ * released again before the handler reads it, finds no change and reports
+ * nothing. The press woke the system but never reached the input layer, so
+ * the screen stayed off and it took several presses to turn it on. Report a
+ * wake key for a press that is over; one still held reports as usual.
+ */
+static int mt6779_keypad_resume(struct device *dev)
+{
+	struct mt6779_keypad *keypad = dev_get_drvdata(dev);
+	DECLARE_BITMAP(state, MTK_KPD_NUM_BITS);
+
+	if (!device_may_wakeup(dev) || pm_wakeup_irq() != keypad->irq)
+		return 0;
+	if (regmap_bulk_read(keypad->regmap, MTK_KPD_MEM, state, MTK_KPD_NUM_MEMS))
+		return 0;
+	if (!bitmap_equal(state, keypad->keymap_state, MTK_KPD_NUM_BITS))
+		return 0;
+	input_report_key(keypad->input_dev, KEY_WAKEUP, 1);
+	input_sync(keypad->input_dev);
+	input_report_key(keypad->input_dev, KEY_WAKEUP, 0);
+	input_sync(keypad->input_dev);
+	return 0;
+}
+
+static DEFINE_SIMPLE_DEV_PM_OPS(mt6779_keypad_pm, NULL, mt6779_keypad_resume);
+
 static const struct of_device_id mt6779_keypad_of_match[] = {
 	{ .compatible = "mediatek,mt6779-keypad" },
 	{ .compatible = "mediatek,mt6873-keypad" },
@@ -260,6 +293,7 @@ static struct platform_driver mt6779_keypad_pdrv = {
 	.driver = {
 		   .name = MTK_KPD_NAME,
 		   .of_match_table = mt6779_keypad_of_match,
+		   .pm = pm_sleep_ptr(&mt6779_keypad_pm),
 	},
 };
 module_platform_driver(mt6779_keypad_pdrv);
