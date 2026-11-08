@@ -302,8 +302,12 @@ static int r1_charge_sample(struct r1_charge_policy *p, struct r1_charge_sample 
 		READ_SAMPLE(typec, USB_TYPE, typec_type);
 		READ_SAMPLE(typec, CURRENT_MAX, typec_ua);
 		READ_SAMPLE(typec, VOLTAGE_NOW, typec_uv);
-		if (!s->typec_online)
-			s->plugged = 0;
+		/*
+		 * No contract does not mean no source: a source with Rp on both
+		 * CC lines reads as a debug accessory, and the port manager never
+		 * reports it online. The charger's present already excludes the
+		 * r1's own VBUS in host mode, so charge on BC1.2 as without TCPM.
+		 */
 	}
 #undef READ_SAMPLE
 	s->valid = true;
