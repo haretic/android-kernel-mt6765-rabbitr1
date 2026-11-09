@@ -241,92 +241,110 @@
 
 		opp-900000000 {
 			opp-hz = /bits/ 64 <900000000>;
+			required-opps = <&dram_opp_low>;
 			opp-microvolt = <812500>;
 		};
 
 		opp-979000000 {
 			opp-hz = /bits/ 64 <979000000>;
+			required-opps = <&dram_opp_low>;
 			opp-microvolt = <812500>;
 		};
 
 		opp-1085000000 {
 			opp-hz = /bits/ 64 <1085000000>;
+			required-opps = <&dram_opp_low>;
 			opp-microvolt = <812500>;
 		};
 
 		opp-1218000000 {
 			opp-hz = /bits/ 64 <1218000000>;
+			required-opps = <&dram_opp_low>;
 			opp-microvolt = <812500>;
 		};
 
 		opp-1351000000 {
 			opp-hz = /bits/ 64 <1351000000>;
+			required-opps = <&dram_opp_low>;
 			opp-microvolt = <812500>;
 		};
 
 		opp-1484000000 {
 			opp-hz = /bits/ 64 <1484000000>;
+			required-opps = <&dram_opp_low>;
 			opp-microvolt = <812500>;
 		};
 
 		opp-1617000000 {
 			opp-hz = /bits/ 64 <1617000000>;
+			required-opps = <&dram_opp_mid>;
 			opp-microvolt = <812500>;
 		};
 
 		opp-1750000000 {
 			opp-hz = /bits/ 64 <1750000000>;
+			required-opps = <&dram_opp_high>;
 			opp-microvolt = <850000>;
 		};
 
 		opp-1803000000 {
 			opp-hz = /bits/ 64 <1803000000>;
+			required-opps = <&dram_opp_high>;
 			opp-microvolt = <893750>;
 		};
 
 		opp-1856000000 {
 			opp-hz = /bits/ 64 <1856000000>;
+			required-opps = <&dram_opp_high>;
 			opp-microvolt = <937500>;
 		};
 
 		opp-1909000000 {
 			opp-hz = /bits/ 64 <1909000000>;
+			required-opps = <&dram_opp_high>;
 			opp-microvolt = <975000>;
 		};
 
 		opp-1962000000 {
 			opp-hz = /bits/ 64 <1962000000>;
+			required-opps = <&dram_opp_high>;
 			opp-microvolt = <1018750>;
 		};
 
 		opp-2015000000 {
 			opp-hz = /bits/ 64 <2015000000>;
+			required-opps = <&dram_opp_high>;
 			opp-microvolt = <1056250>;
 		};
 
 		opp-2068000000 {
 			opp-hz = /bits/ 64 <2068000000>;
+			required-opps = <&dram_opp_high>;
 			opp-microvolt = <1100000>;
 		};
 
 		opp-2130000000 {
 			opp-hz = /bits/ 64 <2130000000>;
+			required-opps = <&dram_opp_high>;
 			opp-microvolt = <1150000>;
 		};
 
 		opp-2200000000 {
 			opp-hz = /bits/ 64 <2200000000>;
+			required-opps = <&dram_opp_high>;
 			opp-microvolt = <1200000>;
 		};
 
 		opp-2300000000 {
 			opp-hz = /bits/ 64 <2300000000>;
+			required-opps = <&dram_opp_high>;
 			opp-microvolt = <1200000>;
 			turbo-mode;
 		};
 
 		opp-2400000000 {
 			opp-hz = /bits/ 64 <2400000000>;
+			required-opps = <&dram_opp_high>;
 			opp-microvolt = <1200000>;
 			turbo-mode;
 		};
@@ -338,92 +356,110 @@
 
 		opp-400000000 {
 			opp-hz = /bits/ 64 <400000000>;
+			required-opps = <&dram_opp_low>;
 			opp-microvolt = <812500>;
 		};
 
 		opp-501000000 {
 			opp-hz = /bits/ 64 <501000000>;
+			required-opps = <&dram_opp_low>;
 			opp-microvolt = <812500>;
 		};
 
 		opp-542000000 {
 			opp-hz = /bits/ 64 <542000000>;
+			required-opps = <&dram_opp_low>;
 			opp-microvolt = <812500>;
 		};
 
 		opp-643000000 {
 			opp-hz = /bits/ 64 <643000000>;
+			required-opps = <&dram_opp_low>;
 			opp-microvolt = <812500>;
 		};
 
 		opp-745000000 {
 			opp-hz = /bits/ 64 <745000000>;
+			required-opps = <&dram_opp_low>;
 			opp-microvolt = <812500>;
 		};
 
 		opp-846000000 {
 			opp-hz = /bits/ 64 <846000000>;
+			required-opps = <&dram_opp_low>;
 			opp-microvolt = <812500>;
 		};
 
 		opp-948000000 {
 			opp-hz = /bits/ 64 <948000000>;
+			required-opps = <&dram_opp_low>;
 			opp-microvolt = <812500>;
 		};
 
 		opp-1050000000 {
 			opp-hz = /bits/ 64 <1050000000>;
+			required-opps = <&dram_opp_low>;
 			opp-microvolt = <850000>;
 		};
 
 		opp-1114000000 {
 			opp-hz = /bits/ 64 <1114000000>;
+			required-opps = <&dram_opp_low>;
 			opp-microvolt = <893750>;
 		};
 
 		opp-1179000000 {
 			opp-hz = /bits/ 64 <1179000000>;
+			required-opps = <&dram_opp_low>;
 			opp-microvolt = <937500>;
 		};
 
 		opp-1244000000 {
 			opp-hz = /bits/ 64 <1244000000>;
+			required-opps = <&dram_opp_low>;
 			opp-microvolt = <975000>;
 		};
 
 		opp-1309000000 {
 			opp-hz = /bits/ 64 <1309000000>;
+			required-opps = <&dram_opp_mid>;
 			opp-microvolt = <1018750>;
 		};
 
 		opp-1374000000 {
 			opp-hz = /bits/ 64 <1374000000>;
+			required-opps = <&dram_opp_mid>;
 			opp-microvolt = <1056250>;
 		};
 
 		opp-1439000000 {
 			opp-hz = /bits/ 64 <1439000000>;
+			required-opps = <&dram_opp_mid>;
 			opp-microvolt = <1100000>;
 		};
 
 		opp-1515000000 {
 			opp-hz = /bits/ 64 <1515000000>;
+			required-opps = <&dram_opp_mid>;
 			opp-microvolt = <1150000>;
 		};
 
 		opp-1600000000 {
 			opp-hz = /bits/ 64 <1600000000>;
+			required-opps = <&dram_opp_high>;
 			opp-microvolt = <1200000>;
 		};
 
 		opp-1700000000 {
 			opp-hz = /bits/ 64 <1700000000>;
+			required-opps = <&dram_opp_high>;
 			opp-microvolt = <1200000>;
 			turbo-mode;
 		};
 
 		opp-1800000000 {
 			opp-hz = /bits/ 64 <1800000000>;
+			required-opps = <&dram_opp_high>;
 			opp-microvolt = <1200000>;
 			turbo-mode;
 		};
@@ -960,23 +996,29 @@
  * The DVFSRC levels (indices into the driver's MT6765 table) that run this
  * LPDDR4X-3200 board at each data rate. Without a request the DRAM stays at
  * the lowest one, which is also the vote left in place across suspend.
+ *
+ * Each CPU OPP names the DRAM rate it needs (required-opps), the passive
+ * governor takes the higher of the two clusters. Interpolated over the range
+ * instead, a cluster parked at a middling OPP while its cores sat powered off
+ * held the DRAM at 3200 with the screen on and nothing running, ~40 mA. The
+ * interaction boosts (big 1750, little 1600 MHz and up) still get 3200.
  */
 / {
 	dram_opp: opp-table-dram {
 		compatible = "operating-points-v2";
 
-		opp-1534000000 {
+		dram_opp_low: opp-1534000000 {
 			opp-hz = /bits/ 64 <1534000000>;
 			opp-level = <0>;
 			opp-suspend;
 		};
 
-		opp-2392000000 {
+		dram_opp_mid: opp-2392000000 {
 			opp-hz = /bits/ 64 <2392000000>;
 			opp-level = <3>;
 		};
 
-		opp-3200000000 {
+		dram_opp_high: opp-3200000000 {
 			opp-hz = /bits/ 64 <3200000000>;
 			opp-level = <5>;
 		};
