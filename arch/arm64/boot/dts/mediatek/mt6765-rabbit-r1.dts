@@ -1147,12 +1147,13 @@
 				source-pdos = <PDO_FIXED(5000, 500, PDO_FIXED_DUAL_ROLE |
 							 PDO_FIXED_USB_COMM | PDO_FIXED_DATA_SWAP)>;
 				/*
-				 * 1.5 A: the charging policy's input cap, 1 A
-				 * for the battery and the rest for the system
+				 * 3 A: the charging policy's input cap with a fast
+				 * charge current chosen. It programs the charger's
+				 * input itself, 1.5 A at the default 1 A charge.
 				 */
-				sink-pdos = <PDO_FIXED(5000, 1500, PDO_FIXED_DUAL_ROLE |
+				sink-pdos = <PDO_FIXED(5000, 3000, PDO_FIXED_DUAL_ROLE |
 						       PDO_FIXED_USB_COMM | PDO_FIXED_DATA_SWAP)>;
-				op-sink-microwatt = <7500000>;
+				op-sink-microwatt = <15000000>;
 
 				port {
 					r1_typec_hs: endpoint {

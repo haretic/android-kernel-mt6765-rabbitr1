@@ -14,7 +14,15 @@
 #include <linux/workqueue.h>
 
 #define R1_CHARGE_MIN_UA 500000
-#define R1_CHARGE_MAX_UA 1000000
+/* The stock 1000 mAh pack at 1 C, the default and the most below the fast choices */
+#define R1_CHARGE_STD_UA 1000000
+/*
+ * The most a choice may ask for, past the stock pack's 1 C: for larger cells fitted by
+ * hand. At 5 V the input is at most 3 A (Type-C, and the 5 V PDO); the MT6370 would go to 5 A.
+ */
+#define R1_CHARGE_MAX_UA 3000000
+/* Above this only for a larger cell (Show unsafe values), which takes its rated current warmer */
+#define R1_CHARGE_FAST_MAX_UA 2000000
 /* Full: within R1_TAPER_UV of the target, the charge current below a tenth of the cell's 1000 mAh. */
 #define R1_TERM_UA	100000
 #define R1_TAPER_UV	50000
@@ -30,6 +38,9 @@
  * also allow.
  */
 #define R1_INPUT_MAX_UA 1500000
+/* A fast choice may take the charge current and the same 0.5 A for the system from Type-C */
+#define R1_INPUT_FAST_MAX_UA 3000000
+#define R1_INPUT_SYSTEM_UA 500000
 #define R1_SAMPLE_MAX_MS 1500
 #define R1_CHARGE_TIMEOUT (10 * 60 * 60 * HZ)
 
@@ -67,7 +78,7 @@ struct r1_charge_policy {
 	struct delayed_work work;
 	struct notifier_block notifier;
 	atomic_t generation;
-	bool stopping, suspended, cold, hot, full, session, timeout;
+	bool stopping, suspended, cold, hot, warm, full, session, timeout;
 	bool notifier_registered, awake, level_hold, resume_hold;
 	unsigned long last_sample, charge_time;
 	int requested_ua, measured_ua, error;
@@ -84,7 +95,7 @@ static struct r1_charge_target r1_charge_decide(struct r1_charge_policy *p,
 					      const struct r1_charge_sample *s)
 {
 	struct r1_charge_target t = { .reason = R1_SENSOR_ERROR };
-	int thermal_ua = R1_CHARGE_MAX_UA, budget = 0;
+	int thermal_ua = R1_CHARGE_MAX_UA, budget = 0, typec_max = R1_INPUT_MAX_UA;
 
 	if (!s->valid)
 		return t;
@@ -114,6 +125,16 @@ static struct r1_charge_target r1_charge_decide(struct r1_charge_policy *p,
 		return t;
 	}
 	t.voltage_uv = 4400000;
+	/*
+	 * Faster than 1 C only from 15 C to under 38 C, again once back under 35 C; the
+	 * unsafe choices, meant for a larger cell rated for them, to under 42 C and 39 C.
+	 */
+	if (p->requested_ua > R1_CHARGE_FAST_MAX_UA)
+		p->warm = s->temperature >= 420 || (p->warm && s->temperature >= 390);
+	else
+		p->warm = s->temperature >= 380 || (p->warm && s->temperature >= 350);
+	if (p->warm)
+		thermal_ua = R1_CHARGE_STD_UA;
 	if (s->temperature < 150 || s->temperature >= 430) {
 		thermal_ua = 500000;
 		t.voltage_uv = s->temperature >= 430 ? 4100000 : 4200000;
@@ -142,8 +163,11 @@ static struct r1_charge_target r1_charge_decide(struct r1_charge_policy *p,
 	 * An established Type-C/PD budget takes precedence over BC1.2. Any PD
 	 * contract counts: a source offering PPS or AVS reads as such even on
 	 * the fixed 5 V contract, and taken as no contract it fell back to BC1.2,
-	 * which reads a USB-C charger's data lines as SDP, 500 mA.
+	 * which reads a USB-C charger's data lines as SDP, 500 mA. BC1.2 chargers
+	 * stay at their 1.5 A: only Type-C states what more a source can give.
 	 */
+	if (p->requested_ua > R1_CHARGE_STD_UA)
+		typec_max = min(p->requested_ua + R1_INPUT_SYSTEM_UA, R1_INPUT_FAST_MAX_UA);
 	if (s->typec_online && s->typec_uv >= 4500000 && s->typec_uv <= 5500000 &&
 	    ((s->typec_type == POWER_SUPPLY_USB_TYPE_C && s->typec_ua >= 1500000) ||
 	     s->typec_type == POWER_SUPPLY_USB_TYPE_PD ||
@@ -151,7 +175,7 @@ static struct r1_charge_target r1_charge_decide(struct r1_charge_policy *p,
 	     s->typec_type == POWER_SUPPLY_USB_TYPE_PD_PPS ||
 	     s->typec_type == POWER_SUPPLY_USB_TYPE_PD_SPR_AVS ||
 	     s->typec_type == POWER_SUPPLY_USB_TYPE_PD_PPS_SPR_AVS)) {
-		budget = min(s->typec_ua, R1_INPUT_MAX_UA);
+		budget = min(s->typec_ua, typec_max);
 	} else if (s->typec_online && s->typec_uv > 5500000) {
 		/* No high-voltage negotiation in this board policy. */
 		budget = 0;
@@ -222,7 +246,7 @@ static struct r1_charge_target r1_charge_decide(struct r1_charge_policy *p,
 		t.reason = R1_USB_BUDGET;
 	else if (thermal_ua < p->requested_ua)
 		t.reason = R1_THERMAL_LIMIT;
-	else if (p->requested_ua < R1_CHARGE_MAX_UA)
+	else if (p->requested_ua < R1_CHARGE_STD_UA)
 		t.reason = R1_USER_LIMIT;
 	else
 		t.reason = R1_READY;
