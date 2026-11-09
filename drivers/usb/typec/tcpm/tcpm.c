@@ -6603,6 +6603,15 @@ static void _tcpm_cc_change(struct tcpm_port *port, enum typec_cc_status cc1,
 			tcpm_set_state(port, SRC_ATTACH_WAIT, 0);
 		else if (tcpm_port_is_debug_sink(port) || tcpm_port_is_sink(port))
 			tcpm_set_state(port, SNK_ATTACH_WAIT, 0);
+		/*
+		 * A TCPC stops toggling on any potential connection, Ra included. An e-marked
+		 * cable's Ra seen in the Rp phase left it presenting Rp for good, and a source
+		 * on the cable's far end was never seen: PD chargers on e-marked cables never
+		 * charged. Look again a second later; the delayed state does not fire in
+		 * suspend, where VBUS from a source wakes the system through the charger.
+		 */
+		else
+			tcpm_set_state(port, unattached_state(port), 1000);
 		break;
 	case CHECK_CONTAMINANT:
 		/* Wait for Toggling to be resumed */
