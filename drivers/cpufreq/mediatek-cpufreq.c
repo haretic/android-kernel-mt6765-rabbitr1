@@ -23,6 +23,9 @@ struct mtk_cpufreq_platform_data {
 	int sram_min_volt;
 	int sram_max_volt;
 	bool ccifreq_supported;
+	/* While a cluster runs at couple_from_khz or more, the others at least couple_floor_khz */
+	unsigned int couple_from_khz;
+	unsigned int couple_floor_khz;
 };
 
 /*
@@ -57,6 +60,8 @@ struct mtk_cpu_dvfs_info {
 	const struct mtk_cpufreq_platform_data *soc_data;
 	int vtrack_max;
 	bool ccifreq_bound;
+	struct freq_qos_request couple_req;
+	bool couple_high;
 };
 
 static struct platform_device *cpufreq_pdev;
@@ -67,6 +72,9 @@ static struct platform_device *cpufreq_pdev;
  * steps of two clusters must not interleave, so serialise all transitions.
  */
 static DEFINE_MUTEX(mtk_cpufreq_rail_lock);
+
+/* The coupling requests and each cluster's couple_high */
+static DEFINE_MUTEX(mtk_cpufreq_couple_lock);
 
 static LIST_HEAD(dvfs_info_list);
 
@@ -204,6 +212,38 @@ static bool is_ccifreq_ready(struct mtk_cpu_dvfs_info *info)
 	return true;
 }
 
+/*
+ * On MT6765 a big cluster run, a memory copy at 2.2 GHz, went ~2 % slower with
+ * the little cluster idling at 643 MHz than at 1050 MHz and up, the other
+ * cluster's clock is in the path of the busy one's memory traffic. Hold the
+ * others' floor while one runs near its top; the shared Vproc is at the top
+ * voltage then anyway. The request only reaches the other policies through
+ * their QoS notifier, which updates them from a work item.
+ */
+static void mtk_cpufreq_couple(struct mtk_cpu_dvfs_info *info, unsigned long freq_hz)
+{
+	const struct mtk_cpufreq_platform_data *soc = info->soc_data;
+	struct mtk_cpu_dvfs_info *other, *any;
+	bool want;
+
+	if (!soc->couple_floor_khz)
+		return;
+
+	mutex_lock(&mtk_cpufreq_couple_lock);
+	info->couple_high = freq_hz >= soc->couple_from_khz * 1000UL;
+	list_for_each_entry(other, &dvfs_info_list, list_head) {
+		if (!freq_qos_request_active(&other->couple_req))
+			continue;
+		want = false;
+		list_for_each_entry(any, &dvfs_info_list, list_head)
+			if (any != other && any->couple_high)
+				want = true;
+		freq_qos_update_request(&other->couple_req, want ? soc->couple_floor_khz :
+					FREQ_QOS_MIN_DEFAULT_VALUE);
+	}
+	mutex_unlock(&mtk_cpufreq_couple_lock);
+}
+
 static int mtk_cpufreq_set_target(struct cpufreq_policy *policy,
 				  unsigned int index)
 {
@@ -318,6 +358,9 @@ static int mtk_cpufreq_set_target(struct cpufreq_policy *policy,
 out:
 	mutex_unlock(&info->reg_lock);
 	mutex_unlock(&mtk_cpufreq_rail_lock);
+
+	if (!ret)
+		mtk_cpufreq_couple(info, freq_hz);
 
 	return ret;
 }
@@ -615,12 +658,30 @@ static int mtk_cpufreq_init(struct cpufreq_policy *policy)
 	policy->driver_data = info;
 	policy->clk = info->cpu_clk;
 
+	if (info->soc_data->couple_floor_khz) {
+		mutex_lock(&mtk_cpufreq_couple_lock);
+		info->couple_high = false;
+		ret = freq_qos_add_request(&policy->constraints, &info->couple_req,
+					   FREQ_QOS_MIN, FREQ_QOS_MIN_DEFAULT_VALUE);
+		mutex_unlock(&mtk_cpufreq_couple_lock);
+		if (ret < 0) {
+			dev_pm_opp_free_cpufreq_table(info->cpu_dev, &policy->freq_table);
+			return ret;
+		}
+	}
+
 	return 0;
 }
 
 static void mtk_cpufreq_exit(struct cpufreq_policy *policy)
 {
 	struct mtk_cpu_dvfs_info *info = policy->driver_data;
+
+	mutex_lock(&mtk_cpufreq_couple_lock);
+	info->couple_high = false;
+	if (freq_qos_request_active(&info->couple_req))
+		freq_qos_remove_request(&info->couple_req);
+	mutex_unlock(&mtk_cpufreq_couple_lock);
 
 	dev_pm_opp_free_cpufreq_table(info->cpu_dev, &policy->freq_table);
 }
@@ -739,6 +800,8 @@ static const struct mtk_cpufreq_platform_data mt6765_platform_data = {
 	.sram_min_volt = 850000,
 	.sram_max_volt = 1200000,
 	.ccifreq_supported = false,
+	.couple_from_khz = 2015000,
+	.couple_floor_khz = 1050000,
 };
 
 static const struct mtk_cpufreq_platform_data mt7622_platform_data = {
