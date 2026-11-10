@@ -688,8 +688,15 @@ static int mt6357_soc_capacity_locked(struct mt6357_gauge *gauge, u64 now, int *
 
 	ret = mt6357_soc_estimate_locked(gauge, now, &estimate);
 	if (ret) {
-		/* Not across an event (suspend, reset, removal) or a stop. */
-		if (ret != -EAGAIN && ret != -ENODEV && soc->shown_valid &&
+		/*
+		 * Not across a stop, nor while suspended. An event (resume,
+		 * reset, removal) clears the estimate until the next sample,
+		 * some 2 s on, and healthd reads at every resume: it logged
+		 * failures and kept a level of its own. Hold the shown one
+		 * through that as through any gap; the hold counts boottime,
+		 * so a long sleep still lets it lapse.
+		 */
+		if (ret != -ENODEV && !READ_ONCE(gauge->suspended) && soc->shown_valid &&
 		    now - soc->estimate_ns < MT6357_SOC_HOLD_NS) {
 			*out = soc->shown;
 			return 0;
