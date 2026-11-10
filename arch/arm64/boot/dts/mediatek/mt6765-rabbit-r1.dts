@@ -851,8 +851,11 @@
 &i2c2 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&r1_i2c2_pins>;
-	/* Stock runs 400 kHz open drain; standard speed for bring-up. */
-	clock-frequency = <100000>;
+	/*
+	 * 400 kHz as stock runs it: the sensor takes 435 register writes to
+	 * start streaming, 0.3 s of every camera open at 100 kHz.
+	 */
+	clock-frequency = <400000>;
 	status = "okay";
 
 	/*
