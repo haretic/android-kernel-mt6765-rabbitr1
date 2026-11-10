@@ -1326,27 +1326,8 @@ static void msdc_recheck_sdio_irq(struct msdc_host *host)
 	}
 }
 
-/* r1: dump controller state once on the first command error. */
-static void msdc_r1_dump(struct msdc_host *host, const char *when)
-{
-	char prefix[48];
-
-	snprintf(prefix, sizeof(prefix), "r1-msdc %s base ", when);
-	print_hex_dump(KERN_INFO, prefix, DUMP_PREFIX_OFFSET, 16, 4,
-		       (__force const void *)host->base, 0x300, false);
-	if (host->top_base) {
-		snprintf(prefix, sizeof(prefix), "r1-msdc %s top ", when);
-		print_hex_dump(KERN_INFO, prefix, DUMP_PREFIX_OFFSET, 16, 4,
-			       (__force const void *)host->top_base, 0x100, false);
-	}
-}
-
 static void msdc_track_cmd_data(struct msdc_host *host, struct mmc_command *cmd)
 {
-	static int r1_dumped;
-
-	if (host->error && !r1_dumped++)
-		msdc_r1_dump(host, "error");
 	if (host->error &&
 	    ((!mmc_op_tuning(cmd->opcode) && !host->hs400_tuning) ||
 	     cmd->error == -ETIMEDOUT))
