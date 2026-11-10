@@ -1761,9 +1761,10 @@ static int __maybe_unused hi846_resume(struct device *dev)
 /*
  * The unbinned 3264x2448 mode has about twice the noise of the 2x binned 1632x1224 one over the
  * same field, and four times the pixels for the software ISP; it is offered only when asked for.
+ * It can be asked for at run time, taking effect when the camera service next lists the modes.
  */
 static bool full_res;
-module_param(full_res, bool, 0444);
+module_param(full_res, bool, 0644);
 MODULE_PARM_DESC(full_res, "Offer the unbinned 3264x2448 mode");
 
 /* Whether the mode streams on the sensor's lane count and is offered. */
