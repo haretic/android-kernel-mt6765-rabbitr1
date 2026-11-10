@@ -89,6 +89,8 @@ struct mtk_dvfsrc {
 
 struct dvfsrc_soc_data {
 	const int *regs;
+	/* How long a level change may take; DVFSRC_POLL_TIMEOUT_US when 0 */
+	u32 poll_timeout_us;
 	const u8 *bw_units;
 	const bool has_emi_ddr;
 	const struct dvfsrc_opp_desc *opps_desc;
@@ -186,6 +188,11 @@ static const int dvfsrc_mt8196_regs[] = {
 	[DVFSRC_GEAR_INFO_H] = 0x6b0,
 };
 
+static u32 dvfsrc_poll_us(struct mtk_dvfsrc *dvfsrc)
+{
+	return dvfsrc->dvd->poll_timeout_us ?: DVFSRC_POLL_TIMEOUT_US;
+}
+
 static const struct dvfsrc_opp *dvfsrc_get_current_opp(struct mtk_dvfsrc *dvfsrc)
 {
 	u32 level = dvfsrc->dvd->get_current_level(dvfsrc);
@@ -225,7 +232,7 @@ static int dvfsrc_wait_for_vcore_level_v1(struct mtk_dvfsrc *dvfsrc, u32 level)
 
 	return readx_poll_timeout_atomic(dvfsrc_get_current_opp, dvfsrc, curr,
 					 curr->vcore_opp >= level, STARTUP_TIME_US,
-					 DVFSRC_POLL_TIMEOUT_US);
+					 dvfsrc_poll_us(dvfsrc));
 }
 
 static int dvfsrc_wait_for_opp_level_v1(struct mtk_dvfsrc *dvfsrc, u32 level)
@@ -237,7 +244,7 @@ static int dvfsrc_wait_for_opp_level_v1(struct mtk_dvfsrc *dvfsrc, u32 level)
 	ret = readx_poll_timeout_atomic(dvfsrc_get_current_opp, dvfsrc, curr,
 					curr->dram_opp >= target->dram_opp &&
 					curr->vcore_opp >= target->vcore_opp,
-					STARTUP_TIME_US, DVFSRC_POLL_TIMEOUT_US);
+					STARTUP_TIME_US, dvfsrc_poll_us(dvfsrc));
 	if (ret < 0) {
 		dev_warn(dvfsrc->dev,
 			 "timeout! target OPP: %u, dram: %d, vcore: %d\n", level,
@@ -257,7 +264,7 @@ static int dvfsrc_wait_for_opp_level_v2(struct mtk_dvfsrc *dvfsrc, u32 level)
 	ret = readx_poll_timeout_atomic(dvfsrc_get_current_opp, dvfsrc, curr,
 					curr->dram_opp >= target->dram_opp &&
 					curr->vcore_opp >= target->vcore_opp,
-					STARTUP_TIME_US, DVFSRC_POLL_TIMEOUT_US);
+					STARTUP_TIME_US, dvfsrc_poll_us(dvfsrc));
 	if (ret < 0) {
 		dev_warn(dvfsrc->dev,
 			 "timeout! target OPP: %u, dram: %d\n", level, curr->dram_opp);
@@ -273,7 +280,7 @@ static int dvfsrc_wait_for_vcore_level_v4(struct mtk_dvfsrc *dvfsrc, u32 level)
 
 	return readx_poll_timeout_atomic(dvfsrc_get_current_target_vcore_gear,
 					 dvfsrc, val, val >= level,
-					 STARTUP_TIME_US, DVFSRC_POLL_TIMEOUT_US);
+					 STARTUP_TIME_US, dvfsrc_poll_us(dvfsrc));
 }
 
 static int dvfsrc_wait_for_opp_level_v4(struct mtk_dvfsrc *dvfsrc, u32 level)
@@ -282,7 +289,7 @@ static int dvfsrc_wait_for_opp_level_v4(struct mtk_dvfsrc *dvfsrc, u32 level)
 
 	return readx_poll_timeout_atomic(dvfsrc_get_current_target_dram_gear,
 					 dvfsrc, val, val >= level,
-					 STARTUP_TIME_US, DVFSRC_POLL_TIMEOUT_US);
+					 STARTUP_TIME_US, dvfsrc_poll_us(dvfsrc));
 }
 
 static u32 dvfsrc_get_target_level_v1(struct mtk_dvfsrc *dvfsrc)
@@ -565,6 +572,8 @@ static void dvfsrc_set_dram_level_v4(struct mtk_dvfsrc *dvfsrc, u32 level)
 int mtk_dvfsrc_send_request(const struct device *dev, u32 cmd, u64 data)
 {
 	struct mtk_dvfsrc *dvfsrc = dev_get_drvdata(dev);
+	s64 waited_us;
+	ktime_t start;
 	bool state;
 	int ret;
 
@@ -609,7 +618,7 @@ int mtk_dvfsrc_send_request(const struct device *dev, u32 cmd, u64 data)
 	udelay(STARTUP_TIME_US);
 
 	ret = readx_poll_timeout_atomic(dvfsrc_is_idle, dvfsrc, state, state,
-					STARTUP_TIME_US, DVFSRC_POLL_TIMEOUT_US);
+					STARTUP_TIME_US, dvfsrc_poll_us(dvfsrc));
 	if (ret < 0) {
 		dev_warn(dvfsrc->dev,
 			 "%d: idle timeout, data: %llu, last: %d -> %d\n", cmd, data,
@@ -618,10 +627,15 @@ int mtk_dvfsrc_send_request(const struct device *dev, u32 cmd, u64 data)
 		return ret;
 	}
 
+	start = ktime_get();
 	if (cmd == MTK_DVFSRC_CMD_OPP)
 		ret = dvfsrc->dvd->wait_for_opp_level(dvfsrc, data);
 	else
 		ret = dvfsrc->dvd->wait_for_vcore_level(dvfsrc, data);
+	waited_us = ktime_us_delta(ktime_get(), start);
+	if (!ret && waited_us > DVFSRC_POLL_TIMEOUT_US)
+		dev_info_ratelimited(dvfsrc->dev, "%d: level %llu took %lld us\n",
+				     cmd, data, waited_us);
 
 	if (ret < 0) {
 		dev_warn(dvfsrc->dev,
@@ -804,6 +818,13 @@ static u32 dvfsrc_get_current_level_mt6765(struct mtk_dvfsrc *dvfsrc)
 }
 
 static const struct dvfsrc_soc_data mt6765_data = {
+	/*
+	 * The SPM firmware switches the DRAM here, and from the lowest level it
+	 * took over 1 ms now and then (the LEVEL register reads no bit until it
+	 * is done): the request failed though the level came, and with it the
+	 * GPU's VCORE vote.
+	 */
+	.poll_timeout_us = 10000,
 	.opps_desc = dvfsrc_opp_mt6765_desc,
 	.num_opps_desc = ARRAY_SIZE(dvfsrc_opp_mt6765_desc),
 	.regs = dvfsrc_mt8183_regs,
