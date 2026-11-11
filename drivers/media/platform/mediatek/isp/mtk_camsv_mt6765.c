@@ -316,10 +316,8 @@ static void mt6765_camsv_stream_on(struct mtk_cam_dev *cam_dev)
 			 MT6765_CAMSV_TG_VF_CON_VFDATA_EN);
 }
 
-static void mt6765_camsv_stream_off(struct mtk_cam_dev *cam_dev)
+static void mt6765_camsv_quiesce(struct mtk_cam_dev *cam_dev)
 {
-	unsigned long flags;
-
 	mt6765_camsv_clr(cam_dev, MT6765_CAMSV_TG_VF_CON,
 			 MT6765_CAMSV_TG_VF_CON_VFDATA_EN);
 	mt6765_camsv_clr(cam_dev, MT6765_CAMSV_TG_SEN_MODE,
@@ -329,6 +327,19 @@ static void mt6765_camsv_stream_off(struct mtk_cam_dev *cam_dev)
 			 MT6765_CAMSV_MODULE_EN_IMGO_EN);
 	mt6765_camsv_clr(cam_dev, MT6765_CAMSV_FBC_IMGO_CTL1,
 			 MT6765_CAMSV_FBC_IMGO_CTL1_FBC_EN);
+}
+
+static void mt6765_camsv_stream_off(struct mtk_cam_dev *cam_dev)
+{
+	unsigned long flags;
+
+	/* No restart from here on, and none left running: it would stream */
+	spin_lock_irqsave(&cam_dev->buf_list_lock, flags);
+	cam_dev->hw_active = false;
+	spin_unlock_irqrestore(&cam_dev->buf_list_lock, flags);
+	cancel_work_sync(&cam_dev->recover_work);
+
+	mt6765_camsv_quiesce(cam_dev);
 
 	spin_lock_irqsave(&cam_dev->buf_list_lock, flags);
 	cam_dev->hw_active = false;
@@ -375,9 +386,8 @@ static irqreturn_t mt6765_camsv_isr(int irq, void *data)
 	 * An IMGO overrun can stay asserted: the status reads back set at once
 	 * and the level interrupt fires without end, 32 million times in the
 	 * 44 seconds before the soft lockup watchdog gave up on the CPU. Errors
-	 * that keep coming with no frame start between them are masked until
-	 * the stream is set up again, which leaves the capture to time out in
-	 * userspace instead of the kernel to panic.
+	 * that keep coming with no frame start between them are masked, and
+	 * the stream is restarted from a work item.
 	 */
 	if (status & (MT6765_CAMSV_IRQ_SOF | MT6765_CAMSV_IRQ_SW_PASS1_DON)) {
 		cam_dev->err_burst = 0;
@@ -386,8 +396,9 @@ static irqreturn_t mt6765_camsv_isr(int irq, void *data)
 		mt6765_camsv_write(cam_dev, MT6765_CAMSV_INT_EN,
 				   MT6765_CAMSV_IRQ_MASK & ~MT6765_CAMSV_IRQ_ERR);
 		dev_err(cam_dev->dev,
-			"error interrupt 0x%08x stuck, masked until the next stream start\n",
+			"error interrupt 0x%08x stuck, masked, restarting the stream\n",
 			status);
+		schedule_work(&cam_dev->recover_work);
 	}
 
 	if (status & MT6765_CAMSV_IRQ_HW_PASS1_DON)
@@ -423,6 +434,32 @@ static irqreturn_t mt6765_camsv_isr(int irq, void *data)
 	}
 
 	return IRQ_HANDLED;
+}
+
+/*
+ * After an IMGO overrun that stays asserted no frame starts are seen any
+ * more: the write DMA does not come back by itself. It is reset and
+ * programmed again, as after a runtime resume, the buffers the hardware held
+ * queued to it anew.
+ */
+static void mt6765_camsv_recover(struct mtk_cam_dev *cam_dev)
+{
+	unsigned long flags;
+	bool active;
+
+	spin_lock_irqsave(&cam_dev->buf_list_lock, flags);
+	active = cam_dev->hw_active;
+	spin_unlock_irqrestore(&cam_dev->buf_list_lock, flags);
+	if (!active)
+		return;
+
+	disable_irq(cam_dev->irq);
+	mt6765_camsv_quiesce(cam_dev);
+	mt6765_camsv_resume(cam_dev);
+	cam_dev->stats.recoveries++;
+	enable_irq(cam_dev->irq);
+
+	dev_warn(cam_dev->dev, "stream restarted\n");
 }
 
 static void mt6765_camsv_dbg_show(struct seq_file *m,
@@ -480,6 +517,7 @@ static const struct mtk_camsv_hw_ops mt6765_camsv_ops = {
 	.stream_on = mt6765_camsv_stream_on,
 	.stream_off = mt6765_camsv_stream_off,
 	.resume = mt6765_camsv_resume,
+	.recover = mt6765_camsv_recover,
 	.isr = mt6765_camsv_isr,
 	.dbg_show = mt6765_camsv_dbg_show,
 };

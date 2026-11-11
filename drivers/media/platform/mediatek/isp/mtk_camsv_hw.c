@@ -350,6 +350,7 @@ static int mtk_camsv_stats_show(struct seq_file *m, void *unused)
 	seq_printf(m, "hw_done:  %u\n", stats->hw_done);
 	seq_printf(m, "done:     %u\n", stats->done);
 	seq_printf(m, "errors:   %u\n", stats->errors);
+	seq_printf(m, "recover:  %u\n", stats->recoveries);
 	seq_printf(m, "last_err: 0x%08x\n", stats->last_err);
 	seq_printf(m, "sequence: %u\n", cam_dev->sequence);
 
@@ -375,6 +376,37 @@ static int mtk_camsv_regs_show(struct seq_file *m, void *unused)
 }
 DEFINE_SHOW_ATTRIBUTE(mtk_camsv_regs);
 
+static void mtk_camsv_recover_work(struct work_struct *work)
+{
+	struct mtk_cam_dev *cam_dev =
+		container_of(work, struct mtk_cam_dev, recover_work);
+
+	if (pm_runtime_get_if_in_use(cam_dev->dev) <= 0)
+		return;
+
+	cam_dev->conf->ops->recover(cam_dev);
+
+	pm_runtime_put(cam_dev->dev);
+}
+
+/* Writing anything restarts the hardware as a stuck error would */
+static ssize_t mtk_camsv_recover_write(struct file *file,
+				       const char __user *buf, size_t count,
+				       loff_t *ppos)
+{
+	struct mtk_cam_dev *cam_dev = file->private_data;
+
+	schedule_work(&cam_dev->recover_work);
+
+	return count;
+}
+
+static const struct file_operations mtk_camsv_recover_fops = {
+	.open = simple_open,
+	.write = mtk_camsv_recover_write,
+	.llseek = noop_llseek,
+};
+
 static void mtk_camsv_debugfs_init(struct mtk_cam_dev *cam_dev)
 {
 	cam_dev->debugfs = debugfs_create_dir(dev_name(cam_dev->dev), NULL);
@@ -383,6 +415,9 @@ static void mtk_camsv_debugfs_init(struct mtk_cam_dev *cam_dev)
 	if (cam_dev->conf->ops->dbg_show)
 		debugfs_create_file("regs", 0400, cam_dev->debugfs, cam_dev,
 				    &mtk_camsv_regs_fops);
+	if (cam_dev->conf->ops->recover)
+		debugfs_create_file("recover", 0200, cam_dev->debugfs, cam_dev,
+				    &mtk_camsv_recover_fops);
 }
 
 /* -----------------------------------------------------------------------------
@@ -559,6 +594,7 @@ static int mtk_camsv_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
+	INIT_WORK(&cam_dev->recover_work, mtk_camsv_recover_work);
 	mtk_camsv_debugfs_init(cam_dev);
 
 	return 0;
@@ -570,6 +606,7 @@ static void mtk_camsv_remove(struct platform_device *pdev)
 	struct mtk_cam_dev *cam_dev = dev_get_drvdata(dev);
 
 	debugfs_remove_recursive(cam_dev->debugfs);
+	cancel_work_sync(&cam_dev->recover_work);
 	mtk_cam_dev_cleanup(cam_dev);
 	pm_runtime_dont_use_autosuspend(cam_dev->dev);
 	pm_runtime_disable(cam_dev->dev);

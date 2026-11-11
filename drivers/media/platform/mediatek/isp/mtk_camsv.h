@@ -14,6 +14,7 @@
 #include <linux/kernel.h>
 #include <linux/pm_runtime.h>
 #include <linux/videodev2.h>
+#include <linux/workqueue.h>
 #include <media/media-entity.h>
 #include <media/v4l2-subdev.h>
 #include <media/videobuf2-core.h>
@@ -104,6 +105,8 @@ struct seq_file;
  * @stream_on: Enable the CMOS and VF data path
  * @stream_off: Stop the data path. Called powered
  * @resume: Restore the streaming state after a runtime resume while streaming
+ * @recover: Optional, restart a stream the hardware stopped delivering.
+ *	     Called powered, from a work item
  * @isr: Interrupt handler, data is the struct mtk_cam_dev
  * @dbg_show: Optional, dump hardware state to debugfs. Called powered
  */
@@ -119,6 +122,7 @@ struct mtk_camsv_hw_ops {
 	void (*stream_on)(struct mtk_cam_dev *cam_dev);
 	void (*stream_off)(struct mtk_cam_dev *cam_dev);
 	void (*resume)(struct mtk_cam_dev *cam_dev);
+	void (*recover)(struct mtk_cam_dev *cam_dev);
 	irq_handler_t isr;
 	void (*dbg_show)(struct seq_file *m, struct mtk_cam_dev *cam_dev);
 };
@@ -130,6 +134,7 @@ struct mtk_camsv_hw_ops {
  * @hw_done: Number of frames ended by the hardware, dropped or not
  * @done: Number of frames written to a buffer
  * @errors: Number of error interrupts
+ * @recoveries: Number of restarts after a stuck error
  * @last_err: Last error interrupt status
  */
 struct mtk_cam_stats {
@@ -138,6 +143,7 @@ struct mtk_cam_stats {
 	unsigned int hw_done;
 	unsigned int done;
 	unsigned int errors;
+	unsigned int recoveries;
 	u32 last_err;
 };
 
@@ -165,6 +171,7 @@ struct mtk_cam_stats {
  * @hw_num_slots: Number of valid entries in @hw_slots (MT6765).
  * @hw_active: The hardware is streaming and may consume buffers (MT6765).
  * @err_burst: Error interrupts since the last frame start or end (MT6765).
+ * @recover_work: Restarts the hardware after an error it does not leave.
  * @scratch: CPU cookie of the buffer frames are dropped into (MT6765).
  * @scratch_daddr: DMA address of @scratch.
  * @scratch_size: Size of @scratch.
@@ -195,6 +202,7 @@ struct mtk_cam_dev {
 	unsigned int hw_num_slots;
 	bool hw_active;
 	unsigned int err_burst;
+	struct work_struct recover_work;
 	void *scratch;
 	dma_addr_t scratch_daddr;
 	size_t scratch_size;
