@@ -24,6 +24,9 @@
 #define SMI_L1LEN			0x100
 
 #define SMI_L1_ARB			0x200
+#define SMI_L1ARB(master)		(0x104 + ((master) << 2))
+#define SMI_WRR_REG0			0x228
+#define SMI_RWULTRA_WRR(master, rw)	(0x308 + (((master) - 1) << 4) + ((rw) << 3))
 #define SMI_BUS_SEL			0x220
 #define SMI_BUS_LARB_SHIFT(larbid)	((larbid) << 1)
 /* All are MMU0 defaultly. Only specialize mmu1 here. */
@@ -85,7 +88,7 @@
 	(_id << 8 | _id << 10 | _id << 12 | _id << 14);	\
 })
 
-#define SMI_COMMON_INIT_REGS_NR		6
+#define SMI_COMMON_INIT_REGS_NR		12
 #define SMI_LARB_PORT_NR_MAX		32
 
 #define MTK_SMI_FLAG_THRT_UPDATE	BIT(0)
@@ -134,6 +137,7 @@ struct mtk_smi_larb_gen {
 	unsigned int			larb_direct_to_common_mask;
 	unsigned int			flags_general;
 	const u8			(*ostd)[SMI_LARB_PORT_NR_MAX];
+	u32				cmd_thrt;	/* SMI_LARB_CMD_THRT_CON, if set */
 };
 
 struct mtk_smi {
@@ -253,6 +257,10 @@ static int mtk_smi_larb_config_port_gen2_general(struct device *dev)
 		reg |= SMI_LARB_THRT_RD_NU_LMT;
 		writel_relaxed(reg, larb->base + SMI_LARB_CMD_THRT_CON);
 	}
+
+	if (larb->larb_gen->cmd_thrt)
+		writel_relaxed(larb->larb_gen->cmd_thrt,
+			       larb->base + SMI_LARB_CMD_THRT_CON);
 
 	if (MTK_SMI_CAPS(flags_general, MTK_SMI_FLAG_SW_FLAG))
 		writel_relaxed(SMI_LARB_SW_FLAG_1, larb->base + SMI_LARB_SW_FLAG);
@@ -491,8 +499,26 @@ static const struct mtk_smi_larb_gen mtk_smi_larb_mt2712 = {
 	.larb_direct_to_common_mask = BIT(8) | BIT(9),      /* bdpsys */
 };
 
+/*
+ * The outstanding-command limits the stock kernel programs (smi_conf.h,
+ * scenario INIT): larb0 display and MDP, larb1 codec, larb2 imgsys, larb3
+ * camsys. Left at reset the ports are not limited against each other, and
+ * the CAMSV write DMA (larb3 port 12) lost the bus for long enough under
+ * memory load to overrun its FIFO.
+ */
+static const u8 mtk_smi_larb_mt6765_ostd[][SMI_LARB_PORT_NR_MAX] = {
+	[0] = {0x1f, 0x1f, 0x1f, 0x7, 0x7, 0x4, 0x4, 0x1f,},
+	[1] = {0x3, 0x1, 0x1, 0x1, 0x1, 0x5, 0x3, 0x1, 0x1, 0x1, 0x6,},
+	[2] = {0xc, 0x1, 0x4, 0x4, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1,},
+	[3] = {0x16, 0x14, 0x2, 0x2, 0x2, 0x2, 0x4, 0x2, 0x2, 0x2, 0x2, 0x2,
+	       0x4, 0x4, 0x4, 0x2, 0x2, 0x2, 0x2, 0x2, 0x2,},
+};
+
 static const struct mtk_smi_larb_gen mtk_smi_larb_mt6765 = {
 	.config_port = mtk_smi_larb_config_port_gen2_general,
+	.flags_general = MTK_SMI_FLAG_SW_FLAG,
+	.ostd = mtk_smi_larb_mt6765_ostd,
+	.cmd_thrt = 0x370223,
 };
 
 static const struct mtk_smi_larb_gen mtk_smi_larb_mt6779 = {
@@ -768,9 +794,30 @@ static const struct mtk_smi_common_plat mtk_smi_common_gen2 = {
 	.type	  = MTK_SMI_GEN2,
 };
 
+/*
+ * The stock kernel's common arbiter setup (smi_conf.h: the conf pairs and
+ * scenario INIT): the weighted round robin, the ultra weights and the
+ * bandwidth limits of the display (larb0) and imgsys (larb2) masters.
+ */
+static const struct mtk_smi_reg_pair mtk_smi_common_mt6765_init[SMI_COMMON_INIT_REGS_NR] = {
+	{SMI_L1LEN, 0xb},
+	{SMI_WRR_REG0, 0x30c30c},
+	{SMI_DCM, 0x4fd},
+	{SMI_RWULTRA_WRR(1, 0), 0x30c30c},
+	{SMI_RWULTRA_WRR(1, 1), 0x30c30c},
+	{SMI_RWULTRA_WRR(2, 0), 0x30c30c},
+	{SMI_RWULTRA_WRR(2, 1), 0x30c30c},
+	{SMI_DUMMY, 0x1},
+	{SMI_L1ARB(0), 0x1ba5},
+	{SMI_L1ARB(1), 0x1000},
+	{SMI_L1ARB(2), 0x15d3},
+	{SMI_L1ARB(3), 0x1000},
+};
+
 static const struct mtk_smi_common_plat mtk_smi_common_mt6765 = {
 	.type	  = MTK_SMI_GEN2,
 	.has_gals = true,
+	.init	  = mtk_smi_common_mt6765_init,
 	.bus_sel  = F_MMU1_LARB(1) | F_MMU1_LARB(3),
 };
 
