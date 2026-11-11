@@ -164,6 +164,7 @@ struct mtk_cam_stats {
  *	      scratch buffer (MT6765).
  * @hw_num_slots: Number of valid entries in @hw_slots (MT6765).
  * @hw_active: The hardware is streaming and may consume buffers (MT6765).
+ * @err_burst: Error interrupts since the last frame start or end (MT6765).
  * @scratch: CPU cookie of the buffer frames are dropped into (MT6765).
  * @scratch_daddr: DMA address of @scratch.
  * @scratch_size: Size of @scratch.
@@ -193,6 +194,7 @@ struct mtk_cam_dev {
 	struct mtk_cam_dev_buffer *hw_slots[2];
 	unsigned int hw_num_slots;
 	bool hw_active;
+	unsigned int err_burst;
 	void *scratch;
 	dma_addr_t scratch_daddr;
 	size_t scratch_size;

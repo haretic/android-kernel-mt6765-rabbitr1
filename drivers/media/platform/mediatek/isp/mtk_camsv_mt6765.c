@@ -112,6 +112,9 @@
 	(MT6765_CAMSV_IRQ_TG_ERR | MT6765_CAMSV_IRQ_TG_GBERR | \
 	 MT6765_CAMSV_IRQ_IMGO_ERR | MT6765_CAMSV_IRQ_IMGO_OVERR)
 
+/* Error interrupts in a row, with no frame between, before they are masked */
+#define MT6765_CAMSV_ERR_BURST_MAX		64
+
 #define MT6765_CAMSV_IRQ_MASK \
 	(MT6765_CAMSV_IRQ_SOF | MT6765_CAMSV_IRQ_HW_PASS1_DON | \
 	 MT6765_CAMSV_IRQ_SW_PASS1_DON | MT6765_CAMSV_IRQ_ERR)
@@ -242,6 +245,7 @@ static void mt6765_camsv_setup(struct mtk_cam_dev *cam_dev,
 
 	/* Reading the status clears it */
 	mt6765_camsv_read(cam_dev, MT6765_CAMSV_INT_STATUS);
+	cam_dev->err_burst = 0;
 	mt6765_camsv_write(cam_dev, MT6765_CAMSV_INT_EN, MT6765_CAMSV_IRQ_MASK);
 
 	mt6765_camsv_write(cam_dev, MT6765_CAMSV_MODULE_EN,
@@ -365,6 +369,25 @@ static irqreturn_t mt6765_camsv_isr(int irq, void *data)
 				    status,
 				    mt6765_camsv_read(cam_dev, MT6765_CAMSV_TG_FRMSIZE_ST),
 				    mt6765_camsv_read(cam_dev, MT6765_CAMSV_IMGO_ERR_STAT));
+	}
+
+	/*
+	 * An IMGO overrun can stay asserted: the status reads back set at once
+	 * and the level interrupt fires without end, 32 million times in the
+	 * 44 seconds before the soft lockup watchdog gave up on the CPU. Errors
+	 * that keep coming with no frame start between them are masked until
+	 * the stream is set up again, which leaves the capture to time out in
+	 * userspace instead of the kernel to panic.
+	 */
+	if (status & (MT6765_CAMSV_IRQ_SOF | MT6765_CAMSV_IRQ_SW_PASS1_DON)) {
+		cam_dev->err_burst = 0;
+	} else if ((status & MT6765_CAMSV_IRQ_ERR) &&
+		   ++cam_dev->err_burst == MT6765_CAMSV_ERR_BURST_MAX) {
+		mt6765_camsv_write(cam_dev, MT6765_CAMSV_INT_EN,
+				   MT6765_CAMSV_IRQ_MASK & ~MT6765_CAMSV_IRQ_ERR);
+		dev_err(cam_dev->dev,
+			"error interrupt 0x%08x stuck, masked until the next stream start\n",
+			status);
 	}
 
 	if (status & MT6765_CAMSV_IRQ_HW_PASS1_DON)
