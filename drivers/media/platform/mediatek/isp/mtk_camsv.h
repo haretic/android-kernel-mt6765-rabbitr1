@@ -172,6 +172,8 @@ struct mtk_cam_stats {
  * @hw_active: The hardware is streaming and may consume buffers (MT6765).
  * @err_burst: Error interrupts since the last frame start or end (MT6765).
  * @recover_work: Restarts the hardware after an error it does not leave.
+ * @recover_done: Frames completed when the hardware was last restarted.
+ * @recover_fails: Restarts in a row that no frame followed.
  * @scratch: CPU cookie of the buffer frames are dropped into (MT6765).
  * @scratch_daddr: DMA address of @scratch.
  * @scratch_size: Size of @scratch.
@@ -203,6 +205,8 @@ struct mtk_cam_dev {
 	bool hw_active;
 	unsigned int err_burst;
 	struct work_struct recover_work;
+	unsigned int recover_done;
+	unsigned int recover_fails;
 	void *scratch;
 	dma_addr_t scratch_daddr;
 	size_t scratch_size;

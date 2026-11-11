@@ -114,6 +114,8 @@
 
 /* Error interrupts in a row, with no frame between, before they are masked */
 #define MT6765_CAMSV_ERR_BURST_MAX		64
+/* Restarts in a row with no frame after them before the stream is left stopped */
+#define MT6765_CAMSV_RECOVER_MAX		3
 
 #define MT6765_CAMSV_IRQ_MASK \
 	(MT6765_CAMSV_IRQ_SOF | MT6765_CAMSV_IRQ_HW_PASS1_DON | \
@@ -344,6 +346,7 @@ static void mt6765_camsv_stream_off(struct mtk_cam_dev *cam_dev)
 	spin_lock_irqsave(&cam_dev->buf_list_lock, flags);
 	cam_dev->hw_active = false;
 	cam_dev->hw_num_slots = 0;
+	cam_dev->recover_fails = 0;
 	spin_unlock_irqrestore(&cam_dev->buf_list_lock, flags);
 
 	synchronize_irq(cam_dev->irq);
@@ -395,9 +398,9 @@ static irqreturn_t mt6765_camsv_isr(int irq, void *data)
 		   ++cam_dev->err_burst == MT6765_CAMSV_ERR_BURST_MAX) {
 		mt6765_camsv_write(cam_dev, MT6765_CAMSV_INT_EN,
 				   MT6765_CAMSV_IRQ_MASK & ~MT6765_CAMSV_IRQ_ERR);
-		dev_err(cam_dev->dev,
-			"error interrupt 0x%08x stuck, masked, restarting the stream\n",
-			status);
+		dev_err_ratelimited(cam_dev->dev,
+				    "error interrupt 0x%08x stuck, masked, restarting the stream\n",
+				    status);
 		schedule_work(&cam_dev->recover_work);
 	}
 
@@ -455,11 +458,29 @@ static void mt6765_camsv_recover(struct mtk_cam_dev *cam_dev)
 
 	disable_irq(cam_dev->irq);
 	mt6765_camsv_quiesce(cam_dev);
+
+	/*
+	 * A restart that no frame follows did not help, and the error comes
+	 * back with the first line written: restarting over and over only
+	 * keeps a CPU and the console busy. The stream is left stopped, for
+	 * the capture to time out in userspace.
+	 */
+	if (cam_dev->stats.done != cam_dev->recover_done)
+		cam_dev->recover_fails = 0;
+	cam_dev->recover_done = cam_dev->stats.done;
+	if (cam_dev->recover_fails++ >= MT6765_CAMSV_RECOVER_MAX) {
+		enable_irq(cam_dev->irq);
+		dev_err(cam_dev->dev,
+			"no frame after %u restarts, stream left stopped\n",
+			MT6765_CAMSV_RECOVER_MAX);
+		return;
+	}
+
 	mt6765_camsv_resume(cam_dev);
 	cam_dev->stats.recoveries++;
 	enable_irq(cam_dev->irq);
 
-	dev_warn(cam_dev->dev, "stream restarted\n");
+	dev_warn_ratelimited(cam_dev->dev, "stream restarted\n");
 }
 
 static void mt6765_camsv_dbg_show(struct seq_file *m,
