@@ -941,6 +941,11 @@ static int mtk_axi_remove(IN struct platform_device *pdev)
 
 #if AXI_CFG_PREALLOC_MEMORY_BUFFER
 	axiFreeHifMem(pdev);
+	/*
+	 * The device outlives the driver and keeps its coherent pool:
+	 * without this the next probe finds it taken and fails with -EBUSY.
+	 */
+	of_reserved_mem_device_release(&pdev->dev);
 #endif
 
 #if CFG_MTK_ANDROID_WMT
