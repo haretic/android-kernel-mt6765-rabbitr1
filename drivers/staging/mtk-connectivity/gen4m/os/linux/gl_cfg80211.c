@@ -279,9 +279,7 @@ mtk_cfg80211_add_key(struct wiphy *wiphy,
 			rKey.ucCipher = CIPHER_SUITE_GCMP_256;
 			break;
 		case WLAN_CIPHER_SUITE_BIP_GMAC_256:
-			DBGLOG(RSN, INFO,
-				"[TODO] Set BIP-GMAC-256, SW should handle it ...\n");
-			return 0;
+			return -EOPNOTSUPP;
 		default:
 			ASSERT(FALSE);
 		}
