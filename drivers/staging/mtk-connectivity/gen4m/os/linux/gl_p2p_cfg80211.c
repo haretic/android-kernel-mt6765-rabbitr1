@@ -2388,7 +2388,9 @@ int mtk_p2p_cfg80211_remain_on_channel(struct wiphy *wiphy,
 
 		prGlueP2pDevInfo = prGlueInfo->prP2PDevInfo;
 
+#if KERNEL_VERSION(7, 3, 0) > CFG80211_VERSION_CODE
 		*cookie = prGlueP2pDevInfo->u8Cookie++;
+#endif
 
 		prMsgChnlReq = cnmMemAlloc(prGlueInfo->prAdapter,
 			RAM_TYPE_MSG, sizeof(struct MSG_P2P_CHNL_REQUEST));
@@ -2503,7 +2505,9 @@ int _mtk_p2p_cfg80211_mgmt_tx(struct wiphy *wiphy,
 			}
 		}
 
+#if KERNEL_VERSION(7, 3, 0) > CFG80211_VERSION_CODE
 		*cookie = prGlueInfo->prP2PDevInfo->u8Cookie++;
+#endif
 
 		prMsgTxReq = cnmMemAlloc(prGlueInfo->prAdapter,
 				RAM_TYPE_MSG,

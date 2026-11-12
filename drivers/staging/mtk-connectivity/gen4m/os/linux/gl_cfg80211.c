@@ -2493,7 +2493,9 @@ int mtk_cfg80211_remain_on_channel(struct wiphy *wiphy,
 		if (!IS_BSS_INDEX_VALID(ucBssIndex))
 			return -EINVAL;
 
+#if KERNEL_VERSION(7, 3, 0) > CFG80211_VERSION_CODE
 		*cookie = prGlueInfo->u8Cookie++;
+#endif
 
 		prMsgChnlReq = cnmMemAlloc(prGlueInfo->prAdapter,
 			   RAM_TYPE_MSG, sizeof(struct MSG_REMAIN_ON_CHANNEL));
@@ -2621,7 +2623,9 @@ int _mtk_cfg80211_mgmt_tx(struct wiphy *wiphy,
 		WIPHY_PRIV(wiphy, prGlueInfo);
 		ASSERT(prGlueInfo);
 
+#if KERNEL_VERSION(7, 3, 0) > CFG80211_VERSION_CODE
 		*cookie = prGlueInfo->u8Cookie++;
+#endif
 
 		prMsgTxReq = cnmMemAlloc(prGlueInfo->prAdapter,
 				RAM_TYPE_MSG,
