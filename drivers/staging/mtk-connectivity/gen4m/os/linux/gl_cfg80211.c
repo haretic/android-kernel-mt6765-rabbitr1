@@ -1381,7 +1381,13 @@ int mtk_cfg80211_connect(struct wiphy *wiphy,
 
 	if (sme->crypto.wpa_versions & NL80211_WPA_VERSION_1)
 		prWpaInfo->u4WpaVersion = IW_AUTH_WPA_VERSION_WPA;
-	else if (sme->crypto.wpa_versions & NL80211_WPA_VERSION_2)
+	/*
+	 * wpa_supplicant asks for SAE with NL80211_WPA_VERSION_3 alone. It is RSN
+	 * like WPA2: left as "disabled", the authentication mode below fell back to
+	 * shared key, then open system, and the AP refused the SAE association.
+	 */
+	else if (sme->crypto.wpa_versions &
+		 (NL80211_WPA_VERSION_2 | NL80211_WPA_VERSION_3))
 		prWpaInfo->u4WpaVersion =
 			IW_AUTH_WPA_VERSION_WPA2;
 	else
