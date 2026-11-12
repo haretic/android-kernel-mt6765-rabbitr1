@@ -1816,8 +1816,12 @@ kalIndicateStatusAndComplete(IN struct GLUE_INFO
 					cfg80211_put_bss(
 						wlanGetWiphy(),
 						bss_others);
-				} else
+				} else {
+					if (bss_others)
+						cfg80211_put_bss(wlanGetWiphy(),
+							bss_others);
 					break;
+				}
 			}
 
 			/* CFG80211 Indication */
@@ -1874,6 +1878,9 @@ kalIndicateStatusAndComplete(IN struct GLUE_INFO
 					prConnSettings->u4RspIeLength,
 					WLAN_STATUS_SUCCESS,
 					GFP_KERNEL);
+				/* connect_result does not consume our local ref. */
+				if (bss)
+					cfg80211_put_bss(wlanGetWiphy(), bss);
 			}
 
 			/* Check SAP channel */
