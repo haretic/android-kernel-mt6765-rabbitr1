@@ -2281,14 +2281,16 @@ kalIndicateStatusAndComplete(IN struct GLUE_INFO
 				prBssDesc->u2JoinStatus,
 				GFP_KERNEL);
 		else
-			cfg80211_connect_result(prDevHandler,
+			cfg80211_connect_timeout(prDevHandler,
 				arBssid,
 				prConnSettings->aucReqIe,
 				prConnSettings->u4ReqIeLength,
-				prConnSettings->aucRspIe,
-				prConnSettings->u4RspIeLength,
-				WLAN_STATUS_AUTH_TIMEOUT,
-				GFP_KERNEL);
+				GFP_KERNEL,
+				!prBssDesc ? NL80211_TIMEOUT_UNSPECIFIED :
+				prBssDesc->u2JoinStatus == STATUS_CODE_AUTH_TIMEOUT ?
+				NL80211_TIMEOUT_AUTH :
+				prBssDesc->u2JoinStatus == STATUS_CODE_ASSOC_TIMEOUT ?
+				NL80211_TIMEOUT_ASSOC : NL80211_TIMEOUT_UNSPECIFIED);
 
 		prFtIEs = aisGetFtIe(prAdapter, ucBssIndex);
 		if (prFtIEs) {
