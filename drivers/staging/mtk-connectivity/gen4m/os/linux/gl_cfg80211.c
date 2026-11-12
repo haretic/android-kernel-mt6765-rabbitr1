@@ -1906,16 +1906,17 @@ int mtk_cfg80211_external_auth(struct wiphy *wiphy,
 
 	WIPHY_PRIV(wiphy, prGlueInfo);
 	if (!prGlueInfo)
-		DBGLOG(REQ, WARN,
-		       "SAE-confirm failed with invalid prGlueInfo\n");
+		return -EFAULT;
 
 	COPY_MAC_ADDR(auth.bssid, params->bssid);
 	auth.status = params->status;
 	auth.ucBssIdx = wlanGetBssIdx(ndev);
 	rStatus = kalIoctl(prGlueInfo, wlanoidExternalAuthDone, (void *)&auth,
 			   sizeof(auth), FALSE, FALSE, FALSE, &u4BufLen);
-	if (rStatus != WLAN_STATUS_SUCCESS)
-		DBGLOG(OID, INFO, "SAE-confirm failed with: %d\n", rStatus);
+	if (rStatus != WLAN_STATUS_SUCCESS) {
+		DBGLOG(OID, WARN, "SAE-confirm failed with: %d\n", rStatus);
+		return -EIO;
+	}
 
 	return 0;
 }

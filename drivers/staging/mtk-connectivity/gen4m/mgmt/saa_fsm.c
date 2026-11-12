@@ -328,7 +328,15 @@ saaFsmSteps(IN struct ADAPTER *prAdapter,
 
 #if CFG_SUPPORT_WPA3
 		case SAA_STATE_EXTERNAL_AUTH:
-			kalExternalAuthRequest(prAdapter, prStaRec->ucBssIndex);
+			rStatus = kalExternalAuthRequest(prAdapter,
+				prStaRec->ucBssIndex);
+			if (rStatus) {
+				DBGLOG(SAA, WARN, "external auth request failed: %d\n",
+					(int)rStatus);
+				prStaRec->u2StatusCode = STATUS_CODE_UNSPECIFIED_FAILURE;
+				eNextState = AA_STATE_IDLE;
+				fgIsTransition = TRUE;
+			}
 			break;
 #endif
 
@@ -1698,10 +1706,11 @@ void saaFsmRunEventExternalAuthDone(IN struct ADAPTER *prAdapter,
 
 	cnmMemFree(prAdapter, prMsgHdr);
 
-	if (status != WLAN_STATUS_SUCCESS)
+	if (status != WLAN_STATUS_SUCCESS) {
+		prStaRec->u2StatusCode = status;
 		saaFsmSteps(prAdapter, prStaRec, AA_STATE_IDLE,
 			    (struct SW_RFB *)NULL);
-	else if (prStaRec->eAuthAssocState != SAA_STATE_EXTERNAL_AUTH)
+	} else if (prStaRec->eAuthAssocState != SAA_STATE_EXTERNAL_AUTH)
 		DBGLOG(SAA, WARN,
 		       "Receive External Auth DONE at wrong state\n");
 	else

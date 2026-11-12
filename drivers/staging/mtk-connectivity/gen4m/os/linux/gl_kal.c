@@ -9461,7 +9461,7 @@ int8_t atoi(uint8_t ch)
 int kalExternalAuthRequest(IN struct ADAPTER *prAdapter,
 				   IN uint8_t uBssIndex)
 {
-	struct cfg80211_external_auth_params params;
+	struct cfg80211_external_auth_params params = {0};
 	struct AIS_FSM_INFO *prAisFsmInfo = NULL;
 	struct BSS_DESC *prBssDesc = NULL;
 	struct net_device *ndev = NULL;
@@ -9506,9 +9506,9 @@ int kalExternalAuthRequest(IN struct ADAPTER *prAdapter,
 	COPY_MAC_ADDR(params.bssid, prBssDesc->aucBSSID);
 	COPY_SSID(params.ssid.ssid, params.ssid.ssid_len,
 		  prBssDesc->aucSSID, prBssDesc->ucSSIDLen);
-	params.key_mgmt_suite = RSN_AKM_SUITE_SAE;
-	DBGLOG(AIS, INFO, "[WPA3] "MACSTR" %s %d %d %02x-%02x-%02x-%02x",
-	       MAC2STR(params.bssid), params.ssid.ssid,
+	params.key_mgmt_suite = WLAN_AKM_SUITE_SAE;
+	DBGLOG(AIS, INFO, "[WPA3] "MACSTR" %.*s %d %d %02x-%02x-%02x-%02x",
+	       MAC2STR(params.bssid), (int)params.ssid.ssid_len, params.ssid.ssid,
 	       params.ssid.ssid_len, params.action,
 	       (uint8_t) (params.key_mgmt_suite & 0x000000FF),
 	       (uint8_t) ((params.key_mgmt_suite >> 8) & 0x000000FF),
