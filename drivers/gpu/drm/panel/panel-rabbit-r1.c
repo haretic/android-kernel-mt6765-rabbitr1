@@ -9,11 +9,13 @@
  * Panel supply routing and cold power-on sequencing still need board evidence.
  */
 
+#include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/property.h>
+#include <linux/seq_file.h>
 
 #include <drm/drm_mipi_dsi.h>
 #include <drm/drm_modes.h>
@@ -26,6 +28,19 @@ struct r1_panel {
 	u32 max_refresh;
 	/* LK left the panel initialised and showing its splash */
 	bool from_lk;
+	/* Accessed under panel.follower_lock, like the panel callbacks. */
+	u32 prepare_calls;
+	u32 enable_calls;
+	u32 disable_calls;
+	u32 unprepare_calls;
+	u32 handoffs;
+	u32 init_attempts;
+	u32 init_successes;
+	u32 init_writes;
+	int last_prepare_error;
+	int last_failed_command;
+	int last_display_off_error;
+	int last_sleep_in_error;
 };
 
 struct r1_panel_command {
@@ -90,7 +105,13 @@ static const struct r1_panel_command r1_panel_init[] = {
 	{ .len = 2, .data = { 0x29, 0x00 } },
 };
 
-static bool lk_handoff = true;
+/*
+ * Off by default. The takeover keeps the panel as LK initialised it while the
+ * DSI link restarts at our rate, and nothing the panel reports tells whether
+ * it still shows a picture afterwards: the r1 has sat blank with the backlight
+ * on for a whole boot with power mode 0x9c, until the first reset and init.
+ */
+static bool lk_handoff;
 module_param(lk_handoff, bool, 0444);
 MODULE_PARM_DESC(lk_handoff, "Take over the panel LK initialised instead of resetting it");
 
@@ -118,7 +139,13 @@ static int r1_panel_prepare(struct drm_panel *panel)
 {
 	struct r1_panel *ctx = to_r1_panel(panel);
 	unsigned int i;
+	u8 mode;
 	int ret;
+
+	ctx->prepare_calls++;
+	ctx->last_prepare_error = 0;
+	ctx->last_failed_command = -1;
+	ctx->init_writes = 0;
 
 	/*
 	 * LK sent this same RabbitOS sequence and left the panel in sleep-out,
@@ -127,7 +154,27 @@ static int r1_panel_prepare(struct drm_panel *panel)
 	 */
 	if (ctx->from_lk) {
 		ctx->from_lk = false;
-		return gpiod_direction_output(ctx->reset, 0);
+		ret = gpiod_direction_output(ctx->reset, 0);
+		ctx->last_prepare_error = ret;
+		if (ret) {
+			dev_err(&ctx->dsi->dev, "Cannot release panel reset: %d\n", ret);
+			return ret;
+		}
+
+		/* A released reset pin alone does not establish sleep-out/display-on. */
+		ret = mipi_dsi_dcs_get_power_mode(ctx->dsi, &mode);
+		if (!ret && (mode & (BIT(4) | BIT(2))) == (BIT(4) | BIT(2))) {
+			ctx->handoffs++;
+			dev_info(&ctx->dsi->dev, "LK handoff verified: power mode 0x%02x\n",
+				 mode);
+			return 0;
+		}
+		if (ret)
+			dev_warn(&ctx->dsi->dev, "LK power-mode read failed: %d; resetting panel\n",
+				 ret);
+		else
+			dev_warn(&ctx->dsi->dev, "LK power mode 0x%02x; resetting panel\n", mode);
+		/* Cold prepare below also runs when the host rejected the read. */
 	}
 
 	/*
@@ -137,9 +184,12 @@ static int r1_panel_prepare(struct drm_panel *panel)
 	 * 50/50/150 ms plus another 120 ms and 60 ms after display-on:
 	 * 550 ms of every boot and screen-on.
 	 */
+	ctx->init_attempts++;
 	ret = gpiod_direction_output(ctx->reset, 1);
-	if (ret)
+	if (ret) {
+		ctx->last_prepare_error = ret;
 		return ret;
+	}
 	msleep(20);
 	gpiod_set_value_cansleep(ctx->reset, 0);
 	msleep(150);
@@ -153,13 +203,17 @@ static int r1_panel_prepare(struct drm_panel *panel)
 		}
 		ret = r1_panel_write(ctx, cmd->data, cmd->len);
 		if (ret) {
+			ctx->last_prepare_error = ret;
+			ctx->last_failed_command = i;
 			dev_err(&ctx->dsi->dev, "Panel command %u failed: %d\n", i, ret);
 			gpiod_set_value_cansleep(ctx->reset, 1);
 			msleep(120);
 			return ret;
 		}
+		ctx->init_writes++;
 	}
 
+	ctx->init_successes++;
 	return 0;
 }
 
@@ -170,9 +224,12 @@ static int r1_panel_unprepare(struct drm_panel *panel)
 	static const u8 sleep_in[] = { 0x10 };
 	int ret, sleep_ret;
 
+	ctx->unprepare_calls++;
 	ret = r1_panel_write(ctx, display_off, sizeof(display_off));
+	ctx->last_display_off_error = ret;
 	/* Still attempt sleep and reset when display-off fails. */
 	sleep_ret = r1_panel_write(ctx, sleep_in, sizeof(sleep_in));
+	ctx->last_sleep_in_error = sleep_ret;
 	/* Sleep-in takes 120 ms; so does a reset that starts in sleep-out. */
 	msleep(120);
 	gpiod_set_value_cansleep(ctx->reset, 1);
@@ -186,8 +243,76 @@ static int r1_panel_unprepare(struct drm_panel *panel)
 
 static int r1_panel_enable(struct drm_panel *panel)
 {
+	struct r1_panel *ctx = to_r1_panel(panel);
+
+	ctx->enable_calls++;
 	/* The panel core can call enable after a failed prepare. */
 	return panel->prepared ? 0 : -EPERM;
+}
+
+static int r1_panel_disable(struct drm_panel *panel)
+{
+	struct r1_panel *ctx = to_r1_panel(panel);
+
+	ctx->disable_calls++;
+	return 0;
+}
+
+static int r1_panel_state_show(struct seq_file *s, void *unused)
+{
+	struct drm_panel *panel = s->private;
+	struct r1_panel *ctx = to_r1_panel(panel);
+
+	mutex_lock(&panel->follower_lock);
+	seq_printf(s, "prepared=%u enabled=%u handoff_pending=%u reset_logical=%d\n",
+		   panel->prepared, panel->enabled, ctx->from_lk,
+		   gpiod_get_value_cansleep(ctx->reset));
+	seq_printf(s, "prepare=%u enable=%u disable=%u unprepare=%u handoffs=%u\n",
+		   ctx->prepare_calls, ctx->enable_calls, ctx->disable_calls,
+		   ctx->unprepare_calls, ctx->handoffs);
+	seq_printf(s, "init_attempts=%u init_successes=%u init_writes=%u "
+		   "last_prepare_error=%d last_failed_command=%d\n",
+		   ctx->init_attempts, ctx->init_successes, ctx->init_writes,
+		   ctx->last_prepare_error, ctx->last_failed_command);
+	seq_printf(s, "last_display_off_error=%d last_sleep_in_error=%d\n",
+		   ctx->last_display_off_error, ctx->last_sleep_in_error);
+	mutex_unlock(&panel->follower_lock);
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(r1_panel_state);
+
+/* An explicit read pauses video for a BTA; the passive state file does not. */
+static int r1_panel_power_mode_show(struct seq_file *s, void *unused)
+{
+	struct drm_panel *panel = s->private;
+	struct r1_panel *ctx = to_r1_panel(panel);
+	u8 mode = 0;
+	int ret;
+
+	mutex_lock(&panel->follower_lock);
+	if (!panel->prepared || !panel->enabled) {
+		seq_puts(s, "status=unavailable reason=panel_inactive\n");
+		goto out;
+	}
+	ret = mipi_dsi_dcs_get_power_mode(ctx->dsi, &mode);
+	if (ret) {
+		seq_printf(s, "status=error errno=%d\n", ret);
+		goto out;
+	}
+	/* DCS controller state, not proof that pixels reach the glass. */
+	seq_printf(s, "status=ok raw=0x%02x sleep_out=%u display_on=%u normal_mode=%u\n",
+		   mode, !!(mode & BIT(4)), !!(mode & BIT(2)), !!(mode & BIT(3)));
+out:
+	mutex_unlock(&panel->follower_lock);
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(r1_panel_power_mode);
+
+static void r1_panel_debugfs_init(struct drm_panel *panel, struct dentry *root)
+{
+	debugfs_create_file("r1_state", 0400, root, panel, &r1_panel_state_fops);
+	debugfs_create_file("r1_power_mode", 0400, root, panel,
+			    &r1_panel_power_mode_fops);
 }
 
 static const struct drm_display_mode r1_panel_mode = {
@@ -262,8 +387,10 @@ static int r1_panel_get_modes(struct drm_panel *panel,
 static const struct drm_panel_funcs r1_panel_funcs = {
 	.prepare = r1_panel_prepare,
 	.enable = r1_panel_enable,
+	.disable = r1_panel_disable,
 	.unprepare = r1_panel_unprepare,
 	.get_modes = r1_panel_get_modes,
+	.debugfs_init = r1_panel_debugfs_init,
 };
 
 static int r1_panel_probe(struct mipi_dsi_device *dsi)
@@ -285,7 +412,8 @@ static int r1_panel_probe(struct mipi_dsi_device *dsi)
 	ctx->from_lk = lk_handoff && gpiod_get_direction(ctx->reset) == 0 &&
 		       gpiod_get_value_cansleep(ctx->reset) == 0;
 	if (ctx->from_lk)
-		dev_info(dev, "Taking over the panel from LK\n");
+		dev_info(dev, "Panel reset permits LK handoff; checking at prepare\n");
+	ctx->last_failed_command = -1;
 	ctx->dsi = dsi;
 	device_property_read_u32(dev, "rabbit,max-refresh-hz", &ctx->max_refresh);
 	ctx->panel.prepare_prev_first = true;

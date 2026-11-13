@@ -7,6 +7,7 @@
 #include <linux/bitfield.h>
 #include <linux/clk.h>
 #include <linux/component.h>
+#include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/iopoll.h>
 #include <linux/irq.h>
@@ -17,6 +18,7 @@
 #include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/reset.h>
+#include <linux/seq_file.h>
 #include <linux/units.h>
 #include <linux/unaligned.h>
 
@@ -247,6 +249,14 @@ struct mtk_dsi {
 	bool ddp_powered;
 	bool ddp_started;
 	bool bridge_powered;
+	/* Diagnostic counters protected by lock on MT6765. */
+	u32 poweron_count;
+	u32 poweroff_count;
+	u32 transfer_count;
+	u32 transfer_errors;
+	int last_transfer_errno;
+	u8 last_transfer_type;
+	u8 last_transfer_command;
 	atomic_t irq_data;
 	wait_queue_head_t irq_wait_queue;
 	struct mutex lock;
@@ -988,6 +998,7 @@ static int mtk_dsi_poweron(struct mtk_dsi *dsi)
 		atomic_set(&dsi->irq_data, 0);
 		mtk_dsi_set_interrupt_enable(dsi);
 		enable_irq(dsi->irq);
+		dsi->poweron_count++;
 	}
 
 	goto out_unlock;
@@ -1050,6 +1061,7 @@ static void mtk_dsi_poweroff(struct mtk_dsi *dsi)
 	phy_power_off(dsi->phy);
 
 	dsi->lanes_ready = false;
+	dsi->poweroff_count++;
 out_unlock:
 	if (dsi->driver_data->mt6765_regs)
 		mutex_unlock(&dsi->lock);
@@ -1239,6 +1251,49 @@ mtk_dsi_bridge_mode_valid(struct drm_bridge *bridge,
 	return MODE_OK;
 }
 
+static int mt6765_dsi_state_show(struct seq_file *s, void *unused)
+{
+	struct mtk_dsi *dsi = s->private;
+
+	mutex_lock(&dsi->lock);
+	seq_printf(s, "refcount=%d enabled=%u lanes_ready=%u ddp_powered=%u "
+		   "ddp_started=%u bridge_powered=%u data_rate=%u\n",
+		   dsi->refcount, dsi->enabled, dsi->lanes_ready,
+		   READ_ONCE(dsi->ddp_powered), READ_ONCE(dsi->ddp_started),
+		   READ_ONCE(dsi->bridge_powered), dsi->data_rate);
+	seq_printf(s, "powerons=%u poweroffs=%u transfers=%u transfer_errors=%u "
+		   "last_transfer_errno=%d last_type=0x%02x last_command=0x%02x\n",
+		   dsi->poweron_count, dsi->poweroff_count, dsi->transfer_count,
+		   dsi->transfer_errors, dsi->last_transfer_errno,
+		   dsi->last_transfer_type, dsi->last_transfer_command);
+	/* Do not wake the link or touch MMIO while its clocks are off. */
+	if (dsi->refcount) {
+		seq_printf(s, "registers_valid=1 start=0x%08x mode=0x%08x "
+			   "intsta=0x%08x inten=0x%08x\n",
+			   readl(dsi->regs + DSI_START), readl(dsi->regs + DSI_MODE_CTRL),
+			   readl(dsi->regs + DSI_INTSTA), readl(dsi->regs + DSI_INTEN));
+		seq_printf(s, "txrx=0x%08x psctrl=0x%08x size=0x%08x "
+			   "lccon=0x%08x ld0con=0x%08x\n",
+			   readl(dsi->regs + DSI_TXRX_CTRL), readl(dsi->regs + DSI_PSCTRL),
+			   readl(dsi->regs + DSI_SIZE_CON), readl(dsi->regs + DSI_PHY_LCCON),
+			   readl(dsi->regs + DSI_PHY_LD0CON));
+	} else {
+		seq_puts(s, "registers_valid=0\n");
+	}
+	mutex_unlock(&dsi->lock);
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(mt6765_dsi_state);
+
+static void mtk_dsi_bridge_debugfs_init(struct drm_bridge *bridge, struct dentry *root)
+{
+	struct mtk_dsi *dsi = bridge_to_dsi(bridge);
+
+	if (dsi->driver_data->mt6765_regs)
+		debugfs_create_file("r1_dsi_state", 0400, root, dsi,
+				    &mt6765_dsi_state_fops);
+}
+
 static const struct drm_bridge_funcs mtk_dsi_bridge_funcs = {
 	.attach = mtk_dsi_bridge_attach,
 	.atomic_destroy_state = drm_atomic_helper_bridge_destroy_state,
@@ -1250,6 +1305,7 @@ static const struct drm_bridge_funcs mtk_dsi_bridge_funcs = {
 	.atomic_create_state = drm_atomic_helper_bridge_create_state,
 	.mode_valid = mtk_dsi_bridge_mode_valid,
 	.mode_set = mtk_dsi_bridge_mode_set,
+	.debugfs_init = mtk_dsi_bridge_debugfs_init,
 };
 
 int mtk_dsi_ddp_clk_enable(struct device *dev)
@@ -1632,6 +1688,9 @@ static ssize_t mt6765_dsi_transfer(struct mtk_dsi *dsi, const struct mipi_dsi_ms
 		return ret;
 
 	mutex_lock(&dsi->lock);
+	dsi->transfer_count++;
+	dsi->last_transfer_type = msg->type;
+	dsi->last_transfer_command = msg->tx_len ? *(const u8 *)msg->tx_buf : 0;
 	if (!dsi->refcount || !dsi->lanes_ready) {
 		ret = -EHOSTDOWN;
 		goto out_unlock;
@@ -1679,6 +1738,9 @@ restore_mode:
 	if (mode & MODE)
 		mtk_dsi_start(dsi);
 out_unlock:
+	dsi->last_transfer_errno = ret < 0 ? ret : 0;
+	if (ret < 0)
+		dsi->transfer_errors++;
 	mutex_unlock(&dsi->lock);
 	return ret;
 }
