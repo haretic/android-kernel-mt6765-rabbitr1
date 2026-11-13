@@ -5,7 +5,7 @@
  * The sensor sits next to a diametrically magnetised wheel. Turning the wheel
  * rotates the field in the sensor's X/Z plane, so the wheel angle is
  * atan2(X, Z). Like the vendor driver, the sensor is polled and every
- * step_deg of turn (30 by default) reports one KEY_UP or KEY_DOWN press. The steps
+ * step_deg of turn (20 by default) reports one KEY_UP or KEY_DOWN press. The steps
  * are counted from a fixed grid, so a fast turn reports each step it passed
  * and a slow one keeps its part step until it completes. Once the wheel rests,
  * the grid moves to where it stopped: a part step left over is dropped, so a
@@ -48,9 +48,9 @@
 #define OCH1970_CNTL2_MODE_CONT_FASTEST	0x0e
 
 /* The defaults of the poll_ms, poll_fast_ms and step_deg attributes */
-#define OCH1970_POLL_MS			50	/* idle */
-#define OCH1970_POLL_FAST_MS		16	/* while turning */
-#define OCH1970_STEP_DEG		30
+#define OCH1970_POLL_MS			33	/* idle */
+#define OCH1970_POLL_FAST_MS		10	/* while turning */
+#define OCH1970_STEP_DEG		20
 #define OCH1970_FAST_HOLD_MS		1000
 #define OCH1970_REST_MS			400	/* still this long: at rest */
 #define OCH1970_STILL_DEG		2
