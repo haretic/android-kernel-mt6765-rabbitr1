@@ -173,6 +173,25 @@ static int aw87390_dev_set_profile_index(struct aw_device *aw_dev, int index)
 	return 0;
 }
 
+/*
+ * The profile sets the PA gain every time the amplifier powers on. A boost
+ * raises a speaker profile's gain by that many codes, up to the top code;
+ * other gain codes (the receiver profile's) are left alone. The profile's AGC
+ * power limits stay as they are.
+ */
+static void aw87390_apply_pa_boost(struct aw87390 *aw87390)
+{
+	unsigned int gain;
+
+	if (!aw87390->pa_boost ||
+	    regmap_read(aw87390->regmap, AW87390_PAG_REG, &gain))
+		return;
+	if (gain < AW87390_PAG_SPK_MIN || gain > AW87390_PAG_SPK_MAX)
+		return;
+	gain = min(gain + aw87390->pa_boost, AW87390_PAG_SPK_MAX);
+	regmap_write(aw87390->regmap, AW87390_PAG_REG, gain);
+}
+
 static int aw87390_profile_info(struct snd_kcontrol *kcontrol,
 			 struct snd_ctl_elem_info *uinfo)
 {
@@ -235,7 +254,44 @@ static int aw87390_profile_set(struct snd_kcontrol *kcontrol,
 
 	if (aw87390->aw_pa->status == AW87390_DEV_PW_ON) {
 		aw87390_power_off(aw87390->aw_pa);
-		aw87390_power_on(aw87390->aw_pa);
+		if (!aw87390_power_on(aw87390->aw_pa))
+			aw87390_apply_pa_boost(aw87390);
+	}
+
+	return 1;
+}
+
+static int aw87390_pa_boost_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *codec = snd_kcontrol_chip(kcontrol);
+	struct aw87390 *aw87390 = snd_soc_component_get_drvdata(codec);
+
+	ucontrol->value.integer.value[0] = aw87390->pa_boost;
+
+	return 0;
+}
+
+static int aw87390_pa_boost_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *codec = snd_kcontrol_chip(kcontrol);
+	struct aw87390 *aw87390 = snd_soc_component_get_drvdata(codec);
+	long boost = ucontrol->value.integer.value[0];
+
+	if (boost < 0 || boost > AW87390_PA_BOOST_MAX)
+		return -EINVAL;
+
+	guard(mutex)(&aw87390->lock);
+	if (aw87390->pa_boost == boost)
+		return 0;
+	aw87390->pa_boost = boost;
+
+	/* The profile's own gain comes back with a power cycle */
+	if (aw87390->aw_pa->status == AW87390_DEV_PW_ON) {
+		aw87390_power_off(aw87390->aw_pa);
+		if (!aw87390_power_on(aw87390->aw_pa))
+			aw87390_apply_pa_boost(aw87390);
 	}
 
 	return 1;
@@ -244,6 +300,8 @@ static int aw87390_profile_set(struct snd_kcontrol *kcontrol,
 static const struct snd_kcontrol_new aw87390_controls[] = {
 	AW87390_PROFILE_EXT("AW87390 Profile Set", aw87390_profile_info,
 		aw87390_profile_get, aw87390_profile_set),
+	SOC_SINGLE_EXT("AW87390 PA Boost", SND_SOC_NOPM, 0, AW87390_PA_BOOST_MAX, 0,
+		       aw87390_pa_boost_get, aw87390_pa_boost_put),
 };
 
 static int aw87390_request_firmware_file(struct aw87390 *aw87390)
@@ -294,7 +352,11 @@ static int aw87390_drv_event(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
-		ret = aw87390_power_on(aw_dev);
+		scoped_guard(mutex, &aw87390->lock) {
+			ret = aw87390_power_on(aw_dev);
+			if (!ret)
+				aw87390_apply_pa_boost(aw87390);
+		}
 		break;
 	case SND_SOC_DAPM_POST_PMD:
 		ret = aw87390_power_off(aw_dev);

@@ -45,6 +45,11 @@
 
 #define AW87390_SOFT_RESET_VALUE	(0xAA)
 #define AW87390_POWER_DOWN_VALUE	(0x00)
+/* Speaker PA gain codes, about 1.5 dB a step (measured on the rabbit r1) */
+#define AW87390_PAG_SPK_MIN		(0x08)
+#define AW87390_PAG_SPK_MAX		(0x12)
+#define AW87390_PA_BOOST_MAX		(6)
+
 #define AW87390_REG_MAX		(0xFF)
 #define AW87390_DEV_DEFAULT_CH		(0)
 #define AW87390_INIT_PROFILE		(0)
@@ -166,6 +171,8 @@ struct aw87390 {
 	struct regmap *regmap;
 	struct aw_container *aw_cfg;
 	struct regulator *vdd_reg;
+	/* Steps added to the profile's speaker PA gain, see aw87390_apply_pa_boost() */
+	unsigned int pa_boost;
 };
 
 #endif
