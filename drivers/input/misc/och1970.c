@@ -5,7 +5,7 @@
  * The sensor sits next to a diametrically magnetised wheel. Turning the wheel
  * rotates the field in the sensor's X/Z plane, so the wheel angle is
  * atan2(X, Z). Like the vendor driver, the sensor is polled and every
- * OCH1970_STEP_DEG of turn reports one KEY_UP or KEY_DOWN press. The steps
+ * step_deg of turn (30 by default) reports one KEY_UP or KEY_DOWN press. The steps
  * are counted from a fixed grid, so a fast turn reports each step it passed
  * and a slow one keeps its part step until it completes. Once the wheel rests,
  * the grid moves to where it stopped: a part step left over is dropped, so a
@@ -15,11 +15,13 @@
 #include <linux/array_size.h>
 #include <linux/bits.h>
 #include <linux/delay.h>
+#include <linux/device.h>
 #include <linux/err.h>
 #include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
 #include <linux/input.h>
 #include <linux/jiffies.h>
+#include <linux/kstrtox.h>
 #include <linux/math.h>
 #include <linux/math64.h>
 #include <linux/mod_devicetable.h>
@@ -27,6 +29,7 @@
 #include <linux/mutex.h>
 #include <linux/pm.h>
 #include <linux/regulator/consumer.h>
+#include <linux/sysfs.h>
 #include <linux/unaligned.h>
 
 #define OCH1970_REG_WIA			0x00
@@ -37,15 +40,20 @@
 #define OCH1970_CNTL2_SMR_HIGH_RANGE	BIT(5)
 #define OCH1970_CNTL2_SDR_LOW_POWER	BIT(4)
 #define OCH1970_CNTL2_MODE_STANDBY	0x00
-#define OCH1970_CNTL2_MODE_CONT_100HZ	0x0c
+/*
+ * Continuous measurement mode 7, the fastest: 100 Hz on the OCH1970QAD (its mode 6, 0x0c,
+ * is 50 Hz), 500 Hz on the VAD-H. A measurement takes 0.8 ms at 1.9 mA, 0.15 mA on average
+ * at 100 Hz, so every poll down to 10 ms apart reads a measurement of its own.
+ */
+#define OCH1970_CNTL2_MODE_CONT_FASTEST	0x0e
 
+/* The defaults of the poll_ms, poll_fast_ms and step_deg attributes */
 #define OCH1970_POLL_MS			50	/* idle */
 #define OCH1970_POLL_FAST_MS		16	/* while turning */
+#define OCH1970_STEP_DEG		30
 #define OCH1970_FAST_HOLD_MS		1000
 #define OCH1970_REST_MS			400	/* still this long: at rest */
 #define OCH1970_STILL_DEG		2
-#define OCH1970_STEP_DEG		30
-#define OCH1970_MAX_STEPS		5	/* short of half a turn a poll */
 
 struct och1970 {
 	struct i2c_client *client;
@@ -56,6 +64,9 @@ struct och1970 {
 	int last_deg;
 	unsigned long moved;	/* jiffies of the last turn */
 	bool fast;
+	unsigned int poll_ms;
+	unsigned int poll_fast_ms;
+	unsigned int step_deg;
 };
 
 /* tan(0..45 degrees) * 65536 */
@@ -123,7 +134,8 @@ static void och1970_poll(struct input_dev *input)
 {
 	struct och1970 *och = input_get_drvdata(input);
 	unsigned long now = jiffies;
-	int x, z, deg, delta, moved, steps, key, i;
+	unsigned int step = READ_ONCE(och->step_deg);
+	int x, z, deg, delta, moved, steps, max_steps, key, i;
 	bool fast;
 	u8 buf[8];
 	int ret;
@@ -160,14 +172,16 @@ static void och1970_poll(struct input_dev *input)
 	else if (delta <= -180)
 		delta += 360;
 
-	steps = delta / OCH1970_STEP_DEG;
+	steps = delta / (int)step;
 	if (steps) {
 		/*
 		 * The base moves by whole steps, keeping the rest of the turn, so
 		 * every step is the same length however the polls fall.
 		 */
-		och->base_deg = (och->base_deg + steps * OCH1970_STEP_DEG + 360) % 360;
-		steps = clamp(steps, -OCH1970_MAX_STEPS, OCH1970_MAX_STEPS);
+		och->base_deg = (och->base_deg + steps * (int)step + 360) % 360;
+		/* Short of half a turn a poll: past that the way it turned is a guess */
+		max_steps = 179 / step;
+		steps = clamp(steps, -max_steps, max_steps);
 		/* Vendor convention: increasing angle is KEY_DOWN. */
 		key = steps > 0 ? KEY_DOWN : KEY_UP;
 		for (i = 0; i < abs(steps); i++) {
@@ -183,17 +197,78 @@ static void och1970_poll(struct input_dev *input)
 	if (min(moved, 360 - moved) >= OCH1970_STILL_DEG) {
 		och->moved = now;
 		och->last_deg = deg;
-	} else if (delta % OCH1970_STEP_DEG &&
+	} else if (delta % (int)step &&
 		   time_after(now, och->moved + msecs_to_jiffies(OCH1970_REST_MS))) {
 		och->base_deg = deg;
 	}
 	fast = time_before(now, och->moved + msecs_to_jiffies(OCH1970_FAST_HOLD_MS));
 	if (fast != och->fast) {
 		och->fast = fast;
-		input_set_poll_interval(input, fast ? OCH1970_POLL_FAST_MS
-						    : OCH1970_POLL_MS);
+		input_set_poll_interval(input, fast ? READ_ONCE(och->poll_fast_ms)
+						    : READ_ONCE(och->poll_ms));
 	}
 }
+
+/*
+ * The wheel's tuning, for the Kernel Tweaks page: how often it is read while still and while
+ * turning, in ms, and how far a step turns it, in degrees
+ */
+static ssize_t och1970_tune_store(struct device *dev, const char *buf, size_t count,
+				  unsigned int *field, unsigned int min, unsigned int max)
+{
+	struct och1970 *och = i2c_get_clientdata(to_i2c_client(dev));
+	unsigned int value;
+	int ret;
+
+	ret = kstrtouint(buf, 0, &value);
+	if (ret)
+		return ret;
+	if (value < min || value > max)
+		return -EINVAL;
+
+	mutex_lock(&och->input->mutex);
+	WRITE_ONCE(*field, value);
+	if (field == &och->step_deg)
+		/* A new grid, from where the wheel is */
+		och->have_base = false;
+	else
+		input_set_poll_interval(och->input, och->fast ? och->poll_fast_ms
+							      : och->poll_ms);
+	mutex_unlock(&och->input->mutex);
+
+	return count;
+}
+
+#define OCH1970_TUNE_ATTR(_name, _min, _max)					\
+static ssize_t _name##_show(struct device *dev,					\
+			    struct device_attribute *attr, char *buf)		\
+{										\
+	struct och1970 *och = i2c_get_clientdata(to_i2c_client(dev));		\
+										\
+	return sysfs_emit(buf, "%u\n", READ_ONCE(och->_name));			\
+}										\
+										\
+static ssize_t _name##_store(struct device *dev,				\
+			     struct device_attribute *attr,			\
+			     const char *buf, size_t count)			\
+{										\
+	struct och1970 *och = i2c_get_clientdata(to_i2c_client(dev));		\
+										\
+	return och1970_tune_store(dev, buf, count, &och->_name, _min, _max);	\
+}										\
+static DEVICE_ATTR_RW(_name)
+
+OCH1970_TUNE_ATTR(poll_ms, 10, 200);
+OCH1970_TUNE_ATTR(poll_fast_ms, 10, 100);
+OCH1970_TUNE_ATTR(step_deg, 10, 90);
+
+static struct attribute *och1970_attrs[] = {
+	&dev_attr_poll_ms.attr,
+	&dev_attr_poll_fast_ms.attr,
+	&dev_attr_step_deg.attr,
+	NULL
+};
+ATTRIBUTE_GROUPS(och1970);
 
 static int och1970_open(struct input_dev *input)
 {
@@ -201,7 +276,7 @@ static int och1970_open(struct input_dev *input)
 
 	och->have_base = false;
 
-	return och1970_set_mode(och, OCH1970_CNTL2_MODE_CONT_100HZ);
+	return och1970_set_mode(och, OCH1970_CNTL2_MODE_CONT_FASTEST);
 }
 
 static void och1970_close(struct input_dev *input)
@@ -224,6 +299,9 @@ static int och1970_probe(struct i2c_client *client)
 		return -ENOMEM;
 
 	och->client = client;
+	och->poll_ms = OCH1970_POLL_MS;
+	och->poll_fast_ms = OCH1970_POLL_FAST_MS;
+	och->step_deg = OCH1970_STEP_DEG;
 
 	ret = devm_regulator_get_enable_optional(dev, "vdd");
 	if (ret && ret != -ENODEV)
@@ -303,7 +381,7 @@ static int och1970_resume(struct device *dev)
 	mutex_lock(&och->input->mutex);
 	if (input_device_enabled(och->input)) {
 		och->have_base = false;
-		ret = och1970_set_mode(och, OCH1970_CNTL2_MODE_CONT_100HZ);
+		ret = och1970_set_mode(och, OCH1970_CNTL2_MODE_CONT_FASTEST);
 	}
 	mutex_unlock(&och->input->mutex);
 
@@ -330,6 +408,7 @@ static struct i2c_driver och1970_driver = {
 		.name = "och1970",
 		.of_match_table = och1970_of_match,
 		.pm = pm_sleep_ptr(&och1970_pm_ops),
+		.dev_groups = och1970_groups,
 	},
 	.probe = och1970_probe,
 	.id_table = och1970_id,
