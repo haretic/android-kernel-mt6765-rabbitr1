@@ -7,11 +7,13 @@
 #ifndef __MTK_CAMSV_H__
 #define __MTK_CAMSV_H__
 
+#include <linux/atomic.h>
 #include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
+#include <linux/ktime.h>
 #include <linux/pm_runtime.h>
 #include <linux/videodev2.h>
 #include <linux/workqueue.h>
@@ -147,6 +149,22 @@ struct mtk_cam_stats {
 	u32 last_err;
 };
 
+#define MTK_CAM_HIST_LEN	128
+
+/**
+ * struct mtk_cam_event - One entry of the stream event history
+ * @ns: Monotonic time of the event.
+ * @what: Name of the event, a string literal.
+ * @a: First value, usually a DMA address.
+ * @b: Second value.
+ */
+struct mtk_cam_event {
+	u64 ns;
+	const char *what;
+	u64 a;
+	u64 b;
+};
+
 /**
  * struct mtk_cam_dev - MediaTek camera device structure.
  * @dev: Pointer to device.
@@ -178,6 +196,9 @@ struct mtk_cam_stats {
  * @scratch_daddr: DMA address of @scratch.
  * @scratch_size: Size of @scratch.
  * @stats: Interrupt statistics.
+ * @hist: The last stream events, for debugfs.
+ * @hist_pos: Number of events recorded.
+ * @trace_frames: Frames whose addresses are still to be recorded (MT6765).
  * @debugfs: debugfs directory.
  */
 struct mtk_cam_dev {
@@ -212,8 +233,24 @@ struct mtk_cam_dev {
 	size_t scratch_size;
 
 	struct mtk_cam_stats stats;
+	struct mtk_cam_event hist[MTK_CAM_HIST_LEN];
+	atomic_t hist_pos;
+	unsigned int trace_frames;
 	struct dentry *debugfs;
 };
+
+/* Note a stream event. Any context; a torn entry is acceptable in a log. */
+static inline void mtk_cam_event(struct mtk_cam_dev *cam_dev, const char *what,
+				 u64 a, u64 b)
+{
+	unsigned int i = (unsigned int)atomic_inc_return(&cam_dev->hist_pos) - 1;
+	struct mtk_cam_event *e = &cam_dev->hist[i % MTK_CAM_HIST_LEN];
+
+	e->ns = ktime_get_ns();
+	e->what = what;
+	e->a = a;
+	e->b = b;
+}
 
 /**
  * struct mtk_cam_conf - MediaTek camera configuration structure

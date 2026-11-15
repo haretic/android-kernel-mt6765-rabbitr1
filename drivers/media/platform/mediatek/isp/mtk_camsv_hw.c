@@ -358,6 +358,29 @@ static int mtk_camsv_stats_show(struct seq_file *m, void *unused)
 }
 DEFINE_SHOW_ATTRIBUTE(mtk_camsv_stats);
 
+/* The stream events, oldest first: time, name and two values of each. */
+static int mtk_camsv_events_show(struct seq_file *m, void *unused)
+{
+	struct mtk_cam_dev *cam_dev = m->private;
+	unsigned int end = (unsigned int)atomic_read(&cam_dev->hist_pos);
+	unsigned int i = end > MTK_CAM_HIST_LEN ? end - MTK_CAM_HIST_LEN : 0;
+
+	for (; i != end; i++) {
+		const struct mtk_cam_event *e =
+			&cam_dev->hist[i % MTK_CAM_HIST_LEN];
+
+		if (!e->what)
+			continue;
+		seq_printf(m, "%6llu.%06llu %-10s 0x%010llx 0x%010llx\n",
+			   e->ns / NSEC_PER_SEC,
+			   (e->ns % NSEC_PER_SEC) / NSEC_PER_USEC, e->what,
+			   e->a, e->b);
+	}
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(mtk_camsv_events);
+
 static int mtk_camsv_regs_show(struct seq_file *m, void *unused)
 {
 	struct mtk_cam_dev *cam_dev = m->private;
@@ -412,6 +435,8 @@ static void mtk_camsv_debugfs_init(struct mtk_cam_dev *cam_dev)
 	cam_dev->debugfs = debugfs_create_dir(dev_name(cam_dev->dev), NULL);
 	debugfs_create_file("stats", 0400, cam_dev->debugfs, cam_dev,
 			    &mtk_camsv_stats_fops);
+	debugfs_create_file("events", 0400, cam_dev->debugfs, cam_dev,
+			    &mtk_camsv_events_fops);
 	if (cam_dev->conf->ops->dbg_show)
 		debugfs_create_file("regs", 0400, cam_dev->debugfs, cam_dev,
 				    &mtk_camsv_regs_fops);
@@ -627,6 +652,7 @@ static int mtk_camsv_runtime_suspend(struct device *dev)
 
 	disable_irq(cam_dev->irq);
 	clk_bulk_disable_unprepare(cam_dev->num_clks, cam_dev->clks);
+	mtk_cam_event(cam_dev, "suspend", vb2_is_streaming(vbq), 0);
 
 	return 0;
 }
@@ -644,6 +670,7 @@ static int mtk_camsv_runtime_resume(struct device *dev)
 	}
 
 	enable_irq(cam_dev->irq);
+	mtk_cam_event(cam_dev, "resume", vb2_is_streaming(vbq), 0);
 
 	if (vb2_is_streaming(vbq)) {
 		cam_dev->conf->ops->resume(cam_dev);

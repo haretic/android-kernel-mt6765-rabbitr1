@@ -121,6 +121,9 @@
 	(MT6765_CAMSV_IRQ_SOF | MT6765_CAMSV_IRQ_HW_PASS1_DON | \
 	 MT6765_CAMSV_IRQ_SW_PASS1_DON | MT6765_CAMSV_IRQ_ERR)
 
+/* Frames after a stream start whose addresses go to the event history */
+#define MT6765_CAMSV_TRACE_FRAMES		6
+
 static u32 mt6765_camsv_read(struct mtk_cam_dev *cam_dev, u32 reg)
 {
 	return readl(cam_dev->regs + reg);
@@ -165,6 +168,9 @@ static void mt6765_camsv_enqueue(struct mtk_cam_dev *cam_dev)
 
 	daddr = next ? next->daddr : cam_dev->scratch_daddr;
 	cam_dev->hw_slots[cam_dev->hw_num_slots++] = next;
+	if (cam_dev->trace_frames)
+		mtk_cam_event(cam_dev, next ? "enq" : "enq-scratch", daddr,
+			      cam_dev->hw_num_slots);
 
 	mt6765_camsv_write(cam_dev, MT6765_CAMSV_FBC_IMGO_ENQ_ADDR,
 			   lower_32_bits(daddr));
@@ -179,11 +185,15 @@ static int mt6765_camsv_prepare(struct mtk_cam_dev *cam_dev, u32 bpl,
 	cam_dev->scratch = dma_alloc_attrs(cam_dev->dev, cam_dev->scratch_size,
 					   &cam_dev->scratch_daddr, GFP_KERNEL,
 					   DMA_ATTR_NO_KERNEL_MAPPING);
+	mtk_cam_event(cam_dev, "prepare", cam_dev->scratch_daddr,
+		      cam_dev->scratch_size);
 	return cam_dev->scratch ? 0 : -ENOMEM;
 }
 
 static void mt6765_camsv_unprepare(struct mtk_cam_dev *cam_dev)
 {
+	mtk_cam_event(cam_dev, "unprepare", cam_dev->scratch_daddr,
+		      cam_dev->scratch_size);
 	dma_free_attrs(cam_dev->dev, cam_dev->scratch_size, cam_dev->scratch,
 		       cam_dev->scratch_daddr, DMA_ATTR_NO_KERNEL_MAPPING);
 	cam_dev->scratch = NULL;
@@ -221,6 +231,13 @@ static void mt6765_camsv_setup(struct mtk_cam_dev *cam_dev,
 		stride = MT6765_CAMSV_IMGO_STRIDE_YUV;
 		break;
 	}
+
+	mtk_cam_event(cam_dev, "setup", (u64)w << 32 | h, bpl);
+	mtk_cam_event(cam_dev, "setup-regs",
+		      (u64)mt6765_camsv_read(cam_dev, MT6765_CAMSV_MODULE_EN) << 32 |
+		      mt6765_camsv_read(cam_dev, MT6765_CAMSV_CLK_EN),
+		      (u64)mt6765_camsv_read(cam_dev, MT6765_CAMSV_FBC_IMGO_CTL1) << 32 |
+		      mt6765_camsv_read(cam_dev, MT6765_CAMSV_IMGO_BASE_ADDR));
 
 	mt6765_camsv_write(cam_dev, MT6765_CAMSV_TG_SEN_MODE,
 			   conf->tg_sen_mode);
@@ -288,9 +305,15 @@ static void mt6765_camsv_setup(struct mtk_cam_dev *cam_dev,
 	spin_lock_irqsave(&cam_dev->buf_list_lock, flags);
 	cam_dev->hw_active = true;
 	cam_dev->hw_num_slots = 0;
+	cam_dev->trace_frames = MT6765_CAMSV_TRACE_FRAMES;
 	mt6765_camsv_enqueue(cam_dev);
 	mt6765_camsv_enqueue(cam_dev);
 	spin_unlock_irqrestore(&cam_dev->buf_list_lock, flags);
+
+	mtk_cam_event(cam_dev, "setup-done",
+		      (u64)mt6765_camsv_read(cam_dev, MT6765_CAMSV_FBC_IMGO_CTL2) << 32 |
+		      mt6765_camsv_read(cam_dev, MT6765_CAMSV_FBC_IMGO_CUR_ADDR),
+		      mt6765_camsv_read(cam_dev, MT6765_CAMSV_IMGO_BASE_ADDR));
 }
 
 static void mt6765_camsv_buf_queue(struct mtk_cam_dev *cam_dev,
@@ -302,6 +325,9 @@ static void mt6765_camsv_buf_queue(struct mtk_cam_dev *cam_dev,
 	/* The hardware takes it when a slot frees up, in the frame-done IRQ. */
 	spin_lock_irqsave(&cam_dev->buf_list_lock, flags);
 	list_add_tail(&buf->list, &cam_dev->buf_list);
+	if (cam_dev->trace_frames || !streaming)
+		mtk_cam_event(cam_dev, "qbuf", buf->daddr,
+			      vb2_plane_size(&buf->v4l2_buf.vb2_buf, 0));
 	spin_unlock_irqrestore(&cam_dev->buf_list_lock, flags);
 }
 
@@ -316,6 +342,9 @@ static void mt6765_camsv_stream_on(struct mtk_cam_dev *cam_dev)
 	mt6765_camsv_write(cam_dev, MT6765_CAMSV_CLK_EN, clk_en);
 	mt6765_camsv_set(cam_dev, MT6765_CAMSV_TG_VF_CON,
 			 MT6765_CAMSV_TG_VF_CON_VFDATA_EN);
+	mtk_cam_event(cam_dev, "stream-on",
+		      mt6765_camsv_read(cam_dev, MT6765_CAMSV_TG_INTER_ST),
+		      mt6765_camsv_read(cam_dev, MT6765_CAMSV_MODULE_EN));
 }
 
 static void mt6765_camsv_quiesce(struct mtk_cam_dev *cam_dev)
@@ -341,6 +370,12 @@ static void mt6765_camsv_stream_off(struct mtk_cam_dev *cam_dev)
 	spin_unlock_irqrestore(&cam_dev->buf_list_lock, flags);
 	cancel_work_sync(&cam_dev->recover_work);
 
+	mtk_cam_event(cam_dev, "stream-off",
+		      (u64)mt6765_camsv_read(cam_dev, MT6765_CAMSV_TG_INTER_ST) << 32 |
+		      mt6765_camsv_read(cam_dev, MT6765_CAMSV_FBC_IMGO_CUR_ADDR),
+		      (u64)mt6765_camsv_read(cam_dev, MT6765_CAMSV_FBC_IMGO_CTL2) << 32 |
+		      mt6765_camsv_read(cam_dev, MT6765_CAMSV_IMGO_BASE_ADDR));
+
 	mt6765_camsv_quiesce(cam_dev);
 
 	spin_lock_irqsave(&cam_dev->buf_list_lock, flags);
@@ -350,6 +385,7 @@ static void mt6765_camsv_stream_off(struct mtk_cam_dev *cam_dev)
 	spin_unlock_irqrestore(&cam_dev->buf_list_lock, flags);
 
 	synchronize_irq(cam_dev->irq);
+	mtk_cam_event(cam_dev, "stopped", 0, 0);
 }
 
 static void mt6765_camsv_resume(struct mtk_cam_dev *cam_dev)
@@ -383,6 +419,12 @@ static irqreturn_t mt6765_camsv_isr(int irq, void *data)
 				    status,
 				    mt6765_camsv_read(cam_dev, MT6765_CAMSV_TG_FRMSIZE_ST),
 				    mt6765_camsv_read(cam_dev, MT6765_CAMSV_IMGO_ERR_STAT));
+		if (!cam_dev->err_burst)
+			mtk_cam_event(cam_dev, "irq-error",
+				      (u64)status << 32 |
+				      mt6765_camsv_read(cam_dev, MT6765_CAMSV_TG_FRMSIZE_ST),
+				      (u64)mt6765_camsv_read(cam_dev, MT6765_CAMSV_FBC_IMGO_CTL2) << 32 |
+				      mt6765_camsv_read(cam_dev, MT6765_CAMSV_FBC_IMGO_CUR_ADDR));
 	}
 
 	/*
@@ -413,6 +455,13 @@ static irqreturn_t mt6765_camsv_isr(int irq, void *data)
 		if (cam_dev->hw_active && cam_dev->hw_num_slots) {
 			/* NULL: the frame went to the scratch buffer. */
 			buf = cam_dev->hw_slots[0];
+			if (cam_dev->trace_frames) {
+				cam_dev->trace_frames--;
+				mtk_cam_event(cam_dev, "done",
+					      buf ? buf->daddr : cam_dev->scratch_daddr,
+					      (u64)mt6765_camsv_read(cam_dev, MT6765_CAMSV_FBC_IMGO_CTL2) << 32 |
+					      mt6765_camsv_read(cam_dev, MT6765_CAMSV_FBC_IMGO_CUR_ADDR));
+			}
 			cam_dev->hw_slots[0] = cam_dev->hw_slots[1];
 			cam_dev->hw_num_slots--;
 			if (buf)
@@ -434,6 +483,12 @@ static irqreturn_t mt6765_camsv_isr(int irq, void *data)
 	if (status & MT6765_CAMSV_IRQ_SOF) {
 		cam_dev->stats.sof++;
 		cam_dev->sequence++;
+		if (cam_dev->trace_frames)
+			mtk_cam_event(cam_dev, "sof",
+				      (u64)status << 32 |
+				      mt6765_camsv_read(cam_dev, MT6765_CAMSV_FBC_IMGO_CUR_ADDR),
+				      (u64)mt6765_camsv_read(cam_dev, MT6765_CAMSV_FBC_IMGO_CTL2) << 32 |
+				      mt6765_camsv_read(cam_dev, MT6765_CAMSV_IMGO_BASE_ADDR));
 	}
 
 	return IRQ_HANDLED;
@@ -457,6 +512,8 @@ static void mt6765_camsv_recover(struct mtk_cam_dev *cam_dev)
 		return;
 
 	disable_irq(cam_dev->irq);
+	mtk_cam_event(cam_dev, "recover", cam_dev->recover_fails,
+		      mt6765_camsv_read(cam_dev, MT6765_CAMSV_FBC_IMGO_CUR_ADDR));
 	mt6765_camsv_quiesce(cam_dev);
 
 	/*
