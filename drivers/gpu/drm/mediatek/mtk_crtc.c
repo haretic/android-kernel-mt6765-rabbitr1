@@ -60,6 +60,8 @@ struct mtk_crtc {
 	bool				cmdq_pending;
 	int				cmdq_status;
 	struct drm_pending_vblank_event	*cmdq_page_flip;
+	/* The page flip of a completed packet, left for the vblank interrupt. */
+	struct drm_pending_vblank_event	*cmdq_vblank_flip;
 	wait_queue_head_t		cb_blocking_queue;
 #endif
 
@@ -112,6 +114,30 @@ static void mtk_crtc_finish_page_flip(struct mtk_crtc *mtk_crtc)
 	spin_unlock_irqrestore(&crtc->dev->event_lock, flags);
 }
 
+#if IS_REACHABLE(CONFIG_MTK_CMDQ)
+/* With the event lock held */
+static void mtk_crtc_send_cmdq_vblank_flip(struct mtk_crtc *mtk_crtc)
+{
+	struct drm_crtc *crtc = &mtk_crtc->base;
+
+	if (mtk_crtc->cmdq_vblank_flip) {
+		drm_crtc_send_vblank_event(crtc, mtk_crtc->cmdq_vblank_flip);
+		drm_crtc_vblank_put(crtc);
+		mtk_crtc->cmdq_vblank_flip = NULL;
+	}
+}
+
+static void mtk_crtc_finish_cmdq_vblank_flip(struct mtk_crtc *mtk_crtc)
+{
+	struct drm_crtc *crtc = &mtk_crtc->base;
+	unsigned long flags;
+
+	spin_lock_irqsave(&crtc->dev->event_lock, flags);
+	mtk_crtc_send_cmdq_vblank_flip(mtk_crtc);
+	spin_unlock_irqrestore(&crtc->dev->event_lock, flags);
+}
+#endif
+
 static void mtk_drm_finish_page_flip(struct mtk_crtc *mtk_crtc)
 {
 	unsigned long flags;
@@ -119,8 +145,10 @@ static void mtk_drm_finish_page_flip(struct mtk_crtc *mtk_crtc)
 	drm_crtc_handle_vblank(&mtk_crtc->base);
 
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
-	if (mtk_crtc->cmdq_client.chan)
+	if (mtk_crtc->cmdq_client.chan) {
+		mtk_crtc_finish_cmdq_vblank_flip(mtk_crtc);
 		return;
+	}
 #endif
 
 	spin_lock_irqsave(&mtk_crtc->config_lock, flags);
@@ -282,6 +310,22 @@ struct mtk_ddp_comp *mtk_ddp_comp_for_plane(struct drm_crtc *crtc,
 }
 
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
+/*
+ * The frame-end interrupt that counts a vblank and the completion of a packet
+ * that waited for the same frame end arrive together, in either order. Tell
+ * whether the vblank of the frame end just past has been counted.
+ */
+static bool mtk_crtc_frame_end_counted(struct drm_crtc *crtc)
+{
+	int framedur_ns = drm_crtc_vblank_crtc(crtc)->framedur_ns;
+	ktime_t counted;
+
+	drm_crtc_vblank_count_and_time(crtc, &counted);
+
+	return !framedur_ns ||
+	       ktime_to_ns(ktime_sub(ktime_get(), counted)) < framedur_ns / 2;
+}
+
 static void ddp_cmdq_cb(struct mbox_client *cl, void *mssg)
 {
 	struct cmdq_cb_data *data = mssg;
@@ -299,8 +343,20 @@ static void ddp_cmdq_cb(struct mbox_client *cl, void *mssg)
 	/* This event belongs to the submitted packet, not the current atomic state. */
 	if (mtk_crtc->cmdq_page_flip) {
 		spin_lock(&crtc->dev->event_lock);
-		drm_crtc_send_vblank_event(crtc, mtk_crtc->cmdq_page_flip);
-		drm_crtc_vblank_put(crtc);
+		/* Events go out in the order of their commits. */
+		mtk_crtc_send_cmdq_vblank_flip(mtk_crtc);
+		if (data->sta < 0 || mtk_crtc_frame_end_counted(crtc)) {
+			drm_crtc_send_vblank_event(crtc, mtk_crtc->cmdq_page_flip);
+			drm_crtc_vblank_put(crtc);
+		} else {
+			/*
+			 * The packet ran at a frame end whose interrupt has not
+			 * been handled yet: sent now, the event would carry the
+			 * frame before's count and timestamp, a refresh period
+			 * early. That interrupt sends it.
+			 */
+			mtk_crtc->cmdq_vblank_flip = mtk_crtc->cmdq_page_flip;
+		}
 		mtk_crtc->cmdq_page_flip = NULL;
 		spin_unlock(&crtc->dev->event_lock);
 	}
@@ -941,6 +997,9 @@ static void mtk_crtc_atomic_disable(struct drm_crtc *crtc,
 
 complete_events:
 	/* Private events are not on the core's vblank event list. */
+#if IS_REACHABLE(CONFIG_MTK_CMDQ)
+	mtk_crtc_finish_cmdq_vblank_flip(mtk_crtc);
+#endif
 	spin_lock_irqsave(&mtk_crtc->config_lock, flags);
 	mtk_crtc_finish_page_flip(mtk_crtc);
 	mtk_crtc->pending_needs_vblank = false;
